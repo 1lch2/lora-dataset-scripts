@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "checkJs": true,
+    "allowJs": true,
+    "lib": ["ES2021"],
+    "module": "ESNext",
+    "target": "ESNext",
+    "moduleResolution": "node",
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"],
+  "esModuleInterop": true,
+}
