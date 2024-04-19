@@ -130,7 +130,12 @@ dist
 .pnp.*
 
 # dataset
-dataset-raw
+dataset-raw/*
+addTags/*
+output/*
+
+# deprecated
+wasted
 
 # vscode
 .vscode
