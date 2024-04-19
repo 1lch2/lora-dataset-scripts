@@ -60,7 +60,7 @@ different costumes.
 
 `dataset-raw` 下面也可以创建多个文件夹用来存不同角色或者同角色不同服装。
 
-## Scripts | 脚本
+## How to use scripts | 怎么用脚本
 
 Because I mainly train Arknights lora, so the default copyright tag will be `"arknights"`. Feel free
 to change it yourself. The code is located at line 21 of `src/javascript/editCaption.js`.
@@ -84,9 +84,10 @@ each your tag file under this folder.
 `dataset-raw` 下面的文件夹名会作为角色名 tag 被添加进去。比如我有这么个目录，`dataset-raw/amiya`，那
 这个脚本会把 `1girl, amiya (arknights), arknights` 加到这个目录下每个打标文件的最开头。
 
-Don't worry, if the tag file does not contains `1girl`, it won't add additional `1girl` tag.
+Don't worry, if the tag file already contains `1girl` or it has `2girls` tag, it won't add
+additional `1girl` tag.
 
-如果某个打标文件里没有 `1girl` tag，脚本也不会多加一个进去。
+如果某个打标文件里已经有了 `1girl` 或者有 `2girls` 的 tag ，脚本也不会多加一个进去。
 
 ### Resize your images | 缩放图片素材
 
