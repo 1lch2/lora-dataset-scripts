@@ -5,11 +5,11 @@
   "description": "",
   "scripts": {
     "script": "node src/cmd/run-script.js",
-    "tag": "node src/scripts/extract2Txt.js",
-    "delete": "node src/scripts/delete.js",
-    "edit": "node src/scripts/editCaption.js",
-    "rename": "node src/scripts/rename.js",
-    "compare": "node src/scripts/compare.js"
+    "tag": "node src/javascript/extract2Txt.js",
+    "delete": "node src/javascript/delete.js",
+    "edit": "node src/javascript/editCaption.js",
+    "rename": "node src/javascript/rename.js",
+    "compare": "node src/javascript/compare.js"
   },
   "keywords": [],
   "author": "",

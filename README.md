@@ -89,6 +89,23 @@ additional `1girl` tag.
 
 如果某个打标文件里已经有了 `1girl` 或者有 `2girls` 的 tag ，脚本也不会多加一个进去。
 
+### Check and correct tag files | 检查并修正打标文件
+
+As mentioned above, you will need to make sure every (or at least most of your tag files) tag files
+starts with such tags: `1girl, amiya (arknights), arknights`. But the first script sometimes fails
+to follow such format. You should run this script after the first one to correct possible errors in
+tag files.
+
+如上文所说，需要保证每个打标文件（至少是大部分的打标文件）都以这种格式开头：
+`1girl, amiya (arknights), arknights`。但前一个脚本有时候会出些小问题。你应该在前一个脚本运行完之后
+再运行这个来修正可能存在的错误打标。
+
+Use `cd src/python` to change to `src/python` directory first.
+
+先用 `cd src/python` 命令切换到 `src/python` 目录下。
+
+Command | 命令: `py checkTagsAndCorrect.py`
+
 ### Resize your images | 缩放图片素材
 
 Use `cd src/python` to change to `src/python` directory first.
