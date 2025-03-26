@@ -1,33 +1,35 @@
 import os
 
-DATASET_PATH = './dataset-raw'
-COPYRIGHT = 'arknights'
+DATASET_PATH = "./dataset-raw"
+COPYRIGHT = "arknights"
+
 
 def edit_caption(folder_path, character_names):
     for character_name in character_names:
         # 获取指定文件夹中的文件列表
         files = os.listdir(os.path.join(folder_path, character_name))
         for file in files:
-            if file.endswith('.txt'):
+            if file.endswith(".txt"):
                 tag_file_path = os.path.join(folder_path, character_name, file)
-                with open(tag_file_path, 'r', encoding='utf-8') as f:
+                with open(tag_file_path, "r", encoding="utf-8") as f:
                     tag_file = f.read()
-                tag_list = tag_file.split(', ')
-                new_tags = [tag.replace('_', ' ') for tag in tag_list]
-                new_tags.insert(1, f'{character_name} ({COPYRIGHT})')
+                tag_list = tag_file.split(", ")
+                new_tags = [tag.replace("_", " ") for tag in tag_list]
+                new_tags.insert(1, f"{character_name} ({COPYRIGHT})")
                 new_tags.insert(2, COPYRIGHT)
 
                 # 将 1girl 标签移到最前面
-                if '1girl' in new_tags and '2girls' not in new_tags:
-                    new_tags.remove('1girl')
-                    new_tags.insert(0, '1girl')
+                if "1girl" in new_tags and "2girls" not in new_tags:
+                    new_tags.remove("1girl")
+                    new_tags.insert(0, "1girl")
 
-                with open(tag_file_path, 'w', encoding='utf-8') as f:
-                    f.write(', '.join(new_tags))
+                with open(tag_file_path, "w", encoding="utf-8") as f:
+                    f.write(", ".join(new_tags))
 
-                print('Write tag file: ', tag_file)
+                print("Write tag file: ", tag_file)
 
-    print('Edit tag files complete')
+    print("Edit tag files complete")
+
 
 def check_txt_files_in_folder(folderPath: str):
     """
@@ -60,7 +62,11 @@ def check_txt_files_in_folder(folderPath: str):
                         ("1girl" in data_array)
                         and (
                             data_array[:3]
-                            == ["1girl", f"{characterName} ({COPYRIGHT})", "{COPYRIGHT}"]
+                            == [
+                                "1girl",
+                                f"{characterName} ({COPYRIGHT})",
+                                COPYRIGHT,
+                            ]
                         )
                         or ("2girls" in data_array)
                     ):
@@ -76,13 +82,13 @@ def check_txt_files_in_folder(folderPath: str):
                         name = data_array.index(f"{characterName} ({COPYRIGHT})")
                         data_array.pop(name)
 
-                        arknights = data_array.index("{COPYRIGHT}")
+                        arknights = data_array.index(COPYRIGHT)
                         data_array.pop(arknights)
 
                         data_array = [
                             "1girl",
                             f"{characterName} ({COPYRIGHT})",
-                            "{COPYRIGHT}",
+                            COPYRIGHT,
                         ] + data_array
 
                         new_content = ", ".join(data_array)
