@@ -17,12 +17,8 @@
 ```
 ├─addTags
 ├─output
-├─dataset-raw
-│  └─character_name
-└─src
-    ├─javascript
-    ├─python
-    └─utils
+└─dataset-raw
+   └─character_name
 ```
 
 `dataset-raw/character name` 和 `addTags` 是用来存放打标文件的。
