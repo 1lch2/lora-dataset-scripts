@@ -55,7 +55,7 @@
 
 ### 为 XYZ 图的提示词搜索替换功能生成提示词
 
-脚本：`generate_sr.py`
+脚本：`generate_lora_tag.py`
 
 假设你有这么 5 个炼好的 lora 文件：
 
@@ -65,4 +65,12 @@
 - myLora-3.safetensors
 - myLora-4.safetensors
 
-生成 `<lora:myLora-0:1>` 在 WebUI 的 XYZ 图中用于对比的 Lora 提示词。
+脚本会生成 
+```
+<lora:myLora-0:1>
+<lora:myLora-1:1>
+<lora:myLora-2:1>
+<lora:myLora-3:1>
+<lora:myLora-4:1>
+``` 
+用于在 WebUI 的 XYZ 脚本中对比不同 Lora 检查点的效果。
