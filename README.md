@@ -17,12 +17,8 @@
 ```
 ├─addTags
 ├─output
-├─dataset-raw
-│  └─character_name
-└─src
-    ├─javascript
-    ├─python
-    └─utils
+└─dataset-raw
+   └─character_name
 ```
 
 `dataset-raw/character name` 和 `addTags` 是用来存放打标文件的。
@@ -40,13 +36,6 @@
 `dataset-raw` 下面的文件夹名会作为角色名 tag 被添加进去。比如我有这么个目录，`dataset-raw/amiya`，那这个脚本会把 `1girl, amiya (arknights), arknights` 加到这个目录下每个打标文件的最开头。
 
 如果某个打标文件里已经有了 `1girl` 或者有 `2girls` 的 tag ，脚本也不会多加一个进去。
-
-### 检查并修正打标文件
-
-脚本：`checkTagsAndCorrect.py`
-
-如上文所说，需要保证每个打标文件（至少是大部分的打标文件）都以这种格式开头：
-`1girl, amiya (arknights), arknights`。但前一个脚本有时候会出些小问题。你应该在前一个脚本运行完之后再运行这个来修正可能存在的错误打标。
 
 ### 缩放图片素材
 
@@ -66,7 +55,7 @@
 
 ### 为 XYZ 图的提示词搜索替换功能生成提示词
 
-脚本：`generate_sr.py`
+脚本：`generate_lora_tag.py`
 
 假设你有这么 5 个炼好的 lora 文件：
 
@@ -76,4 +65,12 @@
 - myLora-3.safetensors
 - myLora-4.safetensors
 
-生成 `<lora:myLora-0:1>` 在 WebUI 的 XYZ 图中用于对比的 Lora 提示词。
+脚本会生成 
+```
+<lora:myLora-0:1>
+<lora:myLora-1:1>
+<lora:myLora-2:1>
+<lora:myLora-3:1>
+<lora:myLora-4:1>
+``` 
+用于在 WebUI 的 XYZ 脚本中对比不同 Lora 检查点的效果。
