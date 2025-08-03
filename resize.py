@@ -70,4 +70,4 @@ def resize_images_in_folder(folderPath: str, length=1200, rename=False):
 
 
 if __name__ == "__main__":
-    resize_images_in_folder("../../dataset-raw", 1200, False)
+    resize_images_in_folder("./dataset-raw", 1280, False)
