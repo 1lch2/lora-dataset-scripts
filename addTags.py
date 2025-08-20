@@ -1,4 +1,5 @@
 import os
+import sys
 
 
 def process_txt_files(tags, folder, index=None):
@@ -29,9 +30,19 @@ def process_txt_files(tags, folder, index=None):
                 if index >= 0 and index < len(lines):
                     # 插入到指定位置
                     lines.insert(index, ", ".join(tags))
+                elif index < 0:
+                    # 负数索引，从末尾开始计算位置
+                    # -1 表示在末尾插入，-2 表示在倒数第二个位置插入，以此类推
+                    insert_pos = len(lines) + index + 1
+                    # 确保插入位置在有效范围内
+                    if insert_pos < 0:
+                        insert_pos = 0
+                    elif insert_pos > len(lines):
+                        insert_pos = len(lines)
+                    lines.insert(insert_pos, ", ".join(tags))
             else:
-                # 插入到末尾
-                lines.extend(tags)
+                # 默认插入到开头
+                lines.insert(0, ", ".join(tags))
 
             # 将数组用逗号空格链接成字符串
             new_content = ", ".join(lines)
@@ -43,8 +54,31 @@ def process_txt_files(tags, folder, index=None):
             print(f"Write file: {file.name}")
 
 
+def main():
+    # Check argument count
+    if len(sys.argv) < 2 or len(sys.argv) > 3:
+        print("Usage: python addTags.py <tag> [position]")
+        print("  <tag>: The tag to be added to each txt file")
+        print("  [position]: The position to insert the tag (optional)")
+        print("    - If not provided, tag will be added at the beginning")
+        print("    - If negative, counts from the end (-1 means at the end)")
+        sys.exit(1)
+
+    # Get tag from first argument
+    tag = sys.argv[1]
+
+    # Get position from second argument if provided
+    index = None
+    if len(sys.argv) == 3:
+        try:
+            index = int(sys.argv[2])
+        except ValueError:
+            print("Error: Position must be an integer")
+            sys.exit(1)
+
+    # Process files with the provided arguments
+    process_txt_files([tag], "./addTags", index)
+
+
 if __name__ == "__main__":
-    process_txt_files(
-        ["official alternate costume"],
-        "../../addTags",
-    )
+    main()
