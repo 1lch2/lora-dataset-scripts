@@ -1,83 +1,100 @@
 import os
 import sys
+import argparse
 
 
-def process_txt_files(tags, folder, index=None):
-    # 获取当前脚本的绝对路径
+def process_txt_files(tags: list[str], folder: str, index: int = 0):
+    """批量为txt tag文件添加指定tag。
+
+    Args:
+        tags: 要添加的tag列表
+        folder: 目标文件夹路径（相对于脚本所在目录）
+        index: 插入位置。0为最开头，-1为末尾，负数表示从后向前的位置
+    """
     script_dir = os.path.abspath(os.path.dirname(__file__))
-    # 计算完整的文件夹路径（处理相对路径）
     full_folder_path = os.path.abspath(os.path.join(script_dir, folder))
 
-    # 确保full_folder_path是一个存在的目录
     if not os.path.isdir(full_folder_path):
         print(f"Error: The folder '{full_folder_path}' does not exist.")
         return
 
-    # 遍历full_folder_path目录下的所有文件
-    for filename in os.listdir(full_folder_path):
-        if filename.endswith(".txt"):
-            file_path = os.path.join(full_folder_path, filename)
+    # 递归收集所有txt文件（支持一层子文件夹）
+    txt_files = []
+    for entry in os.listdir(full_folder_path):
+        entry_path = os.path.join(full_folder_path, entry)
+        if os.path.isdir(entry_path):
+            # 遍历子文件夹中的txt文件
+            for filename in os.listdir(entry_path):
+                if filename.endswith(".txt"):
+                    txt_files.append(os.path.join(entry_path, filename))
+        elif entry.endswith(".txt"):
+            txt_files.append(entry_path)
 
-            # 读取txt文件
-            with open(file_path, "r", encoding="utf-8") as file:
-                content = file.read()
+    if not txt_files:
+        print(f"No .txt files found in '{full_folder_path}'.")
+        return
 
-            # 将内容按逗号分隔为字符串数组，并去除首尾空格
-            lines = [line.strip() for line in content.split(",")]
+    for file_path in txt_files:
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
 
-            # 根据index的值处理tags数组
-            if index is not None:
-                if index >= 0 and index < len(lines):
-                    # 插入到指定位置
-                    lines.insert(index, ", ".join(tags))
-                elif index < 0:
-                    # 负数索引，从末尾开始计算位置
-                    # -1 表示在末尾插入，-2 表示在倒数第二个位置插入，以此类推
-                    insert_pos = len(lines) + index + 1
-                    # 确保插入位置在有效范围内
-                    if insert_pos < 0:
-                        insert_pos = 0
-                    elif insert_pos > len(lines):
-                        insert_pos = len(lines)
-                    lines.insert(insert_pos, ", ".join(tags))
-            else:
-                # 默认插入到开头
-                lines.insert(0, ", ".join(tags))
+        # 按逗号分隔为列表，去除每个tag的首尾空格
+        existing_tags = [tag.strip() for tag in content.split(",") if tag.strip()]
 
-            # 将数组用逗号空格链接成字符串
-            new_content = ", ".join(lines)
+        # 处理插入位置
+        if index == 0:
+            insert_pos = 0
+        elif index < 0:
+            # 负数：从后向前计算。-1表示末尾（即append），-2表示倒数第二个之前
+            insert_pos = max(0, len(existing_tags) + index + 1)
+        else:
+            insert_pos = min(index, len(existing_tags))
 
-            # 写入并覆盖原文件
-            with open(file_path, "w", encoding="utf-8") as file:
-                file.write(new_content)
+        # 在指定位置逐个插入新tag
+        for i, tag in enumerate(tags):
+            existing_tags.insert(insert_pos + i, tag)
 
-            print(f"Write file: {file.name}")
+        # 用逗号+空格连接，最后一个tag后无符号和空格
+        new_content = ", ".join(existing_tags)
+
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(new_content)
+
+        print(f"Processed: {file_path}")
 
 
 def main():
-    # Check argument count
-    if len(sys.argv) < 2 or len(sys.argv) > 3:
-        print("Usage: python addTags.py <tag> [position]")
-        print("  <tag>: The tag to be added to each txt file")
-        print("  [position]: The position to insert the tag (optional)")
-        print("    - If not provided, tag will be added at the beginning")
-        print("    - If negative, counts from the end (-1 means at the end)")
+    parser = argparse.ArgumentParser(description="批量为txt tag文件添加指定tag")
+    parser.add_argument(
+        "tags",
+        help="要添加的tag，多个tag使用逗号分隔",
+    )
+    parser.add_argument(
+        "position",
+        type=int,
+        help="插入位置：0为最开头，-1为末尾，负数表示从后向前的位置",
+    )
+    parser.add_argument(
+        "--folder",
+        default="addTags",
+        help="目标文件夹路径，相对于脚本所在目录（默认: addTags）",
+    )
+
+    args = parser.parse_args()
+
+    # 解析tags：按逗号分隔，去除首尾空格
+    tags = [tag.strip() for tag in args.tags.split(",") if tag.strip()]
+
+    if not tags:
+        print("Error: No tags provided.")
         sys.exit(1)
 
-    # Get tag from first argument
-    tag = sys.argv[1]
+    print(f"Tags to add: {tags}")
+    print(f"Insert position: {args.position}")
+    print(f"Target folder: {args.folder}")
+    print("---")
 
-    # Get position from second argument if provided
-    index = None
-    if len(sys.argv) == 3:
-        try:
-            index = int(sys.argv[2])
-        except ValueError:
-            print("Error: Position must be an integer")
-            sys.exit(1)
-
-    # Process files with the provided arguments
-    process_txt_files([tag], "./addTags", index)
+    process_txt_files(tags, args.folder, args.position)
 
 
 if __name__ == "__main__":
