@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>训练集审核</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="appHeader">
+      <h1>训练集审核</h1>
+      <nav class="tabs" role="tablist" aria-label="审核阶段">
+        <button id="cropTab" role="tab" aria-selected="true" aria-controls="cropView" class="active">裁切</button
+        ><button id="tagTab" role="tab" aria-selected="false" aria-controls="tagView" tabindex="-1">标签</button>
+      </nav>
+      <div class="stageActions">
+        <span id="stageStatus">读取进度…</span><button id="startTag" class="primary" disabled>开始打标</button
+        ><button id="exportDataset" class="primary" hidden disabled>导出训练集</button
+        ><button id="refresh" title="重新读取已保存的数据">刷新</button>
+      </div>
+    </header>
+    <div id="notification" hidden>
+      <p id="message" role="status" aria-live="polite"></p>
+      <button id="dismissMessage" aria-label="关闭提示">×</button>
+    </div>
+    <div class="appShell">
+      <aside class="libraryPanel" aria-label="图片筛选和列表">
+        <div class="filters">
+          <label
+            >身份<select id="group" name="group">
+              <option value="">全部</option>
+            </select></label
+          ><label
+            >文件名<input id="search" name="search" type="search" placeholder="搜索图片…" autocomplete="off"
+          /></label>
+        </div>
+        <section id="cropLibrary" class="sourcePanel">
+          <div class="sourceHeading"><strong>图片列表</strong><span id="sourceProgress"></span></div>
+          <div id="sources" aria-label="源图片"></div>
+        </section>
+        <section id="tagFilters" class="panelScroll" hidden>
+          <h2>筛选样本</h2>
+          <label
+            >裁切类型<select id="kind" name="kind">
+              <option value="">全部</option>
+              <option value="full">完整图</option>
+              <option value="head">头部</option>
+              <option value="upper">腰上</option>
+              <option value="knees">膝盖以上</option>
+              <option value="eyes_calf">眼睛到小腿</option>
+              <option value="lower">下半身</option>
+              <option value="manual">手动</option>
+            </select></label
+          >
+          <label
+            >包含标签<input
+              id="hasTag"
+              name="hasTag"
+              placeholder="例如 white shirt, skirt…"
+              autocomplete="off"
+              spellcheck="false"
+          /></label>
+          <p class="hint">逗号分隔，需同时包含。</p>
+          <label
+            >排除标签<input
+              id="notTag"
+              name="notTag"
+              placeholder="例如 full body…"
+              autocomplete="off"
+              spellcheck="false"
+          /></label>
+          <label class="checkLabel"><input id="unreviewed" type="checkbox" />仅显示未确认</label>
+          <button id="resetTagFilters">清除筛选</button>
+        </section>
+      </aside>
+      <main id="cropView" role="tabpanel" aria-labelledby="cropTab">
+        <section class="editor">
+          <div class="editorHeading">
+            <h2 id="sourceName">选择图片</h2>
+            <button id="focusCrop" aria-pressed="false">专注裁切</button>
+          </div>
+          <div class="images">
+            <figure class="workingFigure">
+              <figcaption>工作图 · 拖动裁框移动，拖动角点缩放</figcaption>
+              <div id="canvasStage"><canvas id="canvas" aria-label="工作图裁框编辑器"></canvas></div>
+            </figure>
+          </div>
+          <aside class="cropInspector panelScroll" aria-label="裁切设置">
+            <section class="cropParts">
+              <h3>裁切部位</h3>
+              <p id="cropProgress" class="hint"></p>
+              <div id="candidates"></div>
+              <button id="newCrop">＋ 新建裁框</button><button id="acceptSource">接受本图全部待审裁框</button>
+            </section>
+            <details class="imageSettings">
+              <summary>倍率与主体</summary>
+              <label
+                >工作图倍率<select id="scale">
+                  <option value="1">不放大</option>
+                  <option value="1.5">1.5 倍</option>
+                  <option value="2">2 倍</option>
+                </select></label
+              ><button id="setScale">重新准备此图</button><label>主体<select id="person"></select></label
+              ><button id="setPerson">生成主体裁框</button>
+            </details>
+            <details>
+              <summary>检测提示</summary>
+              <p id="notes" class="hint"></p>
+            </details>
+            <figure class="originalFigure">
+              <figcaption>完整原图 · 固定保留</figcaption>
+              <button id="originalPreview" class="imageButton" aria-label="查看完整原图">
+                <img id="original" alt="完整原图" />
+              </button>
+            </figure>
+          </aside>
+          <div class="cropActions">
+            <div class="cropSize"><strong id="dimensions"></strong><span id="areaStatus"></span></div>
+            <div class="toolbar" role="group" aria-label="当前裁框操作">
+              <button id="saveCrop">保存修改</button><button id="rejectCrop" class="reject">拒绝并继续</button
+              ><button id="acceptCrop" class="primary">接受并继续</button>
+            </div>
+          </div>
+        </section>
+      </main>
+      <main id="tagView" role="tabpanel" aria-labelledby="tagTab" hidden>
+        <section class="tagGallery" aria-label="标签样本">
+          <div class="galleryHeading">
+            <strong id="visibleCount">样本</strong>
+            <div class="toolbar">
+              <button id="selectVisible">选择筛选结果</button><button id="clearSelection">清空选择</button>
+            </div>
+          </div>
+          <div id="tagCards" tabindex="0" aria-label="可选择的样本列表"></div>
+        </section>
+        <aside class="tagTools" aria-label="批量标签编辑">
+          <div class="toolHeading">
+            <h2>批量编辑</h2>
+            <strong id="selectedCount">0 张</strong>
+          </div>
+          <div class="panelScroll">
+            <p id="selectionHint" class="hint">先在中间选择图片。</p>
+            <label
+              >操作<select id="tagOperation">
+                <option value="add">添加标签／触发词</option>
+                <option value="remove">删除标签</option>
+                <option value="replace">替换标签</option>
+              </select></label
+            >
+            <label id="tagInputGroup"
+              >标签<textarea
+                id="editTags"
+                name="editTags"
+                rows="3"
+                placeholder="例如 white shirt, blue skirt…"
+                autocomplete="off"
+                spellcheck="false"
+              ></textarea>
+            </label>
+            <div id="replaceInputs" hidden>
+              <label>原标签<input id="oldTag" name="oldTag" autocomplete="off" spellcheck="false" /></label
+              ><label>新标签<input id="newTag" name="newTag" autocomplete="off" spellcheck="false" /></label>
+            </div>
+            <button id="applyTags" data-mode="add">添加到选中图片</button>
+            <details open>
+              <summary>选中图片的标签频次</summary>
+              <div id="frequencies"></div>
+            </details>
+            <details>
+              <summary>恢复与导出清理</summary>
+              <p class="hint">恢复会撤销选中图片的人工标签修改及构图自动删除。</p>
+              <button data-mode="restore">恢复原始打标</button
+              ><label
+                >导出时额外删除<textarea
+                  id="dropTags"
+                  name="dropTags"
+                  rows="3"
+                  placeholder="服装变体名称，精确匹配…"
+                  spellcheck="false"
+                ></textarea></label
+              ><button id="saveDrop">保存清理列表</button>
+            </details>
+          </div>
+          <div class="toolFooter">
+            <p class="hint">修改标签后，需要再次确认。</p>
+            <button data-mode="approve" class="primary">确认选中标签</button>
+          </div>
+        </aside>
+      </main>
+    </div>
+    <footer class="appStatus">
+      <span id="summary"></span><progress id="jobProgress" hidden aria-label="打标进度"></progress>
+      <p id="jobStatus" role="status" aria-live="polite"></p>
+    </footer>
+    <dialog id="preview"><button id="closePreview">关闭</button><img alt="样本大图" /></dialog>
+    <script>
+      window.REVIEW_TOKEN = '__TOKEN__';
+    </script>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -144,3 +144,12 @@ dataset-raw
 .gitkeep
 reverse
 dup
+
+# Local preprocessing runtime, review records and datasets
+.venv-preprocess/
+.cache/
+__pycache__/
+*.pyc
+runs/
+dataset-ready/
+preprocess.local.json

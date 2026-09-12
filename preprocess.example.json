@@ -1,0 +1,18 @@
+{
+  "input_dir": "dataset-raw",
+  "identity": "",
+  "run_dir": "runs/default",
+  "output_dir": "dataset-ready",
+  "forge_url": "http://127.0.0.1:7860",
+  "upscaler_1": "4x-UltraSharpV2",
+  "upscaler_2": "ScuNET",
+  "blend": 0.3,
+  "tagger_model": "wd-eva02-large-tagger-v3",
+  "tag_threshold": 0.3,
+  "target_area": 1048576,
+  "min_area": 943719,
+  "duplicate_iou": 0.95,
+  "copyright": "arknights",
+  "drop_tags": [],
+  "tags_csv": "E:/stable-diffusion-webui-forge-classic/models/diffusers/models--SmilingWolf--wd-eva02-large-tagger-v3/snapshots/b25b82a03f7282e41aa2f257a52c7583b710bd1c/selected_tags.csv"
+}
