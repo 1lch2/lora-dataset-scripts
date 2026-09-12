@@ -40,7 +40,7 @@
           <div id="sources" aria-label="源图片"></div>
         </section>
         <section id="tagFilters" class="panelScroll" hidden>
-          <h2>筛选样本</h2>
+          <div class="sampleFilterToolbar">
           <label
             >裁切类型<select id="kind" name="kind">
               <option value="">全部</option>
@@ -53,7 +53,10 @@
               <option value="manual">手动</option>
             </select></label
           >
-          <label
+          <label class="checkLabel"><input id="unreviewed" type="checkbox" />仅显示未确认</label>
+          <button id="resetTagFilters">清除筛选</button>
+          </div>
+          <div class="tagConditionGrid"><div class="fieldRow filterCondition"><label
             >包含标签<input
               id="hasTag"
               name="hasTag"
@@ -61,8 +64,8 @@
               autocomplete="off"
               spellcheck="false"
           /></label>
-          <p class="hint">逗号分隔，需同时包含。</p>
-          <label
+          <label>包含逻辑<select id="hasLogic"><option value="all">AND · 同时包含</option><option value="any">OR · 任意包含</option></select></label></div>
+          <div class="fieldRow filterCondition"><label
             >排除标签<input
               id="notTag"
               name="notTag"
@@ -70,8 +73,21 @@
               autocomplete="off"
               spellcheck="false"
           /></label>
-          <label class="checkLabel"><input id="unreviewed" type="checkbox" />仅显示未确认</label>
-          <button id="resetTagFilters">清除筛选</button>
+          <label>排除逻辑<select id="notLogic"><option value="any">OR · 排除任意命中</option><option value="all">AND · 排除全部命中</option></select></label></div>
+          </div>
+          <hr />
+          <div class="tagListHeading"><h3>标签列表 <small id="vocabularyCount"></small></h3>
+          <div class="tagFocus"><span id="tagFocusName">全部图片的标签</span><button id="viewFocusedImage" hidden>查看大图</button><button id="showAllTags" hidden>显示全部标签</button></div>
+          </div>
+          <div class="tagSearchToolbar">
+          <label>搜索标签<input id="tagSearch" type="search" placeholder="搜索标签名称…" /></label>
+            <label>匹配<select id="tagSearchMode"><option value="contains">包含</option><option value="prefix">前缀</option><option value="suffix">后缀</option><option value="exact">完整标签</option><option value="regex">正则表达式</option></select></label>
+            <label>排序<select id="tagSort"><option value="frequency">出现频率</option><option value="alpha">字母顺序</option></select></label>
+            <label>顺序<select id="tagOrder"><option value="desc">降序</option><option value="asc">升序</option></select></label>
+          </div>
+          <p id="tagSearchError" class="error" role="status"></p>
+          <p class="hint">点击标签加入包含条件；点击 − 加入排除条件。数字为基础筛选中含此标签的图片数。</p>
+          <div id="tagVocabulary" class="tagVocabulary"></div>
         </section>
       </aside>
       <main id="cropView" role="tabpanel" aria-labelledby="cropTab">
@@ -132,27 +148,43 @@
               <button id="selectVisible">选择筛选结果</button><button id="clearSelection">清空选择</button>
             </div>
           </div>
+          <div id="tagDatasetFilters"></div>
           <div id="tagCards" tabindex="0" aria-label="可选择的样本列表"></div>
         </section>
         <aside class="tagTools" aria-label="批量标签编辑">
-          <div class="toolHeading">
-            <h2>批量编辑</h2>
-            <strong id="selectedCount">0 张</strong>
+          <div class="tagToolTabs" role="tablist" aria-label="标签工具">
+            <button id="filterToolTab" role="tab" aria-controls="filterToolPanel" aria-selected="true" class="active">标签筛选</button>
+            <button id="selectionToolTab" role="tab" aria-controls="selectionToolPanel" aria-selected="false" tabindex="-1">图片过滤</button>
+            <button id="batchToolTab" role="tab" aria-controls="batchToolPanel" aria-selected="false" tabindex="-1">批量编辑</button>
+            <button id="singleToolTab" role="tab" aria-controls="singleToolPanel" aria-selected="false" tabindex="-1">单图编辑</button>
           </div>
-          <div class="panelScroll">
+          <div id="filterToolPanel" role="tabpanel" aria-labelledby="filterToolTab" class="panelScroll"></div>
+          <div id="selectionToolPanel" role="tabpanel" aria-labelledby="selectionToolTab" class="panelScroll" hidden>
+            <div class="compactActions"><button id="filterChecked">加入勾选图片</button><button id="filterVisible">加入当前结果</button><button id="invertImageFilter">反选</button><button id="clearImageBasket">清空</button></div>
+            <div class="compactActions"><button id="applyImageFilter" class="primary">应用图片过滤</button><button id="resetImageFilter">取消图片过滤</button><span id="imageFilterStatus" role="status"></span></div>
+            <p class="hint">点击下方缩略图可移出待过滤列表。应用后与标签条件共同生效。</p>
+            <div id="imageFilterBasket"></div>
+          </div>
+          <div id="batchToolPanel" role="tabpanel" aria-labelledby="batchToolTab" class="panelScroll" hidden>
+            <div class="batchScope"><label>操作范围<select id="editScope"><option value="filtered">当前筛选结果</option><option value="selected">勾选的图片</option></select></label><strong id="selectedCount">0 张</strong></div>
             <p id="selectionHint" class="hint">先在中间选择图片。</p>
-            <label
+            <div id="batchTabs" class="compactActions" role="tablist" aria-label="批量操作">
+              <button role="tab" data-operation="add" aria-selected="true">添加</button><button role="tab" data-operation="match" aria-selected="false" tabindex="-1">搜索替换</button><button role="tab" data-operation="remove" aria-selected="false" tabindex="-1">批量删除</button><button role="tab" data-operation="sort" aria-selected="false" tabindex="-1">排序</button><button role="tab" data-operation="dedupe" aria-selected="false" tabindex="-1">去重</button>
+            </div>
+            <label hidden
               >操作<select id="tagOperation">
                 <option value="add">添加标签／触发词</option>
                 <option value="remove">删除标签</option>
                 <option value="replace">替换标签</option>
+                <option value="match">匹配替换／删除</option>
+                <option value="sort">重排图片内标签</option><option value="dedupe">逐图去重</option>
               </select></label
             >
             <label id="tagInputGroup"
               >标签<textarea
                 id="editTags"
                 name="editTags"
-                rows="3"
+                rows="2"
                 placeholder="例如 white shirt, blue skirt…"
                 autocomplete="off"
                 spellcheck="false"
@@ -162,9 +194,26 @@
               <label>原标签<input id="oldTag" name="oldTag" autocomplete="off" spellcheck="false" /></label
               ><label>新标签<input id="newTag" name="newTag" autocomplete="off" spellcheck="false" /></label>
             </div>
-            <button id="applyTags" data-mode="add">添加到选中图片</button>
+            <label id="prependGroup" class="checkLabel"><input id="prependTags" type="checkbox" />添加到最前面</label>
+            <div id="matchInputs" hidden>
+              <div class="fieldRow"><label>匹配方式<select id="matchMode"><option value="exact">完整标签</option><option value="contains">包含文本</option><option value="prefix">前缀</option><option value="suffix">后缀</option><option value="regex">正则表达式</option></select></label>
+              <label>查找<input id="matchSearch" autocomplete="off" spellcheck="false" /></label>
+              <label>替换为<input id="matchReplacement" placeholder="留空则删除命中的整个标签" autocomplete="off" spellcheck="false" /></label>
+              </div><p class="hint">替换匹配文本；留空删除命中的标签。正则支持 \g&lt;1&gt;，逗号生成多个标签。</p>
+            </div>
+            <p id="dedupeHint" class="hint" hidden>对操作范围内的每张图片分别去重，保留标签首次出现的顺序，并保存到同名 TXT。</p>
+            <div id="sortInputs" class="fieldRow" hidden>
+              <label>排序依据<select id="captionSort"><option value="alpha">字母顺序</option><option value="frequency">操作范围内的出现频率</option></select></label>
+              <label>顺序<select id="captionOrder"><option value="asc">升序</option><option value="desc">降序</option></select></label>
+            </div>
+            <div class="compactActions"><button id="previewTags">预览修改</button>
+            <button id="applyTags" data-mode="add" class="primary">添加到选中图片</button><label id="matchCaseGroup" class="checkLabel" hidden><input id="matchCase" type="checkbox" checked />区分大小写</label></div>
+            <div id="batchPreview" hidden aria-live="polite"></div>
             <details open>
-              <summary>选中图片的标签频次</summary>
+              <summary>操作范围内的标签</summary>
+              <p id="commonTags" class="hint"></p>
+              <div class="fieldRow"><label>搜索标签<input id="frequencySearch" type="search" placeholder="筛选可选标签" /></label><label>排序<select id="frequencySort"><option value="frequency">出现频率</option><option value="alpha">字母顺序</option></select></label><label>顺序<select id="frequencyOrder"><option value="desc">降序</option><option value="asc">升序</option></select></label></div>
+              <div id="removeSelectionActions" class="compactActions" hidden><button id="chooseRemovalTags">选择显示标签</button><button id="clearRemovalTags">清空待删除标签</button></div>
               <div id="frequencies"></div>
             </details>
             <details>
@@ -181,10 +230,17 @@
                 ></textarea></label
               ><button id="saveDrop">保存清理列表</button>
             </details>
-          </div>
           <div class="toolFooter">
             <p class="hint">修改标签后，需要再次确认。</p>
-            <button data-mode="approve" class="primary">确认选中标签</button>
+            <button data-mode="approve" class="primary">确认范围内标签</button>
+          </div>
+          </div>
+          <div id="singleToolPanel" role="tabpanel" aria-labelledby="singleToolTab" class="panelScroll" hidden>
+            <h2>单图标签</h2><p class="hint">点击左侧缩略图选择图片。</p>
+            <p id="singleName"></p><details><summary>图片预览</summary><img id="singlePreview" alt="当前编辑样本" hidden /></details>
+            <p id="singleNotes" class="bad"></p>
+            <label>标签<textarea id="singleCaption" rows="8" placeholder="逗号分隔…" spellcheck="false"></textarea></label>
+            <div class="compactActions"><button id="saveSingle" class="primary" disabled>保存此图标签</button></div>
           </div>
         </aside>
       </main>

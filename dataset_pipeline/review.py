@@ -13,7 +13,8 @@ from .core import Run, asset, run_lock
 
 def make_server(directory, port=8765):
     directory = Path(directory).resolve()
-    Run.load(directory)
+    with run_lock(directory):
+        Run.load(directory).ensure_tag_files()
     token = secrets.token_urlsafe(24)
     mutex = threading.Lock()
     static = Path(__file__).parent / "static"
@@ -148,9 +149,8 @@ def make_server(directory, port=8765):
                             if candidate["status"] == "pending":
                                 run.change_crop(source["id"], candidate["id"], status="accepted")
                         result = {}
-                    elif action == "tags":
-                        run.edit_tags(data["selections"], data["operation"])
-                        result = {}
+                    elif action in ("tags", "preview_tags"):
+                        result = run.edit_tags(data["selections"], data["operation"], preview=action == "preview_tags")
                     elif action == "drop_tags":
                         tags = data["tags"]
                         if not isinstance(tags, list) or any(not isinstance(t, str) for t in tags):

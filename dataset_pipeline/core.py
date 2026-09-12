@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -149,11 +150,60 @@ class Run:
         data = json.loads((Path(directory) / "manifest.json").read_text(encoding="utf-8"))
         if data.get("version") != 1:
             raise ValueError("不支持的运行记录版本")
-        return cls(directory, data, **kwargs)
+        run = cls(directory, data, **kwargs)
+        run.read_tag_files()
+        return run
 
     def save(self):
         self.data["updated_at"] = time.time()
         atomic_json(self.directory / "manifest.json", self.data)
+
+    def read_tag_files(self):
+        """Sidecar captions are the editable source of truth; retain model history."""
+        for source in self.data["sources"].values():
+            for candidate in source.get("candidates", []):
+                tag = candidate.get("tag")
+                if not tag or not tag.get("image"):
+                    continue
+                path = asset(self.directory, tag["image"]).with_suffix(".txt")
+                if not path.is_file():
+                    continue
+                tags = list(dict.fromkeys(normalize(t) for t in re.split(r"[,\r\n]+", path.read_text(encoding="utf-8-sig")) if normalize(t)))
+                if tags != tag["tags"]:
+                    tag["operations"].append({"mode": "set", "tags": tags, "origin": "txt"})
+                    tag.update(tags=tags, reviewed=False)
+
+    def write_tag_file(self, tag):
+        path = asset(self.directory, tag["image"]).with_suffix(".txt")
+        content = ", ".join(tag["tags"]) + "\n"
+        if path.is_file() and path.read_text(encoding="utf-8-sig") == content:
+            return
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".txt.tmp")
+        try:
+            temporary.write_text(content, encoding="utf-8")
+            temporary.replace(path)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def ensure_tag_files(self):
+        """Backfill legacy captions, including history, without overwriting files."""
+        written = 0
+        def visit(value):
+            nonlocal written
+            if isinstance(value, dict):
+                if "image" in value and "tags" in value and "raw" in value:
+                    image = asset(self.directory, value["image"])
+                    if image.is_file() and not image.with_suffix(".txt").exists():
+                        self.write_tag_file(value)
+                        written += 1
+                for item in value.values():
+                    visit(item)
+            elif isinstance(value, list):
+                for item in value:
+                    visit(item)
+        visit(self.data["sources"])
+        return written
 
     def _prepare_key(self, fingerprint, scale):
         keys = ("forge_url", "upscaler_1", "upscaler_2", "blend", "target_area", "min_area", "duplicate_iou")
@@ -348,6 +398,8 @@ class Run:
         return relative
 
     def tag_all(self):
+        self.read_tag_files()
+        self.ensure_tag_files()
         failures = []
         self.client.check(tagging=True)
         for source in self.data["sources"].values():
@@ -387,6 +439,7 @@ class Run:
                            "restore_raw": old.get("restore_raw", False), "reviewed": False, "stale": False,
                            "seconds": round(time.monotonic() - started, 3)}
                     tag["tags"] = edited_tags(tag)
+                    self.write_tag_file(tag)
                     candidate["tag"] = tag
                     candidate.pop("error", None)
                     self.save()
@@ -396,22 +449,52 @@ class Run:
                     self.save()
         return failures
 
-    def edit_tags(self, selections, operation):
+    def edit_tags(self, selections, operation, preview=False):
+        self.read_tag_files()
         # Validate the whole batch before changing any image.
         targets = [self.locate(s[0], s[1]) for s in selections]
         if not targets:
             raise ValueError("请先选择图片")
         mode = operation.get("mode")
-        if mode not in ("add", "remove", "replace", "restore", "approve"):
+        if mode not in ("add", "remove", "replace", "match", "sort", "dedupe", "set", "restore", "approve"):
             raise ValueError("未知标签操作")
-        if mode in ("add", "remove") and not isinstance(operation.get("tags"), list):
+        if mode in ("add", "remove", "set") and (not isinstance(operation.get("tags"), list)
+                or any(not isinstance(t, str) for t in operation["tags"])):
             raise ValueError("需要标签列表")
         if mode == "replace" and (not operation.get("old") or not operation.get("new")):
             raise ValueError("替换需要原标签和新标签")
         for source, candidate in targets:
             if not self.current_tag(source, candidate) or candidate["status"] != "accepted":
                 raise ValueError("选中图片的标签过期或尚未打标，请先运行 tag")
-        for _, candidate in targets:
+        operation = copy.deepcopy(operation)
+        if mode == "sort":
+            counts = {}
+            for _, candidate in targets:
+                for text in set(candidate["tag"]["tags"]):
+                    counts[text] = counts.get(text, 0) + 1
+            operation["counts"] = counts
+        # Calculate every result before writing, including regex/replacement validation.
+        changes = []
+        for source, candidate in targets:
+            tag = copy.deepcopy(candidate["tag"])
+            if mode == "restore":
+                tag.update(operations=[], restore_raw=True)
+            elif mode != "approve":
+                tag["operations"].append(operation)
+            after = edited_tags(tag)
+            before = candidate["tag"]["tags"]
+            if mode == "dedupe":
+                path = asset(self.directory, tag["image"]).with_suffix(".txt")
+                if path.is_file():
+                    before = [normalize(t) for t in re.split(r"[,\r\n]+", path.read_text(encoding="utf-8-sig")) if normalize(t)]
+            changes.append({"source": source["id"], "candidate": candidate["id"],
+                            "name": f"{source['relative']} / {candidate['kind']}",
+                            "before": before, "after": after})
+        result = {"total": len(targets), "changed": sum(c["before"] != c["after"] for c in changes),
+                  "examples": [c for c in changes if c["before"] != c["after"]][:20]}
+        if preview:
+            return result
+        for (_, candidate), change in zip(targets, changes):
             tag = candidate["tag"]
             if mode == "approve":
                 tag["reviewed"] = True
@@ -419,12 +502,20 @@ class Run:
                 tag.setdefault("edit_history", []).append(copy.deepcopy(tag["operations"]))
                 tag.update(operations=[], restore_raw=True, reviewed=False)
             else:
+                if mode == "dedupe" and change["before"] == change["after"]:
+                    self.write_tag_file(tag)
+                    continue
+                if mode in ("match", "sort") and change["before"] == change["after"]:
+                    continue
                 tag["operations"].append(copy.deepcopy(operation))
                 tag["reviewed"] = False
             tag["tags"] = edited_tags(tag)
+            self.write_tag_file(tag)
         self.save()
+        return result
 
     def export(self):
+        self.read_tag_files()
         sources = [s for s in self.data["sources"].values() if s.get("active", True)]
         selected = []
         for source in sources:
@@ -503,24 +594,73 @@ def normalize(tag):
 def edited_tags(tag):
     tags = [t for t in tag["raw"] if tag.get("restore_raw") or t not in tag["auto_removed"]]
     for operation in tag["operations"]:
-        mode = operation["mode"]
-        if mode == "add":
-            tags.extend(normalize(t) for t in operation["tags"])
-        elif mode == "remove":
-            remove = {normalize(t) for t in operation["tags"]}
-            tags = [t for t in tags if t not in remove]
-        elif mode == "replace":
-            tags = [normalize(operation["new"]) if t == normalize(operation["old"]) else t for t in tags]
+        tags = apply_tag_operation(tags, operation)
+    return list(dict.fromkeys(t for t in tags if t))
+
+
+def apply_tag_operation(tags, operation):
+    mode = operation["mode"]
+    if mode == "add":
+        extra = [normalize(t) for t in operation["tags"]]
+        tags = extra + tags if operation.get("prepend") else tags + extra
+    elif mode == "remove":
+        remove = {normalize(t) for t in operation["tags"]}
+        tags = [t for t in tags if t not in remove]
+    elif mode == "replace":
+        tags = [normalize(operation["new"]) if t == normalize(operation["old"]) else t for t in tags]
+    elif mode == "set":
+        tags = [normalize(t) for t in operation["tags"]]
+    elif mode == "match":
+        search, replacement = operation.get("search"), operation.get("new", "")
+        match = operation.get("match", "exact")
+        if not isinstance(search, str) or not search or not isinstance(replacement, str):
+            raise ValueError("请输入匹配内容；替换内容留空表示删除")
+        if match not in ("exact", "contains", "prefix", "suffix", "regex"):
+            raise ValueError("未知匹配方式")
+        expression = search if match == "regex" else re.escape(normalize(search))
+        if match in ("exact", "prefix"):
+            expression = "^" + expression
+        if match in ("exact", "suffix"):
+            expression += "$"
+        try:
+            pattern = re.compile(expression, 0 if operation.get("case_sensitive", True) else re.I)
+            # Validate backreferences even when no tag matches.
+            if match == "regex":
+                pattern.sub(replacement, "")
+            tags = [pattern.sub(replacement if match == "regex" else lambda _: replacement, t)
+                    if replacement else ("" if pattern.search(t) else t) for t in tags]
+            tags = [normalize(part) for t in tags for part in t.split(",")]
+        except re.error as error:
+            raise ValueError(f"匹配表达式或替换内容无效：{error}") from error
+    elif mode == "sort":
+        by = operation.get("by", "alpha")
+        if by not in ("alpha", "frequency") or operation.get("order", "asc") not in ("asc", "desc"):
+            raise ValueError("未知排序方式")
+        descending = operation.get("order") == "desc"
+        if by == "frequency":
+            counts = operation.get("counts", {})
+            tags = sorted(tags, key=lambda t: ((-1 if descending else 1) * counts.get(t, 0), t.casefold(), t))
+        else:
+            tags = sorted(tags, key=lambda t: (t.casefold(), t), reverse=descending)
     return list(dict.fromkeys(t for t in tags if t))
 
 
 def manual_additions(tag):
     additions = set()
+    current = [t for t in tag["raw"] if tag.get("restore_raw") or t not in tag["auto_removed"]]
     for operation in tag["operations"]:
         if operation["mode"] == "add":
             additions.update(normalize(t) for t in operation["tags"])
         elif operation["mode"] == "replace":
             additions.add(normalize(operation["new"]))
+        elif operation["mode"] == "set":
+            additions.update(normalize(t) for t in operation["tags"])
+        elif operation["mode"] == "match":
+            for text in current:
+                result = apply_tag_operation([text], operation)
+                if result != [text]:
+                    additions.update(result)
+        current = apply_tag_operation(current, operation)
     return additions & set(tag["tags"])
 
 

@@ -151,6 +151,10 @@ class PipelineTests(unittest.TestCase):
         self.accept(run, source)
         self.assertEqual(run.tag_all(), [])
         first_calls = self.client.tags
+        for candidate in source["candidates"]:
+            if candidate.get("tag"):
+                tag = candidate["tag"]
+                self.assertEqual(asset(run.directory, tag["image"]).with_suffix(".txt").read_text(encoding="utf-8"), ", ".join(tag["tags"]) + "\n")
         full = source["candidates"][0]
         with Image.open(asset(run.directory, full["tag"]["image"])) as image:
             self.assertEqual(image.size, (1200, 1800))

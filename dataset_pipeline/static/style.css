@@ -409,50 +409,99 @@ body.focusCrop .editor {
   overflow-y: auto;
   overscroll-behavior: contain;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
   align-content: start;
   padding: 14px;
 }
+
+/* Tag Editor: gallery on the left, tabbed tools on the right. */
+body.tagEditing .libraryPanel { display: none; }
+body.tagEditing .appShell { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+body.tagEditing #tagView { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); }
+.tagToolTabs { display: flex; gap: 4px; padding: 10px 14px; border-bottom: 1px solid #dce0d8; flex: none; }
+.tagToolTabs button { flex: 1; white-space: nowrap; }
+.tagTools > [role='tabpanel'] { flex: 1; min-height: 0; overflow-y: auto; }
+#filterToolPanel { padding: 0; }
+#tagFilters { overflow: visible; }
+#tagFilters label { margin-bottom: 0; gap: 4px; }
+.sampleFilterToolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.sampleFilterToolbar > label:first-child { flex: 1; flex-direction: row; align-items: center; white-space: nowrap; }
+.sampleFilterToolbar select { flex: 1; }
+.sampleFilterToolbar .checkLabel, .sampleFilterToolbar button { flex: none; white-space: nowrap; }
+.tagConditionGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tagConditionGrid .fieldRow { gap: 6px; }
+.tagConditionGrid .filterCondition > label:last-child { flex: 0 0 130px; }
+.tagListHeading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; margin: 8px 0; }
+.tagListHeading h3 { flex: none; }
+.tagListHeading .tagFocus { flex: 1; margin: 0; }
+.tagSearchToolbar { display: grid; grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0; }
+#tagFilters hr { border: 0; border-top: 1px solid #e3e6df; margin: 10px 0; }
+#tagDatasetFilters .filters { display: flex; width: auto; gap: 12px; padding: 10px 14px; border-bottom: 1px solid #e3e6df; }
+#tagDatasetFilters label { flex: 1; margin: 0; }
+.fieldRow { display: flex; align-items: end; gap: 10px; }
+.fieldRow > label { flex: 1; }
+.filterCondition > label:first-child { flex: 2; }
+.tagVocabulary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.tagFocus { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px; }
+#tagFocusName { flex: 1; overflow-wrap: anywhere; color: #6c746c; }
+.tagFocus button { font-size: 12px; }
+#singleNotes { white-space: pre-line; margin-bottom: 10px; }
+.tagChoice { display: inline-flex; max-width: 100%; }
+.tagChoice button:first-child { border-radius: 4px 0 0 4px; overflow-wrap: anywhere; text-align: left; }
+.tagChoice button:last-child { border-radius: 0 4px 4px 0; border-left: 0; flex: none; }
+#vocabularyCount { color: #6c746c; font-weight: 400; }
+#batchPreview { padding: 12px; margin-bottom: 14px; border: 1px solid #ccd7cb; border-radius: 5px; background: #f4f7f2; overflow-wrap: anywhere; }
+#batchPreview p { margin-top: 8px; }
+#commonTags { margin-bottom: 10px; max-height: 85px; overflow-y: auto; }
+#singlePreview { width: 100%; height: 220px; object-fit: contain; margin: 12px 0; background: #f3f4f0; }
+#singleCaption { min-height: 160px; max-height: 350px; }
+#singleName { overflow-wrap: anywhere; }
+#previewTags { margin-bottom: 8px; width: 100%; }
+@media (max-width: 850px) {
+  body.tagEditing #tagView { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); grid-template-rows: minmax(0, 1fr); }
+}
+@media (max-width: 1150px) {
+  .tagConditionGrid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .tagSearchToolbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sampleFilterToolbar { flex-wrap: wrap; gap: 8px; }
+}
+@media (max-width: 600px) {
+  body.tagEditing #tagView { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(180px, 42%) minmax(0, 1fr); }
+  body.tagEditing #tagCards { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); padding: 8px; gap: 6px; }
+  .tagToolTabs { padding: 6px 8px; }
+  .tagToolTabs button { padding: 5px; }
+}
 .card {
+  position: relative;
   border: 1px solid #d3d9cf;
   border-radius: 5px;
   background: white;
-  padding: 10px;
-  overflow-wrap: anywhere;
+  padding: 3px;
 }
 .card.selected {
   border-color: #31704b;
   box-shadow: inset 0 0 0 1px #31704b;
 }
-.card label {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
+.card.focused {
+  outline: 2px solid #31704b;
+  outline-offset: 1px;
 }
+.card > input[type='checkbox'] {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px white;
+}
+.card .imageButton { display: block; width: 100%; aspect-ratio: 1; cursor: pointer; }
 .card .imageButton img {
-  height: 210px;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
   max-height: none;
   object-fit: contain;
   background: #f3f4f0;
-}
-.card p {
-  font-size: 12px;
-  margin-top: 6px;
-}
-.card .caption {
-  max-height: 110px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-.card .filename {
-  color: #6c746c;
-}
-.card details {
-  padding-bottom: 0;
-  margin-top: 8px;
 }
 .tagTools {
   display: flex;
@@ -501,6 +550,50 @@ body.focusCrop .editor {
   overflow-wrap: anywhere;
   text-align: left;
 }
+.compactActions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.compactActions #applyTags { width: auto; margin: 0; }
+.compactActions #previewTags { width: auto; margin: 0; }
+.batchScope { display: flex; align-items: center; gap: 12px; }
+.batchScope label { display: flex; flex-direction: row; align-items: center; flex: 1; white-space: nowrap; }
+.batchScope select { flex: 1; min-width: 0; }
+#batchTabs button { flex: 1; white-space: nowrap; }
+#batchToolPanel .toolHeading { padding: 4px 0; }
+#batchToolPanel label { margin-bottom: 6px; }
+#batchToolPanel .hint { margin: 5px 0; }
+#batchToolPanel #commonTags { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#batchToolPanel .fieldRow label { min-width: 0; }
+#batchToolPanel #frequencies { max-height: none; }
+#frequencies button[aria-pressed="true"] { background: #e1efdf; border-color: #31704b; color: #255439; }
+#imageFilterBasket { display: grid; grid-template-columns: repeat(auto-fill,minmax(80px,1fr)); gap: 8px; }
+#imageFilterBasket .imageButton { padding: 0; cursor: pointer; aspect-ratio: 1; overflow: hidden; }
+#imageFilterBasket img { width: 100%; height: 100%; object-fit: contain; }
+#imageFilterStatus { font-size: 12px; }
+.tagVocabulary, #frequencies { gap: 6px; align-items: flex-start; }
+.tagChoice { align-items: stretch; }
+.tagChoice .tagChip, #frequencies .tagChip {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 30px; max-width: 100%; padding: 4px 8px;
+  background: #eef0ec; border: 1px solid #d9ded5; border-radius: 8px;
+  font-size: 14px; line-height: 1.4; color: #27302a; cursor: pointer;
+  text-align: left; overflow-wrap: anywhere;
+}
+.tagChip .tagText { min-width: 0; }
+.tagChip .tagCount { flex: none; font-size: 12px; font-variant-numeric: tabular-nums; color: #606b62; }
+.tagChip[aria-pressed]::before {
+  content: ''; flex: none; width: 14px; height: 14px; border-radius: 3px;
+  border: 1px solid #9aa69c; background: #fff; box-sizing: border-box;
+}
+.tagChoice .tagChip[aria-pressed='true'], #frequencies .tagChip[aria-pressed='true'] {
+  background: #e1efdf; border-color: #31704b; color: #255439;
+}
+.tagChip[aria-pressed='true']::before {
+  content: '✓'; background: #31704b; border-color: #31704b; color: #fff;
+  text-align: center; font-size: 11px; line-height: 12px;
+}
+.tagChoice .tagChip:hover, #frequencies .tagChip:hover { border-color: #77927e; background: #e5eae2; }
+.tagChoice button:focus-visible, #frequencies .tagChip:focus-visible { outline: 3px solid #31704b; outline-offset: 2px; }
+.tagChoice .tagChip:first-child { border-radius: 8px 0 0 8px; }
+.tagChoice button:last-child { min-width: 26px; padding: 4px 6px; border-radius: 0 8px 8px 0; font-size: 14px; }
 .emptyState {
   grid-column: 1 / -1;
   text-align: center;
