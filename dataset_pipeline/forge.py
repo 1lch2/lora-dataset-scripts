@@ -1,5 +1,6 @@
 import base64
 import io
+from pathlib import Path
 
 import requests
 from PIL import Image
@@ -7,7 +8,7 @@ from PIL import Image
 
 def encode_image(image):
     stream = io.BytesIO()
-    image.save(stream, format="PNG")
+    image.save(stream, format="PNG", compress_level=1)
     return base64.b64encode(stream.getvalue()).decode("ascii")
 
 
@@ -49,8 +50,11 @@ class ForgeClient:
             return result.copy()
 
     def tag(self, image):
+        # Existing files already have a supported image encoding; send them as-is.
+        payload = (base64.b64encode(image.read_bytes()).decode("ascii")
+                   if isinstance(image, Path) else encode_image(image))
         result = self.request("POST", "/tagger/v1/interrogate", json={
-            "image": encode_image(image), "model": self.config["tagger_model"],
+            "image": payload, "model": self.config["tagger_model"],
             "threshold": self.config["tag_threshold"], "queue": "", "name_in_queue": "",
         })
         return result["caption"]["tag"]

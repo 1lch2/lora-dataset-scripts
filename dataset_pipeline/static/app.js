@@ -83,6 +83,12 @@ async function pollJob() {
 }
 $('startTag').onclick=()=>startJob('start_tag');
 $('exportDataset').onclick=()=>startJob('export');
+$('openWorkdir').onclick=async()=>{
+  try {
+    const response=await fetch('/api/edit',{method:'POST',headers:{'Content-Type':'application/json','X-Review-Token':window.REVIEW_TOKEN},body:JSON.stringify({action:'open_workdir'})});
+    const result=await response.json(); if(!response.ok)throw Error(result.error);
+  }catch(error){message(error.message,true);}
+};
 async function edit(data, advance = false) {
   if (processing()) return;
   busy = true;

@@ -153,3 +153,6 @@ __pycache__/
 runs/
 dataset-ready/
 preprocess.local.json
+
+*.in
+*.lock

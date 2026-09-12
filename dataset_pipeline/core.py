@@ -14,7 +14,6 @@ from urllib.parse import urlparse
 from PIL import Image, ImageOps
 
 from edit_caption import process_text_files_in_dataset
-from resize import resize_images_in_folder
 from .forge import ForgeClient
 from .geometry import MIN_AREA, TARGET_AREA, area, default_scale, full_body_conflict, iou, propose, tag_suggestions, validate_box
 
@@ -319,14 +318,14 @@ class Run:
         image_key = source["fingerprint"] if candidate["kind"] == "full" else source["prepare_key"]
         return digest([image_key, candidate["box"], 1280, self.config["tagger_model"],
                        self.config["tag_threshold"],
-                       source.get("detection") if candidate["box"] else None, "tag-v1"])
+                       source.get("detection") if candidate["box"] else None, "tag-v2-before-resize"])
 
     def current_tag(self, source, candidate):
         tag = candidate.get("tag")
         return bool(tag and not tag.get("stale") and tag["key"] == self.tag_key(source, candidate))
 
     def _materialize(self, source, candidate, key):
-        relative = f"images/{source['id']}/{candidate['id']}-{key[:16]}.png"
+        relative = f"images/{source['id']}_{candidate['id']}-{key[:16]}.png"
         destination = asset(self.directory, relative)
         if destination.exists():
             return relative
@@ -334,14 +333,18 @@ class Run:
             output = image.copy() if candidate["box"] is None else image.crop(candidate["box"])
         if candidate["box"] and output.width * output.height < self.config["min_area"]:
             raise ValueError("裁片低于像素下限")
-        # The unmodified legacy routine operates on one level of identity directories.
-        with tempfile.TemporaryDirectory(dir=self.directory) as temporary:
-            folder = Path(temporary) / "identity"
-            folder.mkdir()
-            output.save(folder / "image.png")
-            resize_images_in_folder(temporary, 1280, False)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(folder / "image.png", destination)
+        # Match resize.py without encoding and reopening the full-resolution PNG.
+        shortest = min(output.size)
+        if shortest >= 1280:
+            ratio = 1280 / shortest
+            output = output.resize((int(output.width * ratio), int(output.height * ratio)), Image.LANCZOS)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_suffix(".tmp")
+        try:
+            output.save(temporary, format="PNG", compress_level=1)
+            temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
         return relative
 
     def tag_all(self):
@@ -364,9 +367,14 @@ class Run:
                 started = time.monotonic()
                 try:
                     key = self.tag_key(source, candidate)
+                    if candidate["box"] is None:
+                        scores = self.client.tag(Path(source["source_path"]))
+                    else:
+                        with Image.open(asset(self.directory, source["working"])) as image:
+                            with image.crop(candidate["box"]) as crop:
+                                scores = self.client.tag(crop)
+                    # Training-size images are generated only after interrogation.
                     relative = self._materialize(source, candidate, key)
-                    with Image.open(asset(self.directory, relative)) as image:
-                        scores = self.client.tag(image)
                     raw = list(dict.fromkeys(normalize(t) for t in scores))
                     removed = ["full body"] if "full body" in raw and full_body_conflict(
                         candidate["box"], source["detection"], source["working_size"]) else []

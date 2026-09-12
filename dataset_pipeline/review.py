@@ -1,5 +1,6 @@
 import json
 import mimetypes
+import os
 import secrets
 import threading
 import webbrowser
@@ -120,6 +121,10 @@ def make_server(directory, port=8765):
                 if not 0 < length <= 1024 * 1024:
                     raise ValueError("请求大小无效")
                 data = json.loads(self.rfile.read(length))
+                if data.get("action") == "open_workdir":
+                    os.startfile(directory)
+                    self.reply(200, {"ok": True, "result": {}})
+                    return
                 if data.get("action") in ("start_tag", "export"):
                     start_job(data["action"])
                     self.reply(202, {"ok": True, "result": {}})

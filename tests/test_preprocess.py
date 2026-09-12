@@ -1,6 +1,7 @@
 import copy
 import csv
 import json
+import re
 import shutil
 import tempfile
 import threading
@@ -189,6 +190,36 @@ class PipelineTests(unittest.TestCase):
                 self.assertFalse(run.current_tag(source, candidate))
         self.assertTrue(source["history"])
 
+    def test_tags_original_and_unscaled_crops_before_materializing(self):
+        Image.new("RGB", (1500, 2100), "red").save(self.original, format="JPEG")
+        run, source = self.prepared()
+        self.accept(run, source)
+        candidates = [c for c in source["candidates"] if c["status"] == "accepted"]
+        events = []
+        materialize = run._materialize
+
+        def tag(image):
+            candidate = candidates[len(events) // 2]
+            events.append(("tag", candidate["id"]))
+            if candidate["box"] is None:
+                self.assertEqual(image, self.original)
+            else:
+                x1, y1, x2, y2 = candidate["box"]
+                self.assertEqual(image.size, (x2 - x1, y2 - y1))
+            return {"white_shirt": .8}
+
+        def save(source, candidate, key):
+            self.assertEqual(events[-1], ("tag", candidate["id"]))
+            events.append(("save", candidate["id"]))
+            return materialize(source, candidate, key)
+
+        with patch.object(self.client, "tag", side_effect=tag), patch.object(run, "_materialize", side_effect=save):
+            self.assertEqual(run.tag_all(), [])
+        self.assertEqual(len(events), 2 * len(candidates))
+        full = next(c for c in candidates if c["box"] is None)
+        with Image.open(asset(run.directory, full["tag"]["image"])) as image:
+            self.assertEqual(image.size, (1280, 1792))
+
     def test_lower_rule_upgrade_preserves_reviewed_and_edited_crops(self):
         run, source = self.prepared()
         baseline = copy.deepcopy(source)
@@ -322,13 +353,20 @@ class PipelineTests(unittest.TestCase):
         url = f"http://127.0.0.1:{server.server_port}"
         self.assertEqual(requests.post(url + "/api/edit", json={}).status_code, 403)
         html = requests.get(url).text
-        token = html.split('window.REVIEW_TOKEN = "')[1].split('"')[0]
+        token = re.search(r"window\.REVIEW_TOKEN\s*=\s*['\"]([^'\"]+)['\"]", html)[1]
         crop = source["candidates"][1]
         response = requests.post(url + "/api/edit", headers={"X-Review-Token": token}, json={
             "action": "crop", "source": source["id"], "candidate": crop["id"], "status": "rejected"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(Run.load(run.directory).locate(source["id"], crop["id"])[1]["status"], "rejected")
         self.assertEqual(requests.get(url + "/image?source=../../escape").status_code, 400)
+        with patch("dataset_pipeline.review.os.startfile") as open_directory:
+            self.assertEqual(requests.post(url + "/api/edit", json={"action": "open_workdir"}).status_code, 403)
+            open_directory.assert_not_called()
+            response = requests.post(url + "/api/edit", headers={"X-Review-Token": token},
+                                     json={"action": "open_workdir", "path": "C:/untrusted"})
+            self.assertEqual(response.status_code, 200)
+            open_directory.assert_called_once_with(run.directory)
 
     def test_bad_paths_and_lock(self):
         config = self.root / "config.json"
@@ -347,7 +385,7 @@ class PipelineTests(unittest.TestCase):
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         url = f"http://127.0.0.1:{server.server_port}"
-        token = requests.get(url).text.split('window.REVIEW_TOKEN = "')[1].split('"')[0]
+        token = re.search(r"window\.REVIEW_TOKEN\s*=\s*['\"]([^'\"]+)['\"]", requests.get(url).text)[1]
         def post(action, **values):
             return requests.post(url + '/api/edit', headers={'X-Review-Token': token},
                                  json={'action': action, **values}, timeout=5)
