@@ -9,12 +9,16 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .core import Run, asset, run_lock
+from .analysis_job import AnalysisJob
 
 
-def make_server(directory, port=8765):
-    directory = Path(directory).resolve()
-    with run_lock(directory):
-        Run.load(directory).ensure_tag_files()
+def make_server(directory=None, port=8765):
+    directory = Path(directory).resolve() if directory is not None else None
+    if directory is not None:
+        with run_lock(directory):
+            Run.load(directory).ensure_tag_files()
+    cache = (directory.parent if directory else Path(__file__).resolve().parent.parent/'runs')/'.models'
+    analysis = AnalysisJob(cache if cache.is_dir() else None)
     token = secrets.token_urlsafe(24)
     mutex = threading.Lock()
     static = Path(__file__).parent / "static"
@@ -71,10 +75,20 @@ def make_server(directory, port=8765):
             try:
                 if route.path == "/":
                     html = (static / "index.html").read_text(encoding="utf-8").replace("__TOKEN__", token)
+                    html = html.replace('__ANALYSIS_ONLY__', 'true' if directory is None else 'false')
                     self.reply(200, html.encode(), "text/html; charset=utf-8")
-                elif route.path in ("/app.js", "/style.css"):
+                elif route.path in ("/app.js", "/analysis.js", "/style.css"):
                     path = static / route.path[1:]
                     self.reply(200, path.read_bytes(), "application/javascript" if path.suffix == ".js" else "text/css")
+                elif route.path == '/api/analysis/status':
+                    self.reply(200, analysis.status())
+                elif route.path == '/api/analysis/report':
+                    self.reply(200, analysis.report())
+                elif route.path == '/api/analysis/csv':
+                    from .analysis import csv_report
+                    self.reply(200, csv_report(analysis.report()).encode('utf-8-sig'), 'text/csv; charset=utf-8')
+                elif directory is None:
+                    self.reply(404, {'error':'独立分析模式没有审核数据'})
                 elif route.path == "/api/state":
                     with mutex:
                         run = Run.load(directory)
@@ -114,7 +128,7 @@ def make_server(directory, port=8765):
             if not self.valid_host() or self.headers.get("X-Review-Token") != token:
                 self.reply(403, {"error": "审核会话无效，请刷新页面"})
                 return
-            if self.path != "/api/edit":
+            if self.path not in ("/api/edit", '/api/analysis/start', '/api/analysis/cancel'):
                 self.reply(404, {"error": "接口不存在"})
                 return
             try:
@@ -122,6 +136,16 @@ def make_server(directory, port=8765):
                 if not 0 < length <= 1024 * 1024:
                     raise ValueError("请求大小无效")
                 data = json.loads(self.rfile.read(length))
+                if not isinstance(data,dict):
+                    raise ValueError('请求必须为对象')
+                if self.path == '/api/analysis/start':
+                    self.reply(202, analysis.start(data))
+                    return
+                if self.path == '/api/analysis/cancel':
+                    self.reply(200, analysis.cancel())
+                    return
+                if directory is None:
+                    raise ValueError('独立分析模式没有审核数据')
                 if data.get("action") == "open_workdir":
                     os.startfile(directory)
                     self.reply(200, {"ok": True, "result": {}})
@@ -164,7 +188,11 @@ def make_server(directory, port=8765):
             except Exception as error:
                 self.reply(400, {"error": str(error)})
 
-    return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    class ReviewServer(ThreadingHTTPServer):
+        def server_close(self):
+            analysis.close()
+            super().server_close()
+    return ReviewServer(("127.0.0.1", port), Handler)
 
 
 def serve(directory, port=8765, open_browser=True):

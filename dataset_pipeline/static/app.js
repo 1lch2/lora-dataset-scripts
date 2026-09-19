@@ -80,7 +80,7 @@ async function pollJob() {
     if(job.id!==handledJob && ['complete','failed'].includes(job.status) && !busy){
       await load(); handledJob=job.id;
       $('jobStatus').textContent=job.status==='failed'?`处理未完成，已保存成功项，可重试。\n${job.errors.join('\n')}`:job.action==='start_tag'?`打标完成，共 ${job.total} 份样本。请审核标签。`:`已导出 ${job.count} 组图片和标签至 ${state.config.output_dir}`;
-      if(job.status==='complete'&&job.action==='start_tag')tab(true);
+      if(job.status==='complete'&&job.action==='start_tag'&&!document.body.classList.contains('analyzing'))tab(true);
     }
     updateWorkflow();
   }catch(error){$('jobStatus').textContent=`${error.message}，正在重连；可用“刷新数据”核对已保存结果。`;}
@@ -142,6 +142,7 @@ function renderSources() {
   }); renderEditor();
 }
 function renderEditor() {
+  if(document.body.classList.contains('analyzing'))return;
   const s = source(); $('cropView').querySelector('.editor').hidden = !s; if (!s) return;
   $('sourceName').textContent = `${s.group} / ${s.relative}`;
   $('sourceName').title = $('sourceName').textContent;
@@ -225,6 +226,7 @@ $('setScale').onclick=()=>edit({action:'scale',source:sourceId,scale:Number($('s
 $('setPerson').onclick=()=>edit({action:'person',source:sourceId,index:Number($('person').value)});
 function key(s,c) {return `${s.id}/${c.id}`;}
 function renderTags() {
+  if(document.body.classList.contains('analyzing'))return;
   invalidatePreview();
   const scrollTop=$('tagCards').scrollTop;
   visibleTags=[]; $('tagCards').replaceChildren();
@@ -389,6 +391,8 @@ $('showAllTags').onclick=()=>{clearFocusedTag();renderTags();};
 $('viewFocusedImage').onclick=()=>{$('preview').querySelector('img').src=$('singlePreview').src;$('preview').showModal();};
 $('saveSingle').onclick=()=>{if(singleTagKey)edit({action:'tags',selections:[singleTagKey.split('/')],operation:{mode:'set',tags:splitTags($('singleCaption').value)}});};
 function tab(tags){
+  $('analysisView').hidden=true;document.body.classList.remove('analyzing');
+  $('analysisTab').classList.remove('active');$('analysisTab').setAttribute('aria-selected','false');$('analysisTab').tabIndex=-1;
   $('cropView').hidden=tags;$('tagView').hidden=!tags;
   $('cropLibrary').hidden=tags;$('tagFilters').hidden=!tags;
   document.body.classList.toggle('tagEditing',tags);
@@ -398,10 +402,12 @@ function tab(tags){
   $('focusCrop').setAttribute('aria-pressed',String(document.body.classList.contains('focusCrop')));
   ['cropTab','tagTab'].forEach((id,i)=>{const active=Boolean(i)===tags;$(id).classList.toggle('active',active);$(id).setAttribute('aria-selected',String(active));$(id).tabIndex=active?0:-1;});
   updateWorkflow();requestAnimationFrame(fitCanvas);
+  if(!state && !window.ANALYSIS_ONLY)load().then(pollJob).catch(error=>message(error.message,true));
+  else if(state){renderSources();renderTags();}
 }
 $('focusCrop').onclick=()=>{const focus=document.body.classList.toggle('focusCrop');$('focusCrop').textContent=focus?'退出专注':'专注裁切';$('focusCrop').setAttribute('aria-pressed',String(focus));requestAnimationFrame(fitCanvas);};
 $('originalPreview').onclick=()=>{$('preview').querySelector('img').src=$('original').src;$('preview').showModal();};
 $('cropTab').onclick=()=>tab(false);$('tagTab').onclick=()=>tab(true);$('refresh').onclick=()=>load().catch(e=>message(e.message,true));
-document.querySelector('[role=tablist]').onkeydown=event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const tags=event.key==='End'||(event.key!=='Home'&&event.target.id==='cropTab');tab(tags);$(tags?'tagTab':'cropTab').focus();}};
+document.querySelector('[role=tablist]').onkeydown=event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();const tabs=[...document.querySelectorAll('.tabs [role=tab]')].filter(b=>!b.disabled),i=tabs.indexOf(document.activeElement),next=event.key==='Home'?0:event.key==='End'?tabs.length-1:(i+(event.key==='ArrowRight'?1:tabs.length-1))%tabs.length;tabs[next].click();tabs[next].focus();}};
 $('closePreview').onclick=()=>$('preview').close();
-load().then(pollJob).catch(error=>message(error.message,true));
+if(!window.ANALYSIS_ONLY && !new URLSearchParams(location.search).has('analysis'))load().then(pollJob).catch(error=>message(error.message,true));

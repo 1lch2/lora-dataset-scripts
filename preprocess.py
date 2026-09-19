@@ -8,6 +8,9 @@ from dataset_pipeline.core import Run, prepare, read_config, run_lock
 def main():
     parser = argparse.ArgumentParser(description="LoRA 数据预处理：prepare → review → tag → review → export")
     commands = parser.add_subparsers(dest="command", required=True)
+    analysis = commands.add_parser('analyze', help='独立打开数据集分析页，无需准备图片或启动 Forge')
+    analysis.add_argument('--port', type=int, default=8766)
+    analysis.add_argument('--no-browser', action='store_true')
     commands.add_parser("prepare", help="生成工作图和待审核裁框").add_argument("--config", required=True)
     for command in ("review", "tag", "export"):
         sub = commands.add_parser(command)
@@ -17,6 +20,10 @@ def main():
             sub.add_argument("--no-browser", action="store_true")
     args = parser.parse_args()
     try:
+        if args.command == 'analyze':
+            from dataset_pipeline.review import serve
+            serve(None, args.port, not args.no_browser)
+            return 0
         if args.command == "review":
             from dataset_pipeline.review import serve
             serve(args.run, args.port, not args.no_browser)

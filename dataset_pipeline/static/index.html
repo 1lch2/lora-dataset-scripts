@@ -12,6 +12,7 @@
       <nav class="tabs" role="tablist" aria-label="审核阶段">
         <button id="cropTab" role="tab" aria-selected="true" aria-controls="cropView" class="active">裁切</button
         ><button id="tagTab" role="tab" aria-selected="false" aria-controls="tagView" tabindex="-1">标签</button>
+        <button id="analysisTab" role="tab" aria-selected="false" aria-controls="analysisView" tabindex="-1">数据集分析</button>
       </nav>
       <div class="stageActions">
         <span id="stageStatus">读取进度…</span><button id="startTag" class="primary" disabled>开始打标</button
@@ -25,6 +26,40 @@
       <button id="dismissMessage" aria-label="关闭提示">×</button>
     </div>
     <div class="appShell">
+      <main id="analysisView" role="tabpanel" aria-labelledby="analysisTab" hidden>
+        <section class="analysisSetup">
+          <h2>数据集特性分析</h2>
+          <p class="hint">本地只读分析 · 不上传图片 · 不展示缩略图 · 不修改源文件。只有点击开始后才读取指定目录。</p>
+          <form id="analysisForm">
+            <label>图片目录<input id="analysisDirectory" required placeholder="粘贴本地目录的完整路径" autocomplete="off" /></label>
+            <div class="analysisOptions">
+              <label class="checkLabel"><input id="analysisRecursive" type="checkbox" checked />包含子目录</label>
+              <label class="checkLabel"><input id="analysisPose" type="checkbox" />人物与姿势（本地缓存模型）</label>
+              <label class="checkLabel"><input id="analysisCaptions" type="checkbox" />同名 TXT 标签分布</label>
+            </div>
+            <details><summary>分析设置</summary>
+              <div class="analysisSettings">
+                <label>相似比较图片上限<input id="analysisLimit" type="number" min="2" max="5000" value="1500" required /></label>
+                <label>姿势距离阈值（越小越严格）<input id="analysisPoseThreshold" type="number" min="0.01" max="1" step="0.01" value="0.18" required /></label>
+                <label>dHash 汉明距离阈值<input id="analysisHashThreshold" type="number" min="0" max="16" value="6" required /></label>
+                <label>可选模型缓存 HF_HOME<input id="analysisCache" placeholder="留空使用当前环境缓存" autocomplete="off" /></label>
+              </div>
+              <p class="hint">基础统计覆盖全部图片；相似度最多抽取指定数量，按排序后等间隔抽样。姿势仅使用已有模型，缺少模型时跳过并提示。标签可能含敏感文本，勾选后会出现在报告中。</p>
+            </details>
+            <div class="toolbar"><button id="analysisStart" class="primary" type="submit">开始分析</button><button id="analysisCancel" type="button" disabled>取消</button><progress id="analysisProgress" hidden aria-label="分析进度"></progress><span id="analysisStatus" role="status" aria-live="polite">等待选择目录</span></div>
+          </form>
+        </section>
+        <section id="analysisResults" hidden>
+          <div class="analysisReportHeading"><h2>统计报告</h2><div class="toolbar"><button id="analysisJson">导出 JSON</button><button id="analysisCsv">导出逐图 CSV</button><label class="baselineLabel">载入对照报告<input id="analysisBaseline" type="file" accept=".json,application/json" /></label><button id="analysisClearBaseline" hidden>清除对照</button></div></div>
+          <p id="analysisOverview"></p><div id="analysisWarnings" role="status"></div>
+          <p class="hint">亮度为 sRGB 加权值，不代表物理曝光；接近白色也可能来自背景或画风。以下分布按图片等权汇总，不推断 LoRA 效果的单一原因。</p>
+          <div class="analysisChart"><h3>像素亮度分布 · 每张图片等权</h3><div id="analysisPixelHistogram" class="histogram"></div><p class="hint">左：黑 → 右：白；鼠标悬停可查看区间占比。</p></div>
+          <div id="analysisMetrics" class="analysisMetrics"></div>
+          <section class="analysisSection"><h3>重复与姿势多样性</h3><p id="analysisSimilarity"></p><p class="hint">近似重复是候选，不等于内容相同；纯色/低对比度图不参与近似判断。姿势只比较每图最大人物的身体关节，消除平移和尺度，保留朝向；遮挡、特写、多人和动漫结构可能导致漏检。人物框含背景，不是分割掩膜。</p><div id="analysisPairs"></div></section>
+          <section id="analysisCaptionSection" class="analysisSection" hidden><h3>标签覆盖</h3><p id="analysisCaptionSummary"></p><div id="analysisCaptionTags"></div></section>
+          <section class="analysisSection"><h3>逐图指标与筛选</h3><div class="analysisSettings"><label>文件名<input id="analysisSearch" type="search" placeholder="筛选相对路径" /></label><label>排序<select id="analysisSort"><option value="brightness">平均亮度</option><option value="highlights">高光占比</option><option value="shadows">暗部占比</option><option value="contrast">对比度</option><option value="saturation">饱和度</option><option value="detail">细节强度</option><option value="megapixels">像素面积</option><option value="person_area">人物占比</option></select></label><label>顺序<select id="analysisOrder"><option value="desc">降序</option><option value="asc">升序</option></select></label></div><p id="analysisRowCount" class="hint"></p><div class="analysisTableWrap"><table id="analysisTable"></table></div><div class="toolbar"><button id="analysisPrev">上一页</button><button id="analysisNext">下一页</button></div><details><summary>读取失败的文件</summary><div id="analysisErrors"></div></details></section>
+        </section>
+      </main>
       <aside class="libraryPanel" aria-label="图片筛选和列表">
         <div class="filters">
           <label
@@ -252,7 +287,9 @@
     <dialog id="preview"><button id="closePreview">关闭</button><img alt="样本大图" /></dialog>
     <script>
       window.REVIEW_TOKEN = '__TOKEN__';
+      window.ANALYSIS_ONLY = __ANALYSIS_ONLY__;
     </script>
     <script src="/app.js"></script>
+    <script src="/analysis.js"></script>
   </body>
 </html>

@@ -82,3 +82,9 @@
 顾名思义，水平翻转，适用于练画风lora时候需要数据增强的场景。
 
 脚本：`reverse.py`
+
+## 数据集分析
+
+审核页现已提供「数据集分析」tab：亮度/色彩分布、重复图、尺寸、可选人物姿势和标签分布，支持离线统计与报告导出。
+无需预处理即可独立启动：`.\.venv-preprocess\Scripts\python.exe preprocess.py analyze`。
+详见 [ANALYSIS.md](ANALYSIS.md)。
