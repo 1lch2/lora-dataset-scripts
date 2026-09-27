@@ -171,7 +171,7 @@ class Run:
                 tags = list(dict.fromkeys(normalize(t) for t in re.split(r"[,\r\n]+", path.read_text(encoding="utf-8-sig")) if normalize(t)))
                 if tags != tag["tags"]:
                     tag["operations"].append({"mode": "set", "tags": tags, "origin": "txt"})
-                    tag.update(tags=tags, reviewed=False)
+                    tag["tags"] = tags
 
     def write_tag_file(self, tag):
         path = asset(self.directory, tag["image"]).with_suffix(".txt")
@@ -285,7 +285,6 @@ class Run:
                 candidate["tag"] = copy.deepcopy(previous["tag"])
                 if candidate["id"] != "full" or fingerprint != record.get("fingerprint"):
                     candidate["tag"]["stale"] = True
-                    candidate["tag"]["reviewed"] = False
         record.update(fingerprint=fingerprint, original=original_path, working=working_path,
                       original_size=list(original.size), working_size=list(working.size),
                       scale=selected_scale, prepare_key=key, candidates=candidates,
@@ -332,7 +331,7 @@ class Run:
                 candidate["box"] = box
                 candidate["status"] = "pending"
                 if candidate.get("tag"):
-                    candidate["tag"].update(stale=True, reviewed=False)
+                    candidate["tag"]["stale"] = True
         if status is not None:
             if status not in ("pending", "accepted", "rejected"):
                 raise ValueError("无效审核状态")
@@ -359,7 +358,7 @@ class Run:
         for crop in crops:
             if previous.get(crop["id"], {}).get("tag"):
                 crop["tag"] = copy.deepcopy(previous[crop["id"]]["tag"])
-                crop["tag"].update(stale=True, reviewed=False)
+                crop["tag"]["stale"] = True
         source["candidates"] = [previous["full"], *crops]
         source.update(notes=notes, person_index=index)
         self.save()
@@ -436,7 +435,7 @@ class Run:
                     tag = {"key": key, "image": relative, "raw": raw, "scores": scores,
                            "auto_removed": removed, "operations": old.get("operations", []),
                            "suggestions": tag_suggestions(raw, removed, candidate["box"], source["detection"]),
-                           "restore_raw": old.get("restore_raw", False), "reviewed": False, "stale": False,
+                           "restore_raw": old.get("restore_raw", False), "stale": False,
                            "seconds": round(time.monotonic() - started, 3)}
                     tag["tags"] = edited_tags(tag)
                     self.write_tag_file(tag)
@@ -456,7 +455,7 @@ class Run:
         if not targets:
             raise ValueError("请先选择图片")
         mode = operation.get("mode")
-        if mode not in ("add", "remove", "replace", "match", "sort", "dedupe", "set", "restore", "approve"):
+        if mode not in ("add", "remove", "replace", "match", "sort", "dedupe", "set", "restore"):
             raise ValueError("未知标签操作")
         if mode in ("add", "remove", "set") and (not isinstance(operation.get("tags"), list)
                 or any(not isinstance(t, str) for t in operation["tags"])):
@@ -479,7 +478,7 @@ class Run:
             tag = copy.deepcopy(candidate["tag"])
             if mode == "restore":
                 tag.update(operations=[], restore_raw=True)
-            elif mode != "approve":
+            else:
                 tag["operations"].append(operation)
             after = edited_tags(tag)
             before = candidate["tag"]["tags"]
@@ -496,11 +495,9 @@ class Run:
             return result
         for (_, candidate), change in zip(targets, changes):
             tag = candidate["tag"]
-            if mode == "approve":
-                tag["reviewed"] = True
-            elif mode == "restore":
+            if mode == "restore":
                 tag.setdefault("edit_history", []).append(copy.deepcopy(tag["operations"]))
-                tag.update(operations=[], restore_raw=True, reviewed=False)
+                tag.update(operations=[], restore_raw=True)
             else:
                 if mode == "dedupe" and change["before"] == change["after"]:
                     self.write_tag_file(tag)
@@ -508,7 +505,6 @@ class Run:
                 if mode in ("match", "sort") and change["before"] == change["after"]:
                     continue
                 tag["operations"].append(copy.deepcopy(operation))
-                tag["reviewed"] = False
             tag["tags"] = edited_tags(tag)
             self.write_tag_file(tag)
         self.save()
@@ -526,8 +522,8 @@ class Run:
                 raise ValueError("仍有待审核裁框，请接受或拒绝后再导出")
             for candidate in source["candidates"]:
                 if candidate["status"] == "accepted":
-                    if not self.current_tag(source, candidate) or not candidate["tag"]["reviewed"]:
-                        raise ValueError("仍有未确认或过期标签，请在标签审核页确认")
+                    if not self.current_tag(source, candidate):
+                        raise ValueError("仍有未打标或过期标签，请先完成打标")
                     selected.append((source, candidate))
         if not selected:
             raise ValueError("没有可导出的图片")
@@ -539,15 +535,15 @@ class Run:
         output = Path(self.config["output_dir"])
         previous = self.data.get("exports", {})
         pending = self.data.get("export_pending", {})
-        # Never overwrite unowned or externally edited output files.
+        # The current run owns recorded exports; leave unrelated output files untouched.
         if output.exists():
             for file in output.rglob("*"):
                 if file.is_file():
                     relative = file.relative_to(output).as_posix()
                     if relative.endswith(".tmp") and relative[:-4] in pending:
                         continue  # Recorded temporary destination from an interrupted copy.
-                    if file_digest(file) not in (previous.get(relative), pending.get(relative)):
-                        raise ValueError(f"输出含非本运行生成或已被外部修改的文件: {relative}")
+                    if relative not in previous and relative not in pending:
+                        raise ValueError(f"输出含非本运行生成的文件: {relative}")
         with tempfile.TemporaryDirectory(dir=self.directory) as temporary:
             staging = Path(temporary)
             for source, candidate in selected:

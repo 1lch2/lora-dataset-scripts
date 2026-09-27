@@ -16,7 +16,7 @@
       </nav>
       <div class="stageActions">
         <span id="stageStatus">读取进度…</span><button id="startTag" class="primary" disabled>开始打标</button
-        ><button id="exportDataset" class="primary" hidden disabled>导出训练集</button
+        ><button id="exportDataset" class="primary" hidden>导出训练集</button
         ><button id="openWorkdir" title="在文件资源管理器中打开当前图片工作目录">打开工作目录</button
         ><button id="refresh" title="重新读取已保存的数据">刷新</button>
       </div>
@@ -88,7 +88,6 @@
               <option value="manual">手动</option>
             </select></label
           >
-          <label class="checkLabel"><input id="unreviewed" type="checkbox" />仅显示未确认</label>
           <button id="resetTagFilters">清除筛选</button>
           </div>
           <div class="tagConditionGrid"><div class="fieldRow filterCondition"><label
@@ -203,8 +202,9 @@
           <div id="batchToolPanel" role="tabpanel" aria-labelledby="batchToolTab" class="panelScroll" hidden>
             <div class="batchScope"><label>操作范围<select id="editScope"><option value="filtered">当前筛选结果</option><option value="selected">勾选的图片</option></select></label><strong id="selectedCount">0 张</strong></div>
             <p id="selectionHint" class="hint">先在中间选择图片。</p>
+            <div class="batchDedupe"><button id="dedupeTags" class="primary">移除操作范围内图片的重复标签</button></div>
             <div id="batchTabs" class="compactActions" role="tablist" aria-label="批量操作">
-              <button role="tab" data-operation="add" aria-selected="true">添加</button><button role="tab" data-operation="match" aria-selected="false" tabindex="-1">搜索替换</button><button role="tab" data-operation="remove" aria-selected="false" tabindex="-1">批量删除</button><button role="tab" data-operation="sort" aria-selected="false" tabindex="-1">排序</button><button role="tab" data-operation="dedupe" aria-selected="false" tabindex="-1">去重</button>
+              <button role="tab" data-operation="add" aria-selected="true">添加</button><button role="tab" data-operation="match" aria-selected="false" tabindex="-1">搜索替换</button><button role="tab" data-operation="remove" aria-selected="false" tabindex="-1">批量删除</button><button role="tab" data-operation="sort" aria-selected="false" tabindex="-1">排序</button>
             </div>
             <label hidden
               >操作<select id="tagOperation">
@@ -212,11 +212,11 @@
                 <option value="remove">删除标签</option>
                 <option value="replace">替换标签</option>
                 <option value="match">匹配替换／删除</option>
-                <option value="sort">重排图片内标签</option><option value="dedupe">逐图去重</option>
+                <option value="sort">重排图片内标签</option>
               </select></label
             >
             <label id="tagInputGroup"
-              >标签<textarea
+              ><span id="tagInputLabel">添加标签／触发词</span><textarea
                 id="editTags"
                 name="editTags"
                 rows="2"
@@ -231,26 +231,27 @@
             </div>
             <label id="prependGroup" class="checkLabel"><input id="prependTags" type="checkbox" />添加到最前面</label>
             <div id="matchInputs" hidden>
-              <div class="fieldRow"><label>匹配方式<select id="matchMode"><option value="exact">完整标签</option><option value="contains">包含文本</option><option value="prefix">前缀</option><option value="suffix">后缀</option><option value="regex">正则表达式</option></select></label>
-              <label>查找<input id="matchSearch" autocomplete="off" spellcheck="false" /></label>
-              <label>替换为<input id="matchReplacement" placeholder="留空则删除命中的整个标签" autocomplete="off" spellcheck="false" /></label>
-              </div><p class="hint">替换匹配文本；留空删除命中的标签。正则支持 \g&lt;1&gt;，逗号生成多个标签。</p>
+              <label>原标签／查找文本<input id="matchSearch" autocomplete="off" spellcheck="false" /></label>
+              <label>编辑标签／替换为<input id="matchReplacement" placeholder="留空则删除命中的整个标签" autocomplete="off" spellcheck="false" /></label>
+              <div class="fieldRow"><label>匹配方式<select id="matchMode"><option value="exact">完整标签</option><option value="contains">包含文本</option><option value="prefix">前缀</option><option value="suffix">后缀</option><option value="regex">正则表达式</option></select></label><label id="matchCaseGroup" class="checkLabel"><input id="matchCase" type="checkbox" checked />区分大小写</label></div>
+              <p class="hint">替换匹配文本；留空删除命中的标签。正则支持 \g&lt;1&gt;，逗号生成多个标签。</p>
             </div>
-            <p id="dedupeHint" class="hint" hidden>对操作范围内的每张图片分别去重，保留标签首次出现的顺序，并保存到同名 TXT。</p>
             <div id="sortInputs" class="fieldRow" hidden>
               <label>排序依据<select id="captionSort"><option value="alpha">字母顺序</option><option value="frequency">操作范围内的出现频率</option></select></label>
               <label>顺序<select id="captionOrder"><option value="asc">升序</option><option value="desc">降序</option></select></label>
             </div>
-            <div class="compactActions"><button id="previewTags">预览修改</button>
-            <button id="applyTags" data-mode="add" class="primary">添加到选中图片</button><label id="matchCaseGroup" class="checkLabel" hidden><input id="matchCase" type="checkbox" checked />区分大小写</label></div>
+            <div class="batchApply"><button id="previewTags">预览修改</button><button id="applyTags" data-mode="add" class="primary">添加到选中图片</button></div>
             <div id="batchPreview" hidden aria-live="polite"></div>
-            <details open>
-              <summary>操作范围内的标签</summary>
+            <section class="batchTagPicker" aria-label="标签列表与图片筛选">
+              <h3>标签列表与图片筛选</h3>
+              <p id="batchTagHint" class="hint">点击标签筛选左侧图片；点击 − 排除包含该标签的图片。</p>
               <p id="commonTags" class="hint"></p>
-              <div class="fieldRow"><label>搜索标签<input id="frequencySearch" type="search" placeholder="筛选可选标签" /></label><label>排序<select id="frequencySort"><option value="frequency">出现频率</option><option value="alpha">字母顺序</option></select></label><label>顺序<select id="frequencyOrder"><option value="desc">降序</option><option value="asc">升序</option></select></label></div>
+              <div class="fieldRow"><label>搜索标签<input id="frequencySearch" type="search" placeholder="筛选可选标签" /></label><label>匹配<select id="frequencySearchMode"><option value="contains">包含</option><option value="prefix">前缀</option><option value="suffix">后缀</option><option value="exact">完整</option><option value="regex">正则</option></select></label></div>
+              <div class="fieldRow"><label>排序<select id="frequencySort"><option value="alpha">字母顺序</option><option value="frequency">出现频率</option><option value="length">标签长度</option></select></label><label>顺序<select id="frequencyOrder"><option value="asc">升序</option><option value="desc">降序</option></select></label></div>
+              <p id="frequencySearchError" class="error" role="status"></p>
               <div id="removeSelectionActions" class="compactActions" hidden><button id="chooseRemovalTags">选择显示标签</button><button id="clearRemovalTags">清空待删除标签</button></div>
               <div id="frequencies"></div>
-            </details>
+            </section>
             <details>
               <summary>恢复与导出清理</summary>
               <p class="hint">恢复会撤销选中图片的人工标签修改及构图自动删除。</p>
@@ -265,10 +266,6 @@
                 ></textarea></label
               ><button id="saveDrop">保存清理列表</button>
             </details>
-          <div class="toolFooter">
-            <p class="hint">修改标签后，需要再次确认。</p>
-            <button data-mode="approve" class="primary">确认范围内标签</button>
-          </div>
           </div>
           <div id="singleToolPanel" role="tabpanel" aria-labelledby="singleToolTab" class="panelScroll" hidden>
             <h2>单图标签</h2><p class="hint">点击左侧缩略图选择图片。</p>

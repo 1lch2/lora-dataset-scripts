@@ -5,11 +5,13 @@ let job = {status: 'idle'}, handledJob, jobTimer;
 let messageTimer;
 let singleTagKey;
 let imageFilter = null, imageBasket = new Set();
+const clickedIncludeTags = new Set();
 const datasetFilters = document.querySelector('.libraryPanel > .filters');
 $('filterToolPanel').append($('tagFilters'));
 const processing = () => busy || job.status === 'running';
 const canvas = $('canvas'), ctx = canvas.getContext('2d');
 const splitTags = value => [...new Set(value.split(/[,\r\n]+/).map(t => t.trim().replaceAll('_', ' ')).filter(Boolean))];
+const tagContains = (tag, term) => tag.replaceAll('_', ' ').toLowerCase().includes(term.toLowerCase());
 function message(text, error = false) {
   clearTimeout(messageTimer);
   $('message').textContent = text; $('message').className = error ? 'error' : '';
@@ -39,15 +41,14 @@ function updateWorkflow() {
   const samples = sources.flatMap(s=>s.candidates.filter(c=>c.status==='accepted'));
   const ready = sources.length > 0 && !pending && !sources.some(s=>s.error);
   const untagged = samples.filter(c=>!c.tag_current).length;
-  const unreviewed = samples.filter(c=>!c.tag_current || !c.tag?.reviewed).length;
   const tagging = !$('tagView').hidden;
-  $('stageStatus').textContent = tagging ? `${samples.length} 份样本 · ${unreviewed} 份标签待确认` : pending ? `还有 ${pending} 个裁框待审（全部图片）` : ready ? `裁切审核完成 · ${samples.length} 份样本可打标` : '请先完成图片准备';
+  $('stageStatus').textContent = tagging ? `${samples.length} 份样本 · ${untagged} 份待打标` : pending ? `还有 ${pending} 个裁框待审（全部图片）` : ready ? `裁切审核完成 · ${samples.length} 份样本可打标` : '请先完成图片准备';
   $('startTag').textContent = job.status === 'running' && job.action === 'start_tag' ? '正在打标…' : job.status === 'failed' && job.action === 'start_tag' ? '重试打标' : untagged === 0 && samples.length ? '查看标签' : tagging ? '重新打标' : '开始打标';
   $('startTag').hidden = tagging && !untagged && job.status !== 'running' && job.status !== 'failed';
   $('startTag').classList.toggle('primary',!tagging);
   $('startTag').disabled = processing() || !ready;
   $('exportDataset').hidden = !tagging;
-  $('exportDataset').disabled = processing() || !ready || !samples.length || unreviewed > 0;
+  $('exportDataset').disabled = false;
   ['newCrop','saveDrop','setScale','setPerson'].forEach(id=>$(id).disabled=processing());
   updateTagControls();
   updateDimensions();
@@ -79,7 +80,7 @@ async function pollJob() {
     if(job.status==='running') $('jobStatus').textContent=job.action==='start_tag'?`已打标 ${job.done} / ${job.total} 份（含已完成缓存）。正在裁切、缩放和打标，可刷新页面查看进度。`:'正在导出训练集…';
     if(job.id!==handledJob && ['complete','failed'].includes(job.status) && !busy){
       await load(); handledJob=job.id;
-      $('jobStatus').textContent=job.status==='failed'?`处理未完成，已保存成功项，可重试。\n${job.errors.join('\n')}`:job.action==='start_tag'?`打标完成，共 ${job.total} 份样本。请审核标签。`:`已导出 ${job.count} 组图片和标签至 ${state.config.output_dir}`;
+      $('jobStatus').textContent=job.status==='failed'?`处理未完成，已保存成功项，可重试。\n${job.errors.join('\n')}`:job.action==='start_tag'?`打标完成，共 ${job.total} 份样本。可编辑标签并导出训练集。`:`已导出 ${job.count} 组图片和标签至 ${state.config.output_dir}`;
       if(job.status==='complete'&&job.action==='start_tag'&&!document.body.classList.contains('analyzing'))tab(true);
     }
     updateWorkflow();
@@ -234,12 +235,11 @@ function renderTags() {
   filteredSources().forEach(s=>s.candidates.forEach(c=>{
     if(c.status!=='accepted' || !c.tag || ($('kind').value && c.kind!==$('kind').value)) return;
     if(imageFilter!==null&&!imageFilter.has(key(s,c)))return;
-    if($('unreviewed').checked && c.tag.reviewed && c.tag_current) return;
-    const matches=terms=>terms.map(t=>c.tag.tags.includes(t));
+    const matches=terms=>terms.map(t=>c.tag.tags.some(tag=>tagContains(tag,t)));
     if(has.length && !($('hasLogic').value==='all'?matches(has).every(Boolean):matches(has).some(Boolean)))return;
     if(not.length && ($('notLogic').value==='all'?matches(not).every(Boolean):matches(not).some(Boolean)))return;
     visibleTags.push([s,c]); const k=key(s,c),card=node('article',undefined,`card${selected.has(k)?' selected':''}${singleTagKey===k?' focused':''}`);
-    const status=!c.tag_current?'标签过期':c.tag.reviewed?'已确认':'待确认';
+    const status=c.tag_current?'标签已生成':'标签过期';
     card.title=`${s.relative} · ${names[c.kind]} · ${status}`;
     const check=node('input');check.type='checkbox';check.checked=selected.has(k);check.disabled=!c.tag_current;check.dataset.selection=k;check.setAttribute('aria-label',`批量选择 ${s.relative} ${names[c.kind]}`);
     check.onchange=()=>{if(check.checked)selected.add(k);else selected.delete(k);renderTags();document.querySelector(`[data-selection="${CSS.escape(k)}"]`)?.focus({preventScroll:true});};
@@ -278,41 +278,52 @@ function selections() {return [...selected].map(k=>k.split('/')).filter(([s,c])=
 function editTargets(){return $('editScope').value==='filtered'?visibleTags.filter(([,c])=>c.tag_current).map(([s,c])=>[s.id,c.id]):selections();}
 function sortedCounts(counts,by,order){return [...counts].sort((a,b)=>{
   const alpha=a[0].localeCompare(b[0],'en');
-  return by==='frequency'?(order==='desc'?b[1]-a[1]:a[1]-b[1])||alpha:(order==='desc'?-alpha:alpha);
+  const difference=by==='frequency'?a[1]-b[1]:by==='length'?a[0].length-b[0].length:alpha;
+  return (order==='desc'?-difference:difference)||alpha;
 });}
-function renderVocabulary(){
+function baseTagCounts(){
   const counts=new Map();
   filteredSources().forEach(s=>s.candidates.forEach(c=>{
-    if(c.status!=='accepted'||!c.tag||($('kind').value&&c.kind!==$('kind').value)||($('unreviewed').checked&&c.tag.reviewed&&c.tag_current))return;
+    if(c.status!=='accepted'||!c.tag||($('kind').value&&c.kind!==$('kind').value))return;
     if(imageFilter!==null&&!imageFilter.has(key(s,c)))return;
     new Set(c.tag.tags).forEach(t=>counts.set(t,(counts.get(t)||0)+1));
   }));
+  return counts;
+}
+function tagSearchMatcher(query,mode,errorId){
+  $(errorId).textContent='';
+  if(!query)return ()=>true;
+  try{
+    if(mode==='regex'){const regex=new RegExp(query,'i');return t=>regex.test(t);}
+    const text=query.replaceAll('_',' ').toLowerCase();
+    return t=>{t=t.toLowerCase();return mode==='prefix'?t.startsWith(text):mode==='suffix'?t.endsWith(text):mode==='exact'?t===text:t.includes(text);};
+  }catch(error){$(errorId).textContent=`正则表达式无效：${error.message}`;return ()=>false;}
+}
+function renderVocabulary(){
+  const counts=baseTagCounts();
   const focused=visibleTags.find(([s,c])=>key(s,c)===singleTagKey);
   const focusedTags=focused?new Set(focused[1].tag.tags):null;
   $('tagFocusName').textContent=focused?`${focused[0].relative} · ${names[focused[1].kind]}`:'全部图片的标签';
   $('showAllTags').hidden=!focused;
   $('viewFocusedImage').hidden=!focused;
   const query=$('tagSearch').value.trim(),mode=$('tagSearchMode').value;
-  let match=()=>true;
-  $('tagSearchError').textContent='';
-  try{
-    if(query){
-      if(mode==='regex'){const regex=new RegExp(query,'i');match=t=>regex.test(t);}
-      else {const text=query.replaceAll('_',' ').toLowerCase();match=t=>{t=t.toLowerCase();return mode==='prefix'?t.startsWith(text):mode==='suffix'?t.endsWith(text):mode==='exact'?t===text:t.includes(text);};}
-    }
-  }catch(error){$('tagSearchError').textContent=`正则表达式无效：${error.message}`;match=()=>false;}
-  const tags=sortedCounts(counts,$('tagSort').value,$('tagOrder').value).filter(([t])=>(!focusedTags||focusedTags.has(t))&&match(t));
-  $('vocabularyCount').textContent=`${tags.length} / ${focusedTags?focusedTags.size:counts.size}`;$('tagVocabulary').replaceChildren();
+  const match=tagSearchMatcher(query,mode,'tagSearchError');
   const positive=splitTags($('hasTag').value),negative=splitTags($('notTag').value);
+  const tags=sortedCounts(counts,$('tagSort').value,$('tagOrder').value).filter(([t])=>(!focusedTags||focusedTags.has(t))&&match(t)&&(!positive.length||positive.some(term=>tagContains(t,term))));
+  $('vocabularyCount').textContent=`${tags.length} / ${focusedTags?focusedTags.size:counts.size}`;$('tagVocabulary').replaceChildren();
   tags.forEach(([t,n])=>{
-    const row=node('div',undefined,'tagChoice'),include=tagChip(t,$('tagSort').value==='frequency'?n:null);
-    include.classList.toggle('active',positive.includes(t));
-    include.setAttribute('aria-pressed',String(positive.includes(t)));include.onclick=()=>toggleFilterTag('hasTag',t);
+    const row=node('div',undefined,'tagChoice'),include=tagChip(t,n);
+    include.classList.toggle('active',clickedIncludeTags.has(t));
+    include.setAttribute('aria-pressed',String(clickedIncludeTags.has(t)));include.onclick=()=>toggleFilterTag('hasTag',t);
     const exclude=node('button','−',negative.includes(t)?'active':'');exclude.setAttribute('aria-label',`排除 ${t}`);exclude.setAttribute('aria-pressed',String(negative.includes(t)));exclude.onclick=()=>toggleFilterTag('notTag',t);
     row.append(include,exclude);$('tagVocabulary').append(row);
   });
 }
-function toggleFilterTag(id,tag){const tags=splitTags($(id).value);$(id).value=(tags.includes(tag)?tags.filter(t=>t!==tag):[...tags,tag]).join(', ');renderTags();}
+function toggleFilterTag(id,tag){
+  const tags=splitTags($(id).value),remove=id==='hasTag'?clickedIncludeTags.has(tag):tags.includes(tag);
+  if(id==='hasTag'){if(remove)clickedIncludeTags.delete(tag);else clickedIncludeTags.add(tag);}
+  $(id).value=(remove?tags.filter(t=>t!==tag):[...new Set([...tags,tag])]).join(', ');renderTags();
+}
 function tagChip(text,count){
   const button=node('button',undefined,'tagChip'),label=node('span',text,'tagText');
   button.append(label);
@@ -320,43 +331,53 @@ function tagChip(text,count){
   return button;
 }
 function renderFrequency(){
-  const targets=editTargets(),counts=new Map(); targets.forEach(([s,c])=>new Set(state.sources[s].candidates.find(x=>x.id===c).tag.tags).forEach(t=>counts.set(t,(counts.get(t)||0)+1)));
+  const targets=editTargets(),counts=baseTagCounts();
   $('selectedCount').textContent=`目标 ${targets.length} 张`;$('frequencies').replaceChildren();
   const visible=new Set(visibleTags.map(([s,c])=>key(s,c))),outside=targets.filter(([s,c])=>!visible.has(`${s}/${c}`)).length;
   $('selectionHint').textContent=targets.length?`将应用到${$('editScope').value==='filtered'?'当前筛选中可编辑的':'勾选的'} ${targets.length} 张图片${outside?`，其中 ${outside} 张不在当前筛选中`:''}。`:'没有可编辑目标。请勾选图片或切换操作范围；过期标签须重新打标。';
-  $('commonTags').textContent=`共同标签：${[...counts].filter(([,n])=>n===targets.length).map(([t])=>t).join(', ')||'无'}`;
-  sortedCounts(counts,$('frequencySort').value,$('frequencyOrder').value).filter(([t])=>t.toLowerCase().includes($('frequencySearch').value.trim().replaceAll('_',' ').toLowerCase())).forEach(([t,n])=>{const b=tagChip(t,$('frequencySort').value==='frequency'?n:null);b.dataset.tag=t;
-    if($('tagOperation').value==='remove'){b.setAttribute('aria-pressed',String(splitTags($('editTags').value).includes(t)));b.classList.toggle('active',splitTags($('editTags').value).includes(t));}
-    b.onclick=()=>{
-    const mode=$('tagOperation').value,id=mode==='replace'?'oldTag':mode==='match'?'matchSearch':'editTags';
-    const current=splitTags($(id).value);
-    $(id).value=id==='editTags'?(mode==='remove'&&current.includes(t)?current.filter(x=>x!==t):[...new Set([...current,t])]).join(', '):t;invalidatePreview();renderFrequency();
-  };$('frequencies').append(b);});
+  const common=new Map();targets.forEach(([s,c])=>new Set(state.sources[s].candidates.find(x=>x.id===c).tag.tags).forEach(t=>common.set(t,(common.get(t)||0)+1)));
+  $('commonTags').textContent=`共同标签：${[...common].filter(([,n])=>n===targets.length).map(([t])=>t).join(', ')||'无'}`;
+  const match=tagSearchMatcher($('frequencySearch').value.trim(),$('frequencySearchMode').value,'frequencySearchError');
+  const positive=splitTags($('hasTag').value),negative=splitTags($('notTag').value),removals=splitTags($('editTags').value),removing=$('tagOperation').value==='remove';
+  sortedCounts(counts,$('frequencySort').value,$('frequencyOrder').value).filter(([t])=>match(t)&&(!positive.length||positive.some(term=>tagContains(t,term)))).forEach(([t,n])=>{
+    const row=node('div',undefined,'tagChoice'),include=tagChip(t,n);
+    include.dataset.tag=t;include.classList.toggle('active',clickedIncludeTags.has(t));include.setAttribute('aria-pressed',String(clickedIncludeTags.has(t)));
+    include.onclick=()=>toggleFilterTag('hasTag',t);row.append(include);
+    const marked=removing?removals.includes(t):negative.includes(t);
+    const secondary=node('button','−',marked?'active':'');secondary.type='button';secondary.setAttribute('aria-label',`${removing?'选择待删除标签':'排除'} ${t}`);secondary.setAttribute('aria-pressed',String(marked));
+    if(removing){
+      secondary.onclick=()=>{const tags=splitTags($('editTags').value);$('editTags').value=(tags.includes(t)?tags.filter(x=>x!==t):[...tags,t]).join(', ');invalidatePreview();renderFrequency();};
+    }else secondary.onclick=()=>toggleFilterTag('notTag',t);
+    row.append(secondary);
+    $('frequencies').append(row);
+  });
   updateTagControls();
 }
 function updateTagControls(){
   const mode=$('tagOperation').value, empty=!state||!editTargets().length;
   $('tagInputGroup').hidden=!['add','remove'].includes(mode);$('replaceInputs').hidden=mode!=='replace';
   $('matchInputs').hidden=mode!=='match';$('sortInputs').hidden=mode!=='sort';$('prependGroup').hidden=mode!=='add';
-  $('matchCaseGroup').hidden=mode!=='match';
+  $('tagInputLabel').textContent=mode==='remove'?'待删除标签':'添加标签／触发词';
   $('applyTags').dataset.mode=mode;
-  $('applyTags').textContent={add:'应用添加',remove:'应用删除',replace:'应用替换',match:'应用匹配修改',sort:'应用标签排序',dedupe:'逐图去重并保存'}[mode];
+  $('applyTags').textContent={add:'应用添加',remove:'删除操作范围内选中的标签',replace:'应用替换',match:'应用搜索替换',sort:'应用标签排序'}[mode];
   document.querySelectorAll('[data-mode]').forEach(b=>b.disabled=processing()||empty);
-  $('applyTags').disabled=processing()||empty||(mode==='replace'?!$('oldTag').value.trim()||!$('newTag').value.trim():mode==='match'?!$('matchSearch').value.trim():['sort','dedupe'].includes(mode)?false:!splitTags($('editTags').value).length);
+  $('dedupeTags').disabled=processing()||empty;
+  $('applyTags').disabled=processing()||empty||(mode==='replace'?!$('oldTag').value.trim()||!$('newTag').value.trim():mode==='match'?!$('matchSearch').value.trim():mode==='sort'?false:!splitTags($('editTags').value).length);
   $('previewTags').disabled=$('applyTags').disabled;
   $('removeSelectionActions').hidden=mode!=='remove';
+  $('batchTagHint').textContent=mode==='remove'?'点击标签筛选左侧图片；点击 − 选择待删除标签。':'点击标签筛选左侧图片；点击 − 排除包含该标签的图片。';
   const [s,c]=(singleTagKey||'').split('/');$('saveSingle').disabled=processing()||!state?.sources[s]?.candidates.some(x=>x.id===c&&x.tag_current&&x.status==='accepted');
-  $('dedupeHint').hidden=mode!=='dedupe';
 }
 function invalidatePreview(){$('batchPreview').hidden=true;}
 function batchOperation(){const mode=$('tagOperation').value;return {mode,tags:splitTags($('editTags').value),old:$('oldTag').value,new:mode==='match'?$('matchReplacement').value:$('newTag').value,search:$('matchSearch').value,match:$('matchMode').value,case_sensitive:$('matchCase').checked,prepend:$('prependTags').checked,by:$('captionSort').value,order:$('captionOrder').value};}
 ['tagOperation','editTags','oldTag','newTag','matchSearch','matchReplacement','matchMode','matchCase','prependTags','captionSort','captionOrder'].forEach(id=>$(id).oninput=()=>{invalidatePreview();updateTagControls();});
 $('editScope').onchange=()=>{invalidatePreview();renderFrequency();};
-['frequencySort','frequencyOrder'].forEach(id=>$(id).onchange=renderFrequency);
+['frequencySort','frequencyOrder','frequencySearchMode'].forEach(id=>$(id).onchange=renderFrequency);
 $('frequencySearch').oninput=renderFrequency;
 $('editTags').oninput=()=>{invalidatePreview();renderFrequency();};
-$('chooseRemovalTags').onclick=()=>{$('editTags').value=[...new Set([...splitTags($('editTags').value),...[...$('frequencies').children].map(b=>b.dataset.tag)])].join(', ');invalidatePreview();renderFrequency();};
+$('chooseRemovalTags').onclick=()=>{const shown=[...$('frequencies').querySelectorAll('[data-tag]')].map(b=>b.dataset.tag);$('editTags').value=[...new Set([...splitTags($('editTags').value),...shown])].join(', ');invalidatePreview();renderFrequency();};
 $('clearRemovalTags').onclick=()=>{$('editTags').value='';invalidatePreview();renderFrequency();};
+$('dedupeTags').onclick=()=>{invalidatePreview();edit({action:'tags',selections:editTargets(),operation:{mode:'dedupe'}});};
 function batchTab(button){$('tagOperation').value=button.dataset.operation;document.querySelectorAll('[data-operation]').forEach(b=>{const active=b===button;b.setAttribute('aria-selected',String(active));b.tabIndex=active?0:-1;b.classList.toggle('active',active);});invalidatePreview();renderFrequency();}
 document.querySelectorAll('[data-operation]').forEach(b=>b.onclick=()=>batchTab(b));
 $('batchTabs').onkeydown=e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();const buttons=[...$('batchTabs').children],i=buttons.indexOf(document.activeElement),next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(i+(e.key==='ArrowRight'?1:buttons.length-1))%buttons.length;batchTab(buttons[next]);buttons[next].focus();}};
@@ -377,9 +398,10 @@ $('previewTags').onclick=async()=>{
 };
 $('saveDrop').onclick=()=>edit({action:'drop_tags',tags:splitTags($('dropTags').value)});
 ['group','search'].forEach(id=>$(id).oninput=()=>{renderSources();renderTags();});
-['kind','hasTag','notTag','hasLogic','notLogic','unreviewed'].forEach(id=>$(id).oninput=()=>{invalidatePreview();renderTags();});
+['kind','hasTag','notTag','hasLogic','notLogic'].forEach(id=>$(id).oninput=()=>{invalidatePreview();renderTags();});
+$('hasTag').oninput=()=>{clickedIncludeTags.clear();renderTags();};
 ['tagSearch','tagSearchMode','tagSort','tagOrder'].forEach(id=>$(id).oninput=renderVocabulary);
-$('resetTagFilters').onclick=()=>{imageFilter=null;['group','search','kind','hasTag','notTag','tagSearch'].forEach(id=>$(id).value='');$('hasLogic').value='all';$('notLogic').value='any';$('unreviewed').checked=false;invalidatePreview();renderSources();renderTags();};
+$('resetTagFilters').onclick=()=>{imageFilter=null;clickedIncludeTags.clear();['group','search','kind','hasTag','notTag','tagSearch'].forEach(id=>$(id).value='');$('hasLogic').value='all';$('notLogic').value='any';invalidatePreview();renderSources();renderTags();};
 const tagToolNames=['filter','selection','batch','single'];
 function tagTool(name){tagToolNames.forEach(n=>{const active=n===name;$(n+'ToolPanel').hidden=!active;const b=$(n+'ToolTab');b.setAttribute('aria-selected',String(active));b.classList.toggle('active',active);b.tabIndex=active?0:-1;});}
 tagToolNames.forEach(name=>$(name+'ToolTab').onclick=()=>tagTool(name));

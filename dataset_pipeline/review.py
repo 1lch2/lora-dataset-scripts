@@ -46,9 +46,9 @@ def make_server(directory=None, port=8765):
                 raise ValueError("没有可用图片或图片准备失败，请先完成准备")
             if any(c["status"] == "pending" for s in sources for c in s["candidates"]):
                 raise ValueError("请先接受或拒绝所有待审裁框")
-            if action == "export" and any(not run.current_tag(s, c) or not c["tag"].get("reviewed")
+            if action == "export" and any(not run.current_tag(s, c)
                                           for s in sources for c in s["candidates"] if c["status"] == "accepted"):
-                raise ValueError("请先完成打标并确认所有接受样本的标签")
+                raise ValueError("请先完成所有接受样本的打标")
             job.update(id=secrets.token_hex(8), status="running", action=action, errors=[], count=None)
         threading.Thread(target=process_job, args=(action,), daemon=True).start()
 

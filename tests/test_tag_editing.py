@@ -59,7 +59,7 @@ class TagEditingTests(unittest.TestCase):
         run.data = {"sources": {}}
         for number, tags in enumerate((["blue hair", "white shirt"], ["red hair", "white shirt"])):
             sid = str(number)
-            tag = {"image": f"images/{sid}.png", "raw": tags, "tags": tags[:], "auto_removed": [], "operations": [], "reviewed": True}
+            tag = {"image": f"images/{sid}.png", "raw": tags, "tags": tags[:], "auto_removed": [], "operations": []}
             run.data["sources"][sid] = {"id": sid, "relative": sid + ".png", "active": True,
                 "candidates": [{"id": "full", "kind": "full", "status": "accepted", "tag": tag}]}
             run.write_tag_file(tag)
@@ -79,8 +79,8 @@ class TagEditingTests(unittest.TestCase):
             self.assertEqual(run.data, before)
             self.assertEqual((run.directory / "manifest.json").read_bytes(), disk)
             self.assertEqual(run.edit_tags(targets, operation), preview)
-            self.assertFalse(run.locate("0", "full")[1]["tag"]["reviewed"])
-            self.assertTrue(run.locate("1", "full")[1]["tag"]["reviewed"])
+            self.assertNotIn("reviewed", run.locate("0", "full")[1]["tag"])
+            self.assertNotIn("reviewed", run.locate("1", "full")[1]["tag"])
             run.edit_tags([["0", "full"]], {"mode": "restore"})
             self.assertEqual(run.locate("0", "full")[1]["tag"]["tags"], ["blue hair", "white shirt"])
 
@@ -106,7 +106,7 @@ class TagEditingTests(unittest.TestCase):
             run.read_tag_files()
             tag = run.locate("0", "full")[1]["tag"]
             self.assertEqual(tag["tags"], ["external tag", "blue hair"])
-            self.assertFalse(tag["reviewed"])
+            self.assertNotIn("reviewed", tag)
             self.assertEqual(edited_tags(tag), tag["tags"])
             run.edit_tags([["0", "full"]], {"mode": "add", "tags": ["new tag"]})
             self.assertEqual(caption.read_text(encoding="utf-8"), "external tag, blue hair, new tag\n")

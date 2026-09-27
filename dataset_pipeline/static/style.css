@@ -548,21 +548,19 @@ body.tagEditing #tagView { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
 .tagTools > .panelScroll {
   flex: 1;
 }
-#applyTags,
-.toolFooter button {
-  width: 100%;
-}
-#applyTags {
-  margin: 0 0 14px;
-}
-.toolFooter {
-  padding: 10px 14px;
-  border-top: 1px solid #e3e6df;
-  background: white;
-}
-.toolFooter .hint {
-  margin: 0 0 7px;
-}
+.batchDedupe { margin: 14px 0 12px; }
+.batchDedupe button { width: 100%; padding: 10px; }
+#batchTabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0 0 18px; }
+#batchTabs button { white-space: normal; min-height: 40px; }
+#batchTabs button[aria-selected='true'] { background: #e1efdf; border-color: #31704b; color: #255439; font-weight: 600; }
+#batchToolPanel #tagInputGroup, #batchToolPanel #matchInputs > label { display: flex; width: 100%; }
+#batchToolPanel #matchInputs .checkLabel { flex: none; align-self: center; }
+.batchApply { display: flex; gap: 8px; margin: 12px 0 14px; }
+.batchApply #previewTags { flex: 0 0 120px; margin: 0; }
+.batchApply #applyTags { flex: 1; margin: 0; }
+.batchTagPicker { border-top: 1px solid #e3e6df; padding-top: 14px; }
+.batchTagPicker h3 { margin: 0 0 6px; }
+#frequencySearchError:empty { display: none; }
 #frequencies {
   display: flex;
   flex-wrap: wrap;
@@ -572,33 +570,25 @@ body.tagEditing #tagView { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
-#frequencies button {
-  font-size: 12px;
-  padding: 3px 6px;
-  overflow-wrap: anywhere;
-  text-align: left;
-}
 .compactActions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
 .compactActions #applyTags { width: auto; margin: 0; }
 .compactActions #previewTags { width: auto; margin: 0; }
 .batchScope { display: flex; align-items: center; gap: 12px; }
 .batchScope label { display: flex; flex-direction: row; align-items: center; flex: 1; white-space: nowrap; }
 .batchScope select { flex: 1; min-width: 0; }
-#batchTabs button { flex: 1; white-space: nowrap; }
 #batchToolPanel .toolHeading { padding: 4px 0; }
 #batchToolPanel label { margin-bottom: 6px; }
 #batchToolPanel .hint { margin: 5px 0; }
 #batchToolPanel #commonTags { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #batchToolPanel .fieldRow label { min-width: 0; }
 #batchToolPanel #frequencies { max-height: none; }
-#frequencies button[aria-pressed="true"] { background: #e1efdf; border-color: #31704b; color: #255439; }
 #imageFilterBasket { display: grid; grid-template-columns: repeat(auto-fill,minmax(80px,1fr)); gap: 8px; }
 #imageFilterBasket .imageButton { padding: 0; cursor: pointer; aspect-ratio: 1; overflow: hidden; }
 #imageFilterBasket img { width: 100%; height: 100%; object-fit: contain; }
 #imageFilterStatus { font-size: 12px; }
 .tagVocabulary, #frequencies { gap: 6px; align-items: flex-start; }
 .tagChoice { align-items: stretch; }
-.tagChoice .tagChip, #frequencies .tagChip {
+.tagChoice .tagChip {
   display: inline-flex; align-items: center; gap: 6px;
   min-height: 30px; max-width: 100%; padding: 4px 8px;
   background: #eef0ec; border: 1px solid #d9ded5; border-radius: 8px;
@@ -611,15 +601,15 @@ body.tagEditing #tagView { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
   content: ''; flex: none; width: 14px; height: 14px; border-radius: 3px;
   border: 1px solid #9aa69c; background: #fff; box-sizing: border-box;
 }
-.tagChoice .tagChip[aria-pressed='true'], #frequencies .tagChip[aria-pressed='true'] {
+.tagChoice .tagChip[aria-pressed='true'] {
   background: #e1efdf; border-color: #31704b; color: #255439;
 }
 .tagChip[aria-pressed='true']::before {
   content: '✓'; background: #31704b; border-color: #31704b; color: #fff;
   text-align: center; font-size: 11px; line-height: 12px;
 }
-.tagChoice .tagChip:hover, #frequencies .tagChip:hover { border-color: #77927e; background: #e5eae2; }
-.tagChoice button:focus-visible, #frequencies .tagChip:focus-visible { outline: 3px solid #31704b; outline-offset: 2px; }
+.tagChoice .tagChip:hover { border-color: #77927e; background: #e5eae2; }
+.tagChoice button:focus-visible { outline: 3px solid #31704b; outline-offset: 2px; }
 .tagChoice .tagChip:first-child { border-radius: 8px 0 0 8px; }
 .tagChoice button:last-child { min-width: 26px; padding: 4px 6px; border-radius: 0 8px 8px 0; font-size: 14px; }
 .emptyState {

@@ -161,7 +161,6 @@ class PipelineTests(unittest.TestCase):
             self.assertGreater(image.getpixel((0, 0))[0], 200)
         selections = [[source["id"], c["id"]] for c in source["candidates"] if c["status"] == "accepted"]
         run.edit_tags(selections, {"mode": "add", "tags": ["special_trigger"]})
-        run.edit_tags(selections, {"mode": "approve"})
         count = run.export()
         captions = list((self.root / "export").rglob("*.txt"))
         self.assertEqual(count, len(captions))
@@ -178,6 +177,18 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(self.client.upscales, 1)
         self.assertEqual(run2.export(), count)
         self.assertEqual(file_digest(self.original), self.original_hash)
+
+    def test_reexport_uses_latest_tags_without_confirmation(self):
+        run, source = self.prepared()
+        for candidate in source["candidates"][1:]:
+            run.change_crop(source["id"], candidate["id"], status="rejected")
+        run.tag_all()
+        self.assertEqual(run.export(), 1)
+        caption = next((self.root / "export").rglob("*.txt"))
+        run.edit_tags([[source["id"], "full"]], {"mode": "set", "tags": ["new trigger"]})
+        self.assertEqual(run.export(), 1)
+        self.assertIn("new trigger", caption.read_text(encoding="utf-8"))
+        self.assertNotIn("white shirt", caption.read_text(encoding="utf-8"))
 
     def test_scale_change_preserves_full_and_manual_operations(self):
         run, source = self.prepared()
@@ -224,7 +235,7 @@ class PipelineTests(unittest.TestCase):
         with Image.open(asset(run.directory, full["tag"]["image"])) as image:
             self.assertEqual(image.size, (1280, 1792))
 
-    def test_lower_rule_upgrade_preserves_reviewed_and_edited_crops(self):
+    def test_lower_rule_upgrade_preserves_existing_and_edited_crops(self):
         run, source = self.prepared()
         baseline = copy.deepcopy(source)
         for preserve in (None, 'accepted', 'rejected', 'edited', 'tagged'):
@@ -258,7 +269,7 @@ class PipelineTests(unittest.TestCase):
         self.assertFalse(run.current_tag(source, crop))
         run.tag_all()
         self.assertIn("trigger", crop["tag"]["tags"])
-        self.assertFalse(crop["tag"]["reviewed"])
+        self.assertNotIn("reviewed", crop["tag"])
 
     def test_reject_tiny_outside_duplicate_and_pending_export(self):
         run, source = self.prepared()
@@ -269,25 +280,27 @@ class PipelineTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             run.export()
 
-    def test_output_external_change_not_overwritten(self):
+    def test_export_overwrites_prior_output_with_current_tags(self):
         run, source = self.prepared()
         for candidate in source["candidates"][1:]:
             run.change_crop(source["id"], candidate["id"], status="rejected")
         run.tag_all()
-        run.edit_tags([[source["id"], "full"]], {"mode": "approve"})
         run.export()
         caption = next((self.root / "export").rglob("*.txt"))
         caption.write_text("external edit", encoding="utf-8")
-        with self.assertRaises(ValueError):
+        self.assertEqual(run.export(), 1)
+        self.assertNotIn("external edit", caption.read_text(encoding="utf-8"))
+        unrelated = self.root / "export" / "unrelated.txt"
+        unrelated.write_text("keep me", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "非本运行生成"):
             run.export()
-        self.assertEqual(caption.read_text(), "external edit")
+        self.assertEqual(unrelated.read_text(encoding="utf-8"), "keep me")
 
     def test_interrupted_export_recovers_partial_copy(self):
         run, source = self.prepared()
         for candidate in source["candidates"][1:]:
             run.change_crop(source["id"], candidate["id"], status="rejected")
         run.tag_all()
-        run.edit_tags([[source["id"], "full"]], {"mode": "approve"})
         original_copy = shutil.copyfile
 
         def interrupted(src, dst):
@@ -303,14 +316,13 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(recovered.export(), 1)
         self.assertFalse(list((self.root / "export").rglob("*.tmp")))
 
-    def test_threshold_change_requires_retag_and_review(self):
+    def test_threshold_change_requires_retag(self):
         run, source = self.prepared()
         run.tag_all()
-        run.edit_tags([[source["id"], "full"]], {"mode": "approve"})
         run.config["tag_threshold"] = .4
         self.assertFalse(run.current_tag(source, source["candidates"][0]))
         run.tag_all()
-        self.assertFalse(source["candidates"][0]["tag"]["reviewed"])
+        self.assertTrue(run.current_tag(source, source["candidates"][0]))
 
     def test_source_change_and_missing_source(self):
         run, source = self.prepared()
@@ -327,7 +339,6 @@ class PipelineTests(unittest.TestCase):
         selections = [[source["id"], "full"]]
         run.data["drop_tags_override"] = ["white shirt"]
         run.edit_tags(selections, {"mode": "add", "tags": ["white shirt"]})
-        run.edit_tags(selections, {"mode": "approve"})
         run2, _ = prepare(self.config, self.client, analyze)
         self.assertEqual(run2.data["drop_tags_override"], ["white shirt"])
         run2.export()
@@ -431,11 +442,16 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual(finished()['status'], 'complete')
             self.assertEqual(self.client.tags, count)
             selections = [[source['id'], c['id']] for c in source['candidates']]
-            self.assertEqual(post('tags', selections=selections, operation={'mode': 'approve'}).status_code, 200)
             self.assertEqual(post('export').status_code, 202)
             result = finished()
             self.assertEqual(result['count'], len(selections), result)
             self.assertEqual(len(list(Path(run.config['output_dir']).rglob('*.txt'))), len(selections))
+            self.assertEqual(post('tags', selections=[[source['id'], 'full']],
+                                  operation={'mode': 'set', 'tags': ['web trigger']}).status_code, 200)
+            self.assertEqual(post('export').status_code, 202)
+            self.assertEqual(finished()['status'], 'complete')
+            caption = Path(run.config['output_dir']) / source['group'] / f"{source['id']}_full.txt"
+            self.assertIn('web trigger', caption.read_text(encoding='utf-8'))
 
 
 class ForgeTests(unittest.TestCase):
