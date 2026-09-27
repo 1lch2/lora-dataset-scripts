@@ -1,4 +1,4 @@
-import type { EditRequest, EditResult, JobInfo, RunInfo, SessionInfo } from './types';
+import type { EditRequest, EditResult, JobInfo, LoraFilesInfo, LoraRenameChange, LoraRenameResult, RunInfo, SessionInfo } from './types';
 
 export async function request<T>(url: string, data?: unknown, token?: string): Promise<T> {
   const response = await fetch(
@@ -20,3 +20,7 @@ export const getRunInfo = () => request<RunInfo>('/api/state');
 export const getJobInfo = () => request<JobInfo>('/api/job');
 export const updateReview = (data: EditRequest, token: string) =>
   request<EditResult>('/api/edit', data, token);
+export const getLoraFilesInfo = (directory: string) =>
+  request<LoraFilesInfo>(`/api/lora/files?directory=${encodeURIComponent(directory)}`);
+export const renameLoraFiles = (directory: string, changes: LoraRenameChange[], token: string) =>
+  request<LoraRenameResult>('/api/lora/rename', { directory, changes }, token);

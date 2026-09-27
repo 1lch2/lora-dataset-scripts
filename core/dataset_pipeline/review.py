@@ -7,6 +7,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from generate_lora_tag import generate_lora_tags
+from rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
+
 from .core import Run, asset, run_lock
 from .analysis_job import AnalysisJob
 
@@ -74,7 +77,8 @@ def make_server(directory=None, port=8765):
             try:
                 if route.path == '/api/session':
                     self.reply(200, {'token': token, 'analysisOnly': directory is None,
-                                     'application': 'dataset-review', 'runDir': str(directory) if directory else None})
+                                     'application': 'dataset-review', 'runDir': str(directory) if directory else None,
+                                     'loraOutputDir': str(LORA_OUTPUT_DIR)})
                 elif route.path == '/' or route.path.startswith('/assets/'):
                     path = (static / ('index.html' if route.path == '/' else route.path.lstrip('/'))).resolve()
                     if not path.is_relative_to(static.resolve()) or not path.is_file():
@@ -88,6 +92,14 @@ def make_server(directory=None, port=8765):
                 elif route.path == '/api/analysis/csv':
                     from .analysis import csv_report
                     self.reply(200, csv_report(analysis.report()).encode('utf-8-sig'), 'text/csv; charset=utf-8')
+                elif route.path == '/api/lora/files':
+                    requested = parse_qs(route.query).get('directory', [str(LORA_OUTPUT_DIR)])[0]
+                    folder = Path(requested).expanduser().resolve()
+                    changes = plan_renames(folder)
+                    files = sorted(path.name for path in folder.iterdir()
+                                   if path.is_file() and path.suffix.lower() == '.safetensors')
+                    self.reply(200, {'directory': str(folder), 'files': files,
+                                     'changes': changes, 'prompts': generate_lora_tags(folder)})
                 elif directory is None:
                     self.reply(404, {'error':'独立分析模式没有审核数据'})
                 elif route.path == "/api/state":
@@ -129,7 +141,7 @@ def make_server(directory=None, port=8765):
             if not self.valid_host() or self.headers.get("X-Review-Token") != token:
                 self.reply(403, {"error": "审核会话无效，请刷新页面"})
                 return
-            if self.path not in ("/api/edit", '/api/analysis/start', '/api/analysis/cancel'):
+            if self.path not in ("/api/edit", '/api/analysis/start', '/api/analysis/cancel', '/api/lora/rename'):
                 self.reply(404, {"error": "接口不存在"})
                 return
             try:
@@ -144,6 +156,17 @@ def make_server(directory=None, port=8765):
                     return
                 if self.path == '/api/analysis/cancel':
                     self.reply(200, analysis.cancel())
+                    return
+                if self.path == '/api/lora/rename':
+                    requested = data.get('directory')
+                    expected = data.get('changes')
+                    if not isinstance(requested, str) or not requested.strip():
+                        raise ValueError('请选择 LoRA 目录')
+                    if not isinstance(expected, list):
+                        raise ValueError('请先刷新重命名预览')
+                    with mutex:
+                        changed = rename_files(requested, expected)
+                    self.reply(200, {'ok': True, 'renamed': len(changed)})
                     return
                 if directory is None:
                     raise ValueError('独立分析模式没有审核数据')

@@ -44,6 +44,18 @@ export function Header() {
           >
             数据集分析
           </button>
+          <button
+            id='loraTab'
+            role='tab'
+            aria-selected={v.stage === 'lora'}
+            aria-controls='loraView'
+            tabIndex={v.stage === 'lora' ? 0 : -1}
+            disabled={v.busy}
+            onClick={() => v.handleStage('lora')}
+            className={v.stage === 'lora' ? 'active' : ''}
+          >
+            LoRA 文件
+          </button>
         </nav>
         <div className='stageActions'>
           <span id='stageStatus'>{v.stageStatus}</span>

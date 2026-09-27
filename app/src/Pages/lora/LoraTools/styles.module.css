@@ -1,0 +1,98 @@
+.view {
+  height: 100%;
+  overflow: auto;
+  padding: 20px;
+}
+
+.content {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.section {
+  background: white;
+  border: 1px solid #dce1d9;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.section h2 {
+  margin: 0 0 12px;
+}
+
+.hint {
+  color: #6c746c;
+}
+
+.directoryForm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.directoryForm input {
+  flex: 1;
+}
+
+.directoryForm button,
+.heading button {
+  white-space: nowrap;
+}
+
+.error {
+  color: #a5292a;
+}
+
+.tableWrap {
+  overflow: auto;
+  max-height: 320px;
+  margin: 16px 0;
+}
+
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  text-align: left;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid #e3e6e1;
+  padding: 8px;
+  overflow-wrap: anywhere;
+}
+
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.section textarea {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  margin: 12px 0;
+  font-family: ui-monospace, monospace;
+}
+
+.section li {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .view {
+    padding: 10px;
+  }
+
+  .directoryForm {
+    flex-wrap: wrap;
+  }
+
+  .directoryForm input {
+    flex-basis: 100%;
+  }
+}

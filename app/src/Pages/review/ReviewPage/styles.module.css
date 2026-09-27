@@ -18,6 +18,15 @@ body:global(.analyzing) :global(.appShell) {
   display: block;
   overflow: hidden;
 }
+body:global(.loraTools) :global(.libraryPanel),
+body:global(.loraTools) :global(.stageActions),
+body:global(.loraTools) :global(.appStatus) {
+  display: none;
+}
+body:global(.loraTools) :global(.appShell) {
+  display: block;
+  overflow: hidden;
+}
 :global(#analysisView) {
   height: 100%;
   overflow: auto;

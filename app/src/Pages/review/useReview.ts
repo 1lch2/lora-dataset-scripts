@@ -127,7 +127,7 @@ export function useReview(session: SessionInfo) {
               : `已导出 ${job.count} 组图片和标签至 ${data.config.output_dir}`,
         );
         if (job.status === 'complete' && job.action === 'start_tag')
-          setStage((previous) => (previous === 'analysis' ? previous : 'tag'));
+          setStage((previous) => (previous === 'analysis' || previous === 'lora' ? previous : 'tag'));
       })
       .catch((error) => {
         handledJob.current = undefined;
@@ -137,13 +137,14 @@ export function useReview(session: SessionInfo) {
   useEffect(() => {
     document.body.classList.toggle('analyzing', stage === 'analysis');
     document.body.classList.toggle('tagEditing', stage === 'tag');
+    document.body.classList.toggle('loraTools', stage === 'lora');
     document.body.classList.toggle('focusCrop', focusCrop && stage === 'crop');
-    return () => document.body.classList.remove('analyzing', 'tagEditing', 'focusCrop');
+    return () => document.body.classList.remove('analyzing', 'tagEditing', 'loraTools', 'focusCrop');
   }, [stage, focusCrop]);
   function handleStage(next: string) {
     setStage(next);
     if (next !== 'crop') setFocusCrop(false);
-    if (next === 'analysis') return;
+    if (next === 'analysis' || next === 'lora') return;
     setReviewStarted(true);
     restoreDraft(source, candidate?.id);
   }

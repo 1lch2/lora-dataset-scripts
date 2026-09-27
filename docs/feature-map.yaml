@@ -1,7 +1,7 @@
 path_base: repository-root
-scope: 已核对审核前端、数据集分析与 BAT 启动主链路；Python 处理模块保留原有组织结构。
+scope: 已核对审核前端、数据集分析、LoRA 文件工具与 BAT 启动主链路；Python 处理模块保留原有组织结构。
 not_yet_mapped:
-  - 原有独立图片与标签工具的内部算法
+  - 其他独立图片与标签工具的内部算法
   - 检测、几何裁框与模型客户端的内部实现
 features:
   - id: review-app
@@ -9,16 +9,24 @@ features:
     keywords: [React, Vite, app/src, 裁框, 标签, 批量编辑, 筛选, 预览, 导出]
     doc: docs/features/review-app.md
     entrypoints:
-      - app/src/features/review/ReviewPage/ReviewPage.tsx
-      - app/src/features/review/useReview.ts
+      - app/src/Pages/review/ReviewPage/ReviewPage.tsx
+      - app/src/Pages/review/useReview.ts
       - core/dataset_pipeline/review.py
   - id: dataset-analysis
     name: 本地数据集分析
     keywords: [分析, 亮度, 姿势, 重复, 报告, CSV, 对照]
     doc: docs/features/dataset-analysis.md
     entrypoints:
-      - app/src/features/analysis/AnalysisView/AnalysisView.tsx
+      - app/src/Pages/analysis/AnalysisView/AnalysisView.tsx
       - core/dataset_pipeline/analysis_job.py
+  - id: lora-files
+    name: LoRA 文件重命名与效果对比提示词
+    keywords: [LoRA, output, safetensors, rename, generate_lora_tag, 重命名, 提示词]
+    doc: docs/features/lora-files.md
+    entrypoints:
+      - app/src/Pages/lora/LoraTools/LoraTools.tsx
+      - core/rename.py
+      - core/generate_lora_tag.py
   - id: launcher
     name: BAT、Forge 与前后端启动
     keywords: [start-webui.bat, npm run dev, Forge, 启动, 等待, 端口, 独立终端]

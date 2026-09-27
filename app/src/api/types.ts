@@ -37,6 +37,21 @@ export interface RunInfo {
 export interface SessionInfo {
   token: string;
   analysisOnly: boolean;
+  loraOutputDir: string;
+}
+export interface LoraRenameChange {
+  from: string;
+  to: string;
+}
+export interface LoraFilesInfo {
+  directory: string;
+  files: string[];
+  changes: LoraRenameChange[];
+  prompts: string;
+}
+export interface LoraRenameResult {
+  ok: boolean;
+  renamed: number;
 }
 export interface JobInfo {
   id?: string;

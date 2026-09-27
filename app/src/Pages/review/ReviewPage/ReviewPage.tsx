@@ -7,6 +7,7 @@ import { TagEditor } from './__internal__/TagEditor';
 import { StatusBar } from './__internal__/StatusBar';
 import { PreviewDialog } from './__internal__/PreviewDialog';
 import { AnalysisView } from '../../analysis/AnalysisView';
+import { LoraTools } from '../../lora/LoraTools';
 import type { ReviewPageProps } from './types';
 import styles from './styles.module.css';
 
@@ -18,6 +19,7 @@ export function ReviewPage({ session }: ReviewPageProps) {
         <Header />
         <div className='appShell'>
           <AnalysisView token={session.token} active={review.stage === 'analysis'} />
+          <LoraTools token={session.token} defaultDirectory={session.loraOutputDir} active={review.stage === 'lora'} />
           <Library />
           <CropEditor />
           <TagEditor />
