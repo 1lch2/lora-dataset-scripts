@@ -227,10 +227,10 @@ class AnalysisHTTPTests(unittest.TestCase):
             thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
             base=f'http://127.0.0.1:{server.server_port}'
             try:
-                html=requests.get(base).text
-                self.assertIn('window.ANALYSIS_ONLY = true',html)
-                token=re.search("window.REVIEW_TOKEN = '([^']+)'",html)[1]
-                self.assertEqual(requests.get(base+'/analysis.js').status_code,200)
+                session=requests.get(base+'/api/session').json()
+                self.assertTrue(session['analysisOnly'])
+                token=session['token']
+                self.assertEqual(session['application'],'dataset-review')
                 self.assertEqual(requests.get(base+'/api/state').status_code,404)
                 payload={'directory':folder}
                 self.assertEqual(requests.post(base+'/api/analysis/start',json=payload).status_code,403)

@@ -1,0 +1,1237 @@
+.page {
+  display: contents;
+}
+:root {
+  font:
+    13px/1.5 system-ui,
+    sans-serif;
+  color: #292d2a;
+  background: #f5f6f3;
+  color-scheme: light;
+}
+body:global(.analyzing) :global(.libraryPanel),
+body:global(.analyzing) :global(.stageActions),
+body:global(.analyzing) :global(.appStatus) {
+  display: none;
+}
+body:global(.analyzing) :global(.appShell) {
+  display: block;
+  overflow: hidden;
+}
+:global(#analysisView) {
+  height: 100%;
+  overflow: auto;
+  padding: 20px;
+}
+:global(.analysisSetup),
+:global(#analysisResults) {
+  max-width: 1500px;
+  margin: 0 auto 20px;
+}
+:global(.analysisSetup) h2,
+:global(.analysisSetup) p,
+:global(.analysisSetup) details,
+:global(#analysisOverview) {
+  margin-bottom: 12px;
+}
+:global(.analysisOptions),
+:global(.analysisSettings),
+:global(.analysisReportHeading) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+}
+:global(.analysisSettings) {
+  margin-top: 12px;
+}
+:global(.analysisSettings) label {
+  flex: 1 1 180px;
+}
+:global(.analysisReportHeading) {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+:global(.analysisReportHeading) :global(.toolbar) {
+  flex-wrap: wrap;
+}
+:global(.baselineLabel) {
+  margin: 0;
+}
+:global(.baselineLabel) input {
+  max-width: 220px;
+}
+:global(.analysisMetrics) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+:global(.metricCard),
+:global(.analysisChart),
+:global(.analysisSection) {
+  background: #fff;
+  border: 1px solid #dce1d9;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 12px;
+}
+:global(.metricCard) {
+  margin: 0;
+}
+:global(.metricCard) strong {
+  display: block;
+  font-size: 26px;
+  color: #245137;
+  margin: 8px 0;
+}
+:global(.histogram) {
+  display: flex;
+  height: 70px;
+  align-items: flex-end;
+  gap: 2px;
+  margin-top: 12px;
+  border-bottom: 1px solid #ccd0ca;
+}
+:global(.histogramBar) {
+  flex: 1;
+  background: #719b80;
+  min-height: 1px;
+}
+:global(.analysisChart) :global(.histogram) {
+  height: 120px;
+}
+:global(#analysisSimilarity) {
+  white-space: pre-line;
+  margin: 8px 0;
+}
+:global(#analysisPairs) details {
+  margin-top: 12px;
+}
+:global(#analysisPairs) li,
+:global(#analysisErrors) p {
+  overflow-wrap: anywhere;
+}
+:global(.analysisTag) {
+  display: inline-block;
+  margin: 4px;
+  padding: 4px 8px;
+  background: #edf2ed;
+  border-radius: 4px;
+}
+:global(.analysisTableWrap) {
+  overflow-x: auto;
+  margin: 12px 0;
+}
+:global(#analysisTable) {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+:global(#analysisTable) th,
+:global(#analysisTable) td {
+  padding: 8px;
+  border-bottom: 1px solid #e3e6e1;
+  text-align: left;
+  white-space: nowrap;
+}
+:global(#analysisTable) td:first-child {
+  max-width: 360px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  :global(#analysisView) {
+    padding: 10px;
+  }
+  :global(.analysisMetrics) {
+    grid-template-columns: 1fr;
+  }
+}
+* {
+  box-sizing: border-box;
+  min-width: 0;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+body {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  background: white;
+  border: 1px solid #ccd0ca;
+  border-radius: 5px;
+  padding: 6px 9px;
+}
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+}
+button:hover {
+  background: #f0f3ee;
+  border-color: #a3afa5;
+}
+button:global(.active) {
+  background: #e9f0e9;
+  border-color: #779680;
+  color: #245137;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+:is(button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid #31704b;
+  outline-offset: 2px;
+}
+button:global(.primary) {
+  background: #31704b;
+  border-color: #31704b;
+  color: white;
+}
+button:global(.primary):hover {
+  background: #265b3c;
+}
+button:global(.reject),
+:global(.bad) {
+  color: #a33730;
+}
+input[type='checkbox'] {
+  accent-color: #31704b;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: none;
+}
+textarea {
+  resize: vertical;
+  min-height: 70px;
+  max-height: 180px;
+}
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0 0 12px;
+}
+:global(.checkLabel) {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+h1 {
+  font-size: 16px;
+  white-space: nowrap;
+}
+h2 {
+  font-size: 14px;
+}
+h3 {
+  font-size: 13px;
+}
+:global(.hint) {
+  color: #6c746c;
+  font-size: 12px;
+  margin: 6px 0 10px;
+  overflow-wrap: anywhere;
+}
+:global(.toolbar) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+:global(.appHeader) {
+  height: 56px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 16px;
+  background: white;
+  border-bottom: 1px solid #dce0d8;
+}
+:global(.tabs) {
+  display: flex;
+  align-self: stretch;
+  gap: 8px;
+}
+:global(.tabs) button {
+  padding: 0 18px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+}
+:global(.tabs) button:global(.active) {
+  border-color: #31704b;
+  color: #245137;
+  font-weight: 600;
+}
+:global(.stageActions) {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 1;
+  gap: 8px;
+}
+:global(#stageStatus) {
+  color: #6c746c;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:global(.stageActions) button {
+  white-space: nowrap;
+}
+:global(.appShell) {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: clamp(270px, 23vw, 350px) minmax(0, 1fr);
+}
+:global(.libraryPanel) {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #dce0d8;
+  background: #fcfcfa;
+}
+:global(.filters) {
+  padding: 14px 14px 2px;
+  flex: none;
+  border-bottom: 1px solid #e3e6df;
+}
+:global(.sourcePanel) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+:global(.sourceHeading),
+:global(.galleryHeading),
+:global(.toolHeading) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  flex: none;
+}
+:global(.sourceHeading) span {
+  font-size: 12px;
+  color: #6c746c;
+}
+:global(#sources) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+  overscroll-behavior: contain;
+}
+:global(#sources) button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 5px;
+  padding: 10px;
+  overflow-wrap: anywhere;
+}
+:global(#sources) button span {
+  display: block;
+}
+:global(.sourceMeta) {
+  color: #6c746c;
+  font-size: 12px;
+  margin-top: 4px;
+}
+:global(.sourceMeta):global(.complete) {
+  color: #31704b;
+}
+:global(.panelScroll) {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+}
+:global(#tagFilters) h2 {
+  margin-bottom: 14px;
+}
+:global(#cropView),
+:global(#tagView) {
+  min-height: 0;
+  overflow: hidden;
+}
+:global(.editor) {
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  grid-template-rows: 42px minmax(0, 1fr) auto;
+}
+:global(.editorHeading) {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 12px;
+  background: white;
+  border-bottom: 1px solid #e3e6df;
+}
+:global(#sourceName) {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:global(.images) {
+  min-height: 0;
+  padding: 10px;
+}
+figure {
+  margin: 0;
+}
+:global(.workingFigure) {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+figcaption {
+  font-size: 12px;
+  color: #6c746c;
+  padding: 3px 0 8px;
+}
+:global(#canvasStage) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #e7e9e3;
+  border-radius: 4px;
+}
+canvas {
+  display: block;
+  touch-action: none;
+  user-select: none;
+}
+:global(.cropInspector) {
+  border-left: 1px solid #e3e6df;
+  background: #fcfcfa;
+}
+:global(#candidates) {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 10px 0;
+}
+:global(#candidates) button {
+  text-align: left;
+}
+:global(.cropParts) > button {
+  width: 100%;
+  margin: 0 0 8px;
+}
+:global(#acceptSource) {
+  font-size: 12px;
+}
+details {
+  padding: 12px 0;
+  border-top: 1px solid #e3e6df;
+}
+summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+details label {
+  margin-top: 12px;
+}
+:global(.imageSettings) button {
+  width: 100%;
+}
+:global(.originalFigure) {
+  margin-top: 12px;
+}
+:global(.imageButton) {
+  display: block;
+  padding: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+}
+:global(.imageButton) img {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  object-fit: contain;
+}
+:global(.cropActions) {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-top: 1px solid #dce0d8;
+  background: white;
+}
+:global(.cropSize) {
+  display: flex;
+  flex-direction: column;
+  font-variant-numeric: tabular-nums;
+}
+:global(.cropSize) strong {
+  font-size: 12px;
+}
+:global(.cropSize) span {
+  font-size: 11px;
+  color: #6c746c;
+}
+:global(.cropSize) span:global(.bad) {
+  color: #a33730;
+}
+:global(.cropActions) :global(.toolbar) {
+  flex-shrink: 0;
+}
+body:global(.focusCrop) :global(.appShell) {
+  grid-template-columns: minmax(0, 1fr);
+}
+body:global(.focusCrop) :global(.libraryPanel),
+body:global(.focusCrop) :global(.originalFigure),
+body:global(.focusCrop) :global(.imageSettings) {
+  display: none;
+}
+body:global(.focusCrop) :global(.editor) {
+  grid-template-columns: minmax(0, 1fr) 240px;
+}
+:global(#tagView) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+}
+:global(.tagGallery) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+:global(.galleryHeading) {
+  border-bottom: 1px solid #e3e6df;
+  background: white;
+}
+:global(.galleryHeading) strong {
+  font-weight: 500;
+  white-space: nowrap;
+}
+:global(#tagCards) {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  align-content: start;
+  padding: 14px;
+}
+
+/* Tag Editor: gallery on the left, tabbed tools on the right. */
+body:global(.tagEditing) :global(.libraryPanel) {
+  display: none;
+}
+body:global(.tagEditing) :global(.appShell) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+body:global(.tagEditing) :global(#tagView) {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+}
+:global(.tagToolTabs) {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #dce0d8;
+  flex: none;
+}
+:global(.tagToolTabs) button {
+  flex: 1;
+  white-space: nowrap;
+}
+:global(.tagTools) > [role='tabpanel'] {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+:global(#filterToolPanel) {
+  padding: 0;
+}
+:global(#tagFilters) {
+  overflow: visible;
+}
+:global(#tagFilters) label {
+  margin-bottom: 0;
+  gap: 4px;
+}
+:global(.sampleFilterToolbar) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+:global(.sampleFilterToolbar) > label:first-child {
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  white-space: nowrap;
+}
+:global(.sampleFilterToolbar) select {
+  flex: 1;
+}
+:global(.sampleFilterToolbar) :global(.checkLabel),
+:global(.sampleFilterToolbar) button {
+  flex: none;
+  white-space: nowrap;
+}
+:global(.tagConditionGrid) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+:global(.tagConditionGrid) :global(.fieldRow) {
+  gap: 6px;
+}
+:global(.tagConditionGrid) :global(.filterCondition) > label:last-child {
+  flex: 0 0 130px;
+}
+:global(.tagListHeading) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 8px 0;
+}
+:global(.tagListHeading) h3 {
+  flex: none;
+}
+:global(.tagListHeading) :global(.tagFocus) {
+  flex: 1;
+  margin: 0;
+}
+:global(.tagSearchToolbar) {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+:global(#tagFilters) hr {
+  border: 0;
+  border-top: 1px solid #e3e6df;
+  margin: 10px 0;
+}
+:global(#tagDatasetFilters) :global(.filters) {
+  display: flex;
+  width: auto;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #e3e6df;
+}
+:global(#tagDatasetFilters) label {
+  flex: 1;
+  margin: 0;
+}
+:global(.fieldRow) {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+:global(.fieldRow) > label {
+  flex: 1;
+}
+:global(.filterCondition) > label:first-child {
+  flex: 2;
+}
+:global(.tagVocabulary) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+:global(.tagFocus) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 12px;
+}
+:global(#tagFocusName) {
+  flex: 1;
+  overflow-wrap: anywhere;
+  color: #6c746c;
+}
+:global(.tagFocus) button {
+  font-size: 12px;
+}
+:global(#singleNotes) {
+  white-space: pre-line;
+  margin-bottom: 10px;
+}
+:global(.tagChoice) {
+  display: inline-flex;
+  max-width: 100%;
+}
+:global(.tagChoice) button:first-child {
+  border-radius: 4px 0 0 4px;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+:global(.tagChoice) button:last-child {
+  border-radius: 0 4px 4px 0;
+  border-left: 0;
+  flex: none;
+}
+:global(#vocabularyCount) {
+  color: #6c746c;
+  font-weight: 400;
+}
+:global(#batchPreview) {
+  padding: 12px;
+  margin-bottom: 14px;
+  border: 1px solid #ccd7cb;
+  border-radius: 5px;
+  background: #f4f7f2;
+  overflow-wrap: anywhere;
+}
+:global(#batchPreview) p {
+  margin-top: 8px;
+}
+:global(#commonTags) {
+  margin-bottom: 10px;
+  max-height: 85px;
+  overflow-y: auto;
+}
+:global(#singlePreview) {
+  width: 100%;
+  height: 220px;
+  object-fit: contain;
+  margin: 12px 0;
+  background: #f3f4f0;
+}
+:global(#singleCaption) {
+  min-height: 160px;
+  max-height: 350px;
+}
+:global(#singleName) {
+  overflow-wrap: anywhere;
+}
+:global(#previewTags) {
+  margin-bottom: 8px;
+  width: 100%;
+}
+@media (max-width: 850px) {
+  body:global(.tagEditing) :global(#tagView) {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
+@media (max-width: 1150px) {
+  :global(.tagConditionGrid) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  :global(.tagSearchToolbar) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  :global(.sampleFilterToolbar) {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+@media (max-width: 600px) {
+  body:global(.tagEditing) :global(#tagView) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(180px, 42%) minmax(0, 1fr);
+  }
+  body:global(.tagEditing) :global(#tagCards) {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    padding: 8px;
+    gap: 6px;
+  }
+  :global(.tagToolTabs) {
+    padding: 6px 8px;
+  }
+  :global(.tagToolTabs) button {
+    padding: 5px;
+  }
+}
+:global(.card) {
+  position: relative;
+  border: 1px solid #d3d9cf;
+  border-radius: 5px;
+  background: white;
+  padding: 3px;
+}
+:global(.card):global(.selected) {
+  border-color: #31704b;
+  box-shadow: inset 0 0 0 1px #31704b;
+}
+:global(.card):global(.focused) {
+  outline: 2px solid #31704b;
+  outline-offset: 1px;
+}
+:global(.card) > input[type='checkbox'] {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px white;
+}
+:global(.card) :global(.imageButton) {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  cursor: pointer;
+}
+:global(.card) :global(.imageButton) img {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1;
+  max-height: none;
+  object-fit: contain;
+  background: #f3f4f0;
+}
+:global(.tagTools) {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #fcfcfa;
+  border-left: 1px solid #dce0d8;
+}
+:global(.toolHeading) {
+  border-bottom: 1px solid #e3e6df;
+}
+:global(#selectedCount) {
+  color: #31704b;
+  font-size: 12px;
+}
+:global(.tagTools) > :global(.panelScroll) {
+  flex: 1;
+}
+:global(.batchDedupe) {
+  margin: 14px 0 12px;
+}
+:global(.batchDedupe) button {
+  width: 100%;
+  padding: 10px;
+}
+:global(#batchTabs) {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 18px;
+}
+:global(#batchTabs) button {
+  white-space: normal;
+  min-height: 40px;
+}
+:global(#batchTabs) button[aria-selected='true'] {
+  background: #e1efdf;
+  border-color: #31704b;
+  color: #255439;
+  font-weight: 600;
+}
+:global(#batchToolPanel) :global(#tagInputGroup),
+:global(#batchToolPanel) :global(#matchInputs) > label {
+  display: flex;
+  width: 100%;
+}
+:global(#batchToolPanel) :global(#matchInputs) :global(.checkLabel) {
+  flex: none;
+  align-self: center;
+}
+:global(.batchApply) {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0 14px;
+}
+:global(.batchApply) :global(#previewTags) {
+  flex: 0 0 120px;
+  margin: 0;
+}
+:global(.batchApply) :global(#applyTags) {
+  flex: 1;
+  margin: 0;
+}
+:global(.batchTagPicker) {
+  border-top: 1px solid #e3e6df;
+  padding-top: 14px;
+}
+:global(.batchTagPicker) h3 {
+  margin: 0 0 6px;
+}
+:global(#frequencySearchError):empty {
+  display: none;
+}
+:global(#frequencies) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+  max-height: 210px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+:global(.compactActions) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0;
+}
+:global(.compactActions) :global(#applyTags) {
+  width: auto;
+  margin: 0;
+}
+:global(.compactActions) :global(#previewTags) {
+  width: auto;
+  margin: 0;
+}
+:global(.batchScope) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+:global(.batchScope) label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex: 1;
+  white-space: nowrap;
+}
+:global(.batchScope) select {
+  flex: 1;
+  min-width: 0;
+}
+:global(#batchToolPanel) :global(.toolHeading) {
+  padding: 4px 0;
+}
+:global(#batchToolPanel) label {
+  margin-bottom: 6px;
+}
+:global(#batchToolPanel) :global(.hint) {
+  margin: 5px 0;
+}
+:global(#batchToolPanel) :global(#commonTags) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:global(#batchToolPanel) :global(.fieldRow) label {
+  min-width: 0;
+}
+:global(#batchToolPanel) :global(#frequencies) {
+  max-height: none;
+}
+:global(#imageFilterBasket) {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 8px;
+}
+:global(#imageFilterBasket) :global(.imageButton) {
+  padding: 0;
+  cursor: pointer;
+  aspect-ratio: 1;
+  overflow: hidden;
+}
+:global(#imageFilterBasket) img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+:global(#imageFilterStatus) {
+  font-size: 12px;
+}
+:global(.tagVocabulary),
+:global(#frequencies) {
+  gap: 6px;
+  align-items: flex-start;
+}
+:global(.tagChoice) {
+  align-items: stretch;
+}
+:global(.tagChoice) :global(.tagChip) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  max-width: 100%;
+  padding: 4px 8px;
+  background: #eef0ec;
+  border: 1px solid #d9ded5;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #27302a;
+  cursor: pointer;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+:global(.tagChip) :global(.tagText) {
+  min-width: 0;
+}
+:global(.tagChip) :global(.tagCount) {
+  flex: none;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #606b62;
+}
+:global(.tagChip)[aria-pressed]::before {
+  content: '';
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid #9aa69c;
+  background: #fff;
+  box-sizing: border-box;
+}
+:global(.tagChoice) :global(.tagChip)[aria-pressed='true'] {
+  background: #e1efdf;
+  border-color: #31704b;
+  color: #255439;
+}
+:global(.tagChip)[aria-pressed='true']::before {
+  content: '✓';
+  background: #31704b;
+  border-color: #31704b;
+  color: #fff;
+  text-align: center;
+  font-size: 11px;
+  line-height: 12px;
+}
+:global(.tagChoice) :global(.tagChip):hover {
+  border-color: #77927e;
+  background: #e5eae2;
+}
+:global(.tagChoice) button:focus-visible {
+  outline: 3px solid #31704b;
+  outline-offset: 2px;
+}
+:global(.tagChoice) :global(.tagChip):first-child {
+  border-radius: 8px 0 0 8px;
+}
+:global(.tagChoice) button:last-child {
+  min-width: 26px;
+  padding: 4px 6px;
+  border-radius: 0 8px 8px 0;
+  font-size: 14px;
+}
+:global(.emptyState) {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: #6c746c;
+  padding: 40px 12px;
+}
+:global(.appStatus) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+  max-height: 80px;
+  flex: none;
+  padding: 4px 14px;
+  border-top: 1px solid #dce0d8;
+  background: white;
+  font-size: 11px;
+}
+:global(#summary) {
+  color: #6c746c;
+  flex: none;
+}
+:global(#jobStatus) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 68px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+:global(#jobStatus):global(.error) {
+  color: #a33730;
+}
+:global(#jobProgress) {
+  width: 120px;
+  flex: none;
+  accent-color: #31704b;
+}
+:global(#notification) {
+  position: fixed;
+  z-index: 5;
+  right: 16px;
+  top: 64px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: min(440px, calc(100vw - 32px));
+  background: #edf4ec;
+  border: 1px solid #b9cdbb;
+  border-radius: 6px;
+  padding: 10px 12px;
+  box-shadow: 0 3px 14px #26382a16;
+}
+:global(#message) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 140px;
+  overflow-y: auto;
+  color: #245137;
+}
+:global(#message):global(.error) {
+  color: #a33730;
+}
+:global(#dismissMessage) {
+  flex: none;
+  border: 0;
+  background: transparent;
+  padding: 0 5px;
+  font-size: 18px;
+}
+dialog {
+  width: min(96vw, 1300px);
+  height: 94dvh;
+  border: 1px solid #ccd0ca;
+  border-radius: 6px;
+  overscroll-behavior: contain;
+}
+dialog::backdrop {
+  background: #17241a66;
+}
+dialog img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(94dvh - 80px);
+  margin: auto;
+}
+[hidden] {
+  display: none !important;
+}
+@media (max-width: 1150px) {
+  :global(.appHeader) {
+    gap: 12px;
+  }
+  :global(#stageStatus) {
+    display: none;
+  }
+  :global(.appShell) {
+    grid-template-columns: 260px minmax(0, 1fr);
+  }
+  :global(.editor) {
+    grid-template-columns: minmax(0, 1fr) 220px;
+  }
+  :global(#tagView) {
+    grid-template-columns: minmax(0, 1fr) 260px;
+  }
+  :global(.cropActions) {
+    flex-wrap: wrap;
+  }
+}
+@media (max-width: 850px) {
+  :global(.appShell) {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+  :global(#tagView) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 40%);
+  }
+  :global(.tagTools) {
+    border-top: 1px solid #dce0d8;
+  }
+  :global(.editor) {
+    grid-template-columns: minmax(0, 1fr) 150px;
+  }
+  :global(.cropInspector) {
+    padding: 8px;
+  }
+  :global(.appHeader) h1 {
+    display: none;
+  }
+  :global(.tabs) button {
+    padding: 0 10px;
+  }
+}
+@media (max-width: 600px) {
+  :global(.appHeader) {
+    height: 50px;
+    padding: 0 8px;
+    gap: 8px;
+  }
+  :global(.stageActions) {
+    gap: 4px;
+  }
+  :global(.stageActions) button {
+    font-size: 11px;
+    padding: 5px;
+  }
+  :global(.appShell) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 140px minmax(0, 1fr);
+  }
+  :global(.libraryPanel) {
+    flex-direction: row;
+    border-bottom: 1px solid #dce0d8;
+  }
+  :global(.filters) {
+    width: 42%;
+    padding: 8px;
+    overflow-y: auto;
+  }
+  :global(.sourcePanel),
+  :global(#tagFilters) {
+    flex: 1;
+  }
+  :global(.sourceHeading) {
+    padding: 6px 8px;
+  }
+  :global(#tagFilters) {
+    padding: 8px;
+  }
+  :global(.editor) {
+    grid-template-columns: minmax(0, 1fr) 130px;
+  }
+  :global(.cropActions) {
+    padding: 6px;
+    gap: 4px;
+  }
+  :global(.cropActions) :global(.toolbar) {
+    gap: 4px;
+  }
+  :global(.cropActions) button {
+    padding: 5px;
+  }
+  body:global(.focusCrop) :global(.appShell) {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  :global(.appStatus) {
+    padding: 4px 8px;
+  }
+}

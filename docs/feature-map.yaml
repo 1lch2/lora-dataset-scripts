@@ -1,0 +1,29 @@
+path_base: repository-root
+scope: 已核对审核前端、数据集分析与 BAT 启动主链路；Python 处理模块保留原有组织结构。
+not_yet_mapped:
+  - 原有独立图片与标签工具的内部算法
+  - 检测、几何裁框与模型客户端的内部实现
+features:
+  - id: review-app
+    name: React 审核前端、裁切与标签编辑
+    keywords: [React, Vite, app/src, 裁框, 标签, 批量编辑, 筛选, 预览, 导出]
+    doc: docs/features/review-app.md
+    entrypoints:
+      - app/src/features/review/ReviewPage/ReviewPage.tsx
+      - app/src/features/review/useReview.ts
+      - core/dataset_pipeline/review.py
+  - id: dataset-analysis
+    name: 本地数据集分析
+    keywords: [分析, 亮度, 姿势, 重复, 报告, CSV, 对照]
+    doc: docs/features/dataset-analysis.md
+    entrypoints:
+      - app/src/features/analysis/AnalysisView/AnalysisView.tsx
+      - core/dataset_pipeline/analysis_job.py
+  - id: launcher
+    name: BAT、Forge 与前后端启动
+    keywords: [start-webui.bat, npm run dev, Forge, 启动, 等待, 端口, 独立终端]
+    doc: docs/features/launcher.md
+    entrypoints:
+      - start-webui.bat
+      - core/launch_webui.py
+      - core/dataset_pipeline/frontend.py

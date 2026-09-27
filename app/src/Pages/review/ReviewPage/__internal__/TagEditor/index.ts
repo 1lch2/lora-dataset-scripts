@@ -1,0 +1,1 @@
+export { TagEditor } from './TagEditor';

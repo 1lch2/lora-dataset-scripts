@@ -367,8 +367,7 @@ class PipelineTests(unittest.TestCase):
         self.addCleanup(server.shutdown)
         url = f"http://127.0.0.1:{server.server_port}"
         self.assertEqual(requests.post(url + "/api/edit", json={}).status_code, 403)
-        html = requests.get(url).text
-        token = re.search(r"window\.REVIEW_TOKEN\s*=\s*['\"]([^'\"]+)['\"]", html)[1]
+        token = requests.get(url + '/api/session').json()['token']
         crop = source["candidates"][1]
         response = requests.post(url + "/api/edit", headers={"X-Review-Token": token}, json={
             "action": "crop", "source": source["id"], "candidate": crop["id"], "status": "rejected"})
@@ -400,7 +399,7 @@ class PipelineTests(unittest.TestCase):
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
         url = f"http://127.0.0.1:{server.server_port}"
-        token = re.search(r"window\.REVIEW_TOKEN\s*=\s*['\"]([^'\"]+)['\"]", requests.get(url).text)[1]
+        token = requests.get(url + '/api/session').json()['token']
         def post(action, **values):
             return requests.post(url + '/api/edit', headers={'X-Review-Token': token},
                                  json={'action': action, **values}, timeout=5)

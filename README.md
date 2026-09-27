@@ -2,7 +2,9 @@
 
 一些处理用来训练 stable diffusion lora 数据集的脚本。
 
-新增：基于 waifuc 的自动化预处理与本地裁切／标签审核页，详见 [使用说明](PREPROCESS.md)。支持少量图片及整批指定身份，原有脚本使用方式不变。
+基于 waifuc 的自动化预处理与本地裁切／标签审核页，详见 [使用说明](PREPROCESS.md)。支持少量图片及整批指定身份。Python 脚本位于 `core/`，从仓库根目录执行时在原脚本路径前加 `core/`，参数与数据目录不变。
+
+审核前端使用 React + TypeScript + Vite，源码位于 `app/src/`。首次运行在 `app/` 执行 `npm install`，随后仍双击根目录 `start-webui.bat`：等待或复用 Forge → 启动 Python API → 执行 `npm run dev`。目录和开发说明见 [前后端结构](docs/features/review-app.md)。
 
 功能包括缩放图片，统一添加角色名和版权 tag，批量重命名 lora，生成 XYZ 图对比用的 lora 提示词。
 
@@ -31,7 +33,7 @@
 
 ### 添加角色名和版权 tag
 
-脚本: `edit_caption.py`
+脚本: `core/edit_caption.py`
 
 你应该在你的 lora 训练配置中使用 `keep_tokens=3` 这个选项，否则这个脚本就没啥用了。
 
@@ -41,7 +43,7 @@
 
 ### 缩放图片素材
 
-脚本: `resize.py`
+脚本: `core/resize.py`
 
 默认会把图片的短边缩放到 1200 像素。如果图片的短边小于 1200 像素，则不变。
 
@@ -51,13 +53,13 @@
 
 把你炼好的 lora 文件放进 `output` 目录下。
 
-脚本: `rename.py`.
+脚本: `core/rename.py`.
 
 这个脚本会批量重命名你的 lora 文件，新文件名以数字结尾。搭配下一个脚本来测试 lora 的性能。
 
 ### 为 XYZ 图的提示词搜索替换功能生成提示词
 
-脚本：`generate_lora_tag.py`
+脚本：`core/generate_lora_tag.py`
 
 假设你有这么 5 个炼好的 lora 文件：
 
@@ -81,10 +83,10 @@
 
 顾名思义，水平翻转，适用于练画风lora时候需要数据增强的场景。
 
-脚本：`reverse.py`
+脚本：`core/reverse.py`
 
 ## 数据集分析
 
 审核页现已提供「数据集分析」tab：亮度/色彩分布、重复图、尺寸、可选人物姿势和标签分布，支持离线统计与报告导出。
-无需预处理即可独立启动：`.\.venv-preprocess\Scripts\python.exe preprocess.py analyze`。
+无需预处理即可独立启动：`.\.venv-preprocess\Scripts\python.exe core/preprocess.py analyze`。
 详见 [ANALYSIS.md](ANALYSIS.md)。

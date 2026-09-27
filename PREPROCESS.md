@@ -23,7 +23,9 @@ uv pip compile requirements-preprocess.in --python .venv-preprocess/Scripts/pyth
 
 ### 双击启动 WebUI
 
-配置好 `preprocess.local.json` 后，双击根目录的 `start-webui.bat`。入口先检查配置中的 Forge API：已运行则复用，未运行则打开独立可见终端，调用 `E:\stable-diffusion-webui-forge-classic\webui.bat`，等待 API 就绪后启动审核页。同一数据集的审核服务若已运行也会复用。
+先安装 Node.js 22.12+，在 `app` 目录执行一次 `npm install`。配置好 `preprocess.local.json` 后，双击根目录的 `start-webui.bat`。入口先检查配置中的 Forge API：已运行则复用，未运行则打开独立可见终端，调用 `E:\stable-diffusion-webui-forge-classic\webui.bat`，等待 API 就绪后启动 Python API（默认 8765）和 `npm run dev`（默认 5173），浏览器打开 Vite 审核页。同一数据集的 API 和对应 Vite 服务若已运行则复用。
+
+升级前已运行的旧版审核进程需要关闭后重启；Forge 可继续复用。也可通过 `--port` 和 `--frontend-port` 使用其他空闲端口。关闭审核入口会清理本次创建的前端进程，不停止复用的服务或独立 Forge。
 
 新 Forge 终端标题为 `Forge - API / model logs`，保留实时日志，关闭该终端可停止本次启动的 Forge；审核服务使用启动入口的终端，关闭它不影响独立的 Forge。复用已有 Forge 时，其原有终端状态保持不变。Forge 退出后终端会等待按 Enter，不会立即消失。
 
@@ -32,7 +34,7 @@ uv pip compile requirements-preprocess.in --python .venv-preprocess/Scripts/pyth
 也可指定其他路径或端口：
 
 ```powershell
-.\start-webui.bat --config preprocess.local.json --forge-dir "E:\stable-diffusion-webui-forge-classic" --port 8765
+.\start-webui.bat --config preprocess.local.json --forge-dir "E:\stable-diffusion-webui-forge-classic" --port 8765 --frontend-port 5173
 ```
 
 新运行目录还没有 `manifest.json` 时会先准备素材，进度显示在启动终端；已有运行直接恢复审核。此入口不会自动接受裁框或自动打标。
@@ -69,8 +71,8 @@ dataset-raw/
 先启动带 `--api` 的 Forge，默认地址 `http://127.0.0.1:7860`。必须可通过 API 列出 `4x-UltraSharpV2`、`ScuNET` 和 `wd-eva02-large-tagger-v3`，不存在时会报错，不静默替换模型。
 
 ```powershell
-.venv-preprocess/Scripts/python.exe preprocess.py prepare --config preprocess.local.json
-.venv-preprocess/Scripts/python.exe preprocess.py review --run runs/entelechia
+.venv-preprocess/Scripts/python.exe core/preprocess.py prepare --config preprocess.local.json
+.venv-preprocess/Scripts/python.exe core/preprocess.py review --run runs/entelechia
 ```
 
 准备完成后在浏览器裁切页：
@@ -87,7 +89,7 @@ dataset-raw/
 
 裁切目标为 1,048,576 像素，下限 943,719 像素；先沿垂直方向扩展到邻近身体范围，再向两侧扩展，始终限制在图像内。不要求正方形，不二次放大裁片，不填充背景。扩展到整幅图或与其他候选 IoU ≥ 0.95 时合并；面积仍不足的范围跳过，并说明原因。
 
-裁框全部审核完后，点击网页上方“开始打标”。后台先对已接受的原图或原尺寸裁片打标：完整原图直接发送源文件字节，不转换格式；裁片从工作图按裁框截取，仅编码传输，不预先缩小。打标成功后再按 `resize.py` 的相同规则在内存中缩放（短边大于等于 1280 时缩到 1280，否则保持尺寸），保存训练 PNG，避免大图重复编码和读写。页面显示已完成样本数，完成后自动进入标签审核；刷新页面仍可查看任务进度。失败后显示具体原因，点击“重试打标”继续，已完成结果会跳过。任务运行期间禁止同时修改数据。
+裁框全部审核完后，点击网页上方“开始打标”。后台先对已接受的原图或原尺寸裁片打标：完整原图直接发送源文件字节，不转换格式；裁片从工作图按裁框截取，仅编码传输，不预先缩小。打标成功后再按 `core/resize.py` 的相同规则在内存中缩放（短边大于等于 1280 时缩到 1280，否则保持尺寸），保存训练 PNG，避免大图重复编码和读写。页面显示已完成样本数，完成后自动进入标签审核；刷新页面仍可查看任务进度。失败后显示具体原因，点击“重试打标”继续，已完成结果会跳过。任务运行期间禁止同时修改数据。
 
 旧版“先缩小再打标”的标签缓存会标为过期，下次打标按新顺序重新生成，保留旧标签历史并重放人工编辑。
 
@@ -108,13 +110,13 @@ dataset-raw/
 
 自动删除 `full body` 仅依据高置信度人物定位及实际被裁框排除的身体关键点；没有检测到某个部位不作为缺失证据。“单图编辑”中可查看自动删除记录与构图提示，原始标签分数仍保存在运行记录中。其余错标由人工筛查。
 
-所有候选必须已接受或拒绝，所有接受样本必须完成打标，之后可随时点击网页上方“导出训练集”。每次导出均读取当前标签结果并更新导出文件，无需逐图确认。导出前按词表清理角色标签和显式配置的变体标签，再调用未修改的 `edit_caption.py` 前置 `目录名 (作品)`；人工补充的触发词受到保留。导出目录仅含身份目录、PNG 和同名 UTF-8 `.txt`，完成后页面显示输出路径。
+所有候选必须已接受或拒绝，所有接受样本必须完成打标，之后可随时点击网页上方“导出训练集”。每次导出均读取当前标签结果并更新导出文件，无需逐图确认。导出前按词表清理角色标签和显式配置的变体标签，再调用未修改的 `core/edit_caption.py` 前置 `目录名 (作品)`；人工补充的触发词受到保留。导出目录仅含身份目录、PNG 和同名 UTF-8 `.txt`，完成后页面显示输出路径。
 
 CLI 入口仍保留，必要时可独立运行：
 
 ```powershell
-.venv-preprocess/Scripts/python.exe preprocess.py tag --run runs/entelechia
-.venv-preprocess/Scripts/python.exe preprocess.py export --run runs/entelechia
+.venv-preprocess/Scripts/python.exe core/preprocess.py tag --run runs/entelechia
+.venv-preprocess/Scripts/python.exe core/preprocess.py export --run runs/entelechia
 ```
 
 ## 续跑与数据保留

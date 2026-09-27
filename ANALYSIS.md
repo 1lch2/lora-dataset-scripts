@@ -4,10 +4,12 @@
 重启现有 WebUI 服务后可使用。也可以单独启动，不读取审核 run、不准备图片、不启动 Forge：
 
 ```powershell
-.\.venv-preprocess\Scripts\python.exe preprocess.py analyze
+.\.venv-preprocess\Scripts\python.exe core/preprocess.py analyze
 ```
 
-默认打开 `http://127.0.0.1:8766`。需要时使用 `--port 8870 --no-browser`。
+前端依赖需先在 `app/` 执行 `npm install`。独立分析默认使用 API 8766 / Vite 5174，可用 `--port` / `--frontend-port` 调整；无需启动 Forge。
+
+默认打开 `http://127.0.0.1:5174`（API 端口为 8766）。需要时使用 `--port 8870 --frontend-port 5178 --no-browser`。
 点击「开始分析」才读取输入目录，支持取消、刷新后恢复任务进度、查看本次结果。
 在正常审核服务的 URL 后加 `?analysis` 可直接进入分析页，避免加载审核图片。
 
@@ -80,10 +82,10 @@
 ## 命令行批量分析
 
 ```powershell
-.\.venv-preprocess\Scripts\python.exe -m dataset_pipeline.analysis 'D:\YourDataset' --output '.\analysis-report.json' --csv '.\analysis-images.csv'
+.\.venv-preprocess\Scripts\python.exe core/dataset_pipeline/analysis.py 'D:\YourDataset' --output '.\analysis-report.json' --csv '.\analysis-images.csv'
 
 # 可选：递归（默认）、姿势、同名 TXT 标签、缓存、相似比较规模
-.\.venv-preprocess\Scripts\python.exe -m dataset_pipeline.analysis 'D:\YourDataset' --output '.\analysis-with-pose.json' --pose --captions --model-cache 'D:\YourModelCache' --pair-limit 1500
+.\.venv-preprocess\Scripts\python.exe core/dataset_pipeline/analysis.py 'D:\YourDataset' --output '.\analysis-with-pose.json' --pose --captions --model-cache 'D:\YourModelCache' --pair-limit 1500
 ```
 
 `--no-recursive` 禁用递归，`--pose-threshold` / `--hash-threshold` 调整候选阈值。

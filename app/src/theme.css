@@ -1,0 +1,12 @@
+@layer theme, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@theme {
+  --color-review-accent: #31704b;
+  --color-review-muted: #6c746c;
+}
+
+#root {
+  display: contents;
+}
