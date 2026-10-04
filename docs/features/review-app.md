@@ -33,3 +33,5 @@ $env:PYTHONPATH = (Join-Path (Get-Location) 'core')
 现有验证入口：[test_preprocess.py](../../tests/test_preprocess.py)、[test_tag_editing.py](../../tests/test_tag_editing.py)、[test_tag_materialize.py](../../tests/test_tag_materialize.py)。本次只适配现有测试的会话获取方式，未增加单元测试。
 
 相关专题：[启动链](launcher.md)、[数据集分析](dataset-analysis.md)、[LoRA 文件工具](lora-files.md)。
+
+新增独立页签：[复合打标](composite-tagging.md)，读取未标注目录，通过 WD EVA02 和 PixAI 合并标签并处理单人动作互斥。旧 OpenPose 标签审查算法已移除；裁切预处理与分析中的姿态检测不受影响。

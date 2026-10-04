@@ -12,6 +12,7 @@ def main():
     analysis.add_argument('--port', type=int, default=8766)
     analysis.add_argument('--frontend-port', type=int, default=5174)
     analysis.add_argument('--no-browser', action='store_true')
+    analysis.add_argument('--config', help='复合打标使用的 preprocess JSON 配置')
     commands.add_parser("prepare", help="生成工作图和待审核裁框").add_argument("--config", required=True)
     for command in ("review", "tag", "export"):
         sub = commands.add_parser(command)
@@ -24,7 +25,8 @@ def main():
     try:
         if args.command == 'analyze':
             from dataset_pipeline.review import serve
-            serve(None, args.port, not args.no_browser, args.frontend_port)
+            config = read_config(args.config) if args.config else None
+            serve(None, args.port, not args.no_browser, args.frontend_port, config=config)
             return 0
         if args.command == "review":
             from dataset_pipeline.review import serve

@@ -8,6 +8,7 @@
   "upscaler_2": "ScuNET",
   "blend": 0.3,
   "tagger_model": "wd-eva02-large-tagger-v3",
+  "pixai_tagger_model": "pixai-tagger-v1.0",
   "tag_threshold": 0.3,
   "target_area": 1048576,
   "min_area": 943719,

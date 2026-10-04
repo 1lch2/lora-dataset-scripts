@@ -1,9 +1,17 @@
 path_base: repository-root
-scope: 已核对审核前端、数据集分析、LoRA 文件工具与 BAT 启动主链路；Python 处理模块保留原有组织结构。
+scope: 已核对审核前端、数据集分析、复合打标、LoRA 文件工具与 BAT 启动主链路；Python 处理模块保留原有组织结构。
 not_yet_mapped:
   - 其他独立图片与标签工具的内部算法
   - 检测、几何裁框与模型客户端的内部实现
 features:
+  - id: composite-tagging
+    name: 未标注数据集的 WD14 与 PixAI 复合打标
+    keywords: [复合打标, WD14, EVA02, PixAI, 动作, 互斥, 概率, meta, Danbooru]
+    doc: docs/features/composite-tagging.md
+    entrypoints:
+      - app/src/Pages/composite/CompositeTagging/CompositeTagging.tsx
+      - core/dataset_pipeline/composite_job.py
+      - core/dataset_pipeline/composite_tags.py
   - id: review-app
     name: React 审核前端、裁切与标签编辑
     keywords: [React, Vite, app/src, 裁框, 标签, 批量编辑, 筛选, 预览, 导出]
@@ -29,7 +37,7 @@ features:
       - core/generate_lora_tag.py
   - id: launcher
     name: BAT、Forge 与前后端启动
-    keywords: [start-webui.bat, npm run dev, Forge, 启动, 等待, 端口, 独立终端]
+    keywords: [start-webui.bat, npm run dev, Forge, 启动, 等待, 端口, 独立终端, venv, uv, 依赖安装]
     doc: docs/features/launcher.md
     entrypoints:
       - start-webui.bat

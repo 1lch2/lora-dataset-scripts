@@ -1,0 +1,7 @@
+# 审核、复合打标与本地 CPU 姿态检测使用独立环境。
+Pillow>=10.3,<12
+requests>=2.31,<3
+numpy>=1.26,<2
+onnxruntime>=1.17,<2
+dghs-imgutils==0.19.0
+waifuc @ https://github.com/deepghs/waifuc/archive/efe5c49171a94a6441a79b7d7b595d4b3a4eb51f.zip

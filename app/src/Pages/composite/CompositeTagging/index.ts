@@ -1,0 +1,1 @@
+export { CompositeTagging } from './CompositeTagging';

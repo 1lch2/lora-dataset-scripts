@@ -45,6 +45,18 @@ export function Header() {
             数据集分析
           </button>
           <button
+            id='compositeTab'
+            role='tab'
+            aria-selected={v.stage === 'composite'}
+            aria-controls='compositeView'
+            tabIndex={v.stage === 'composite' ? 0 : -1}
+            disabled={v.busy}
+            onClick={() => v.handleStage('composite')}
+            className={v.stage === 'composite' ? 'active' : ''}
+          >
+            复合打标
+          </button>
+          <button
             id='loraTab'
             role='tab'
             aria-selected={v.stage === 'lora'}

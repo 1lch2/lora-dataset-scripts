@@ -12,15 +12,20 @@ from rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
 
 from .core import Run, asset, run_lock
 from .analysis_job import AnalysisJob
+from .composite_job import CompositeTagJob
 
 
-def make_server(directory=None, port=8765):
+def make_server(directory=None, port=8765, config=None):
     directory = Path(directory).resolve() if directory is not None else None
     if directory is not None:
         with run_lock(directory):
-            Run.load(directory).ensure_tag_files()
+            run = Run.load(directory)
+            run.ensure_tag_files()
+            if config is None:
+                config = run.config
     cache = (directory.parent if directory else Path(__file__).resolve().parents[2]/'runs')/'.models'
     analysis = AnalysisJob(cache if cache.is_dir() else None)
+    composite = CompositeTagJob(config)
     token = secrets.token_urlsafe(24)
     mutex = threading.Lock()
     static = Path(__file__).resolve().parents[2] / 'app' / 'dist'
@@ -42,6 +47,8 @@ def make_server(directory=None, port=8765):
         with mutex, run_lock(directory):
             if job["status"] == "running":
                 raise ValueError("已有任务正在运行")
+            if composite.status()['status'] in ('running', 'cancelling'):
+                raise ValueError('复合打标正在使用 Forge，请等待完成')
             run = Run.load(directory)
             sources = [s for s in run.data["sources"].values() if s.get("active", True)]
             if not sources or any(s.get("error") for s in sources):
@@ -87,6 +94,8 @@ def make_server(directory=None, port=8765):
                     self.reply(200, path.read_bytes(), mimetypes.guess_type(path.name)[0] or 'application/octet-stream')
                 elif route.path == '/api/analysis/status':
                     self.reply(200, analysis.status())
+                elif route.path == '/api/composite/status':
+                    self.reply(200, composite.status())
                 elif route.path == '/api/analysis/report':
                     self.reply(200, analysis.report())
                 elif route.path == '/api/analysis/csv':
@@ -141,7 +150,8 @@ def make_server(directory=None, port=8765):
             if not self.valid_host() or self.headers.get("X-Review-Token") != token:
                 self.reply(403, {"error": "审核会话无效，请刷新页面"})
                 return
-            if self.path not in ("/api/edit", '/api/analysis/start', '/api/analysis/cancel', '/api/lora/rename'):
+            if self.path not in ("/api/edit", '/api/analysis/start', '/api/analysis/cancel', '/api/lora/rename',
+                                 '/api/composite/start', '/api/composite/cancel'):
                 self.reply(404, {"error": "接口不存在"})
                 return
             try:
@@ -151,6 +161,15 @@ def make_server(directory=None, port=8765):
                 data = json.loads(self.rfile.read(length))
                 if not isinstance(data,dict):
                     raise ValueError('请求必须为对象')
+                if self.path == '/api/composite/start':
+                    with mutex:
+                        if job['status'] == 'running':
+                            raise ValueError('已有审核任务正在运行，请等待完成')
+                        self.reply(202, composite.start(data))
+                    return
+                if self.path == '/api/composite/cancel':
+                    self.reply(200, composite.cancel())
+                    return
                 if self.path == '/api/analysis/start':
                     self.reply(202, analysis.start(data))
                     return
@@ -214,14 +233,15 @@ def make_server(directory=None, port=8765):
 
     class ReviewServer(ThreadingHTTPServer):
         def server_close(self):
+            composite.cancel()
             analysis.close()
             super().server_close()
     return ReviewServer(("127.0.0.1", port), Handler)
 
 
-def serve(directory, port=8765, open_browser=True, frontend_port=5173):
+def serve(directory, port=8765, open_browser=True, frontend_port=5173, config=None):
     from .frontend import start_frontend, stop_frontend
-    server = make_server(directory, port)
+    server = make_server(directory, port, config)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     frontend = None

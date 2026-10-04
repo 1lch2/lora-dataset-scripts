@@ -2,20 +2,20 @@
 
 原有脚本保持独立可用。新流程适用于一张或多张图片，没有最少图片数量限制。
 
+仅需要给未标注图片打标时，打开“复合打标”页签，填写图片目录、新的输出根目录和 Forge 地址。该页签不依赖裁切审核记录；使用 WD EVA02（0.3）和 PixAI 默认分类阈值合并标签，移除 meta 并处理单人动作互斥。输出根目录的 `dataset/` 为图片与 TXT，`probabilities/` 和 `evidence/` 单独保存概率及处理记录。已有同名 TXT 的图片跳过，源文件不改写。详见[复合打标说明](docs/features/composite-tagging.md)。
+
 ## 安装独立环境
 
-不要将下面的依赖装进 Forge 环境，也不要与原来的 `requirements.txt` 混装。检测使用独立的 CPU ONNX Runtime，放大与 WD14 通过 Forge 使用 GPU；这样不会争用同一套 NumPy、OpenCV 和 CUDA 依赖。
+先安装 uv 并确保 `uv` 命令可用。双击 `start-webui.bat` 会检查 `.venv-preprocess`，缺失时自动创建 Python 3.10 环境并安装 `requirements-preprocess.txt`；uv 可按需下载 Python。安装成功后保存清单副本，后续清单未变化时直接启动，安装失败则停止并在下次启动重试。已有但损坏的环境会提示先重命名，不自动删除。
+
+不要将下面的依赖装进 Forge 环境，也不要与原来的 `requirements.txt` 混装。检测使用独立的 CPU ONNX Runtime，放大与 WD14 通过 Forge 使用 GPU；这样不会争用同一套 NumPy、OpenCV 和 CUDA 依赖。需要手动安装时：
 
 ```powershell
 uv venv --python 3.10 .venv-preprocess
-uv pip sync requirements-preprocess.lock --python .venv-preprocess/Scripts/python.exe
+uv pip install -r requirements-preprocess.txt --python .venv-preprocess/Scripts/python.exe
 ```
 
-`requirements-preprocess.lock` 锁定完整依赖；waifuc 固定在 `efe5c49171a94a6441a79b7d7b595d4b3a4eb51f`，imgutils 固定为 0.19.0。需要重新解析依赖时：
-
-```powershell
-uv pip compile requirements-preprocess.in --python .venv-preprocess/Scripts/python.exe --output-file requirements-preprocess.lock
-```
+`requirements-preprocess.txt` 提供独立环境依赖；waifuc 固定在 `efe5c49171a94a6441a79b7d7b595d4b3a4eb51f`，imgutils 固定为 0.19.0，其余依赖使用版本范围，未锁定全部传递依赖。BAT 不会主动升级已有且满足约束的依赖。
 
 首次准备会从 Hugging Face 下载动漫人物、头部检测和 DWPose 模型，默认缓存在工作目录的父目录下 `.models`，遵循已有 `HF_HOME` 设置。模型缓存可跨运行复用。
 
@@ -67,6 +67,8 @@ dataset-raw/
 其他项使用示例配置的默认值。`tags_csv` 必须指向正在使用的 EVA02-Large v3 模型配套词表，不能混用其他模型词表。默认标签阈值 0.3，作品名 `arknights`。身份目录名作为完整描述，不拆分角色和服装。
 
 ## 运行顺序
+
+复合打标的两模型分别配置为 `"tagger_model": "wd-eva02-large-tagger-v3"` 和 `"pixai_tagger_model": "pixai-tagger-v1.0"`，示例及本地 JSON 已包含这两个字段。PixAI 使用 Forge API 注册键，不使用界面显示名。修改后重启审核服务生效。独立分析入口可通过 `core/preprocess.py analyze --config preprocess.local.json` 加载同一配置。复合打标仍固定 WD 阈值 0.30 和 PixAI 默认分类阈值；原裁切标签页的 `tag_threshold` 仍只控制原单模型打标。
 
 先启动带 `--api` 的 Forge，默认地址 `http://127.0.0.1:7860`。必须可通过 API 列出 `4x-UltraSharpV2`、`ScuNET` 和 `wd-eva02-large-tagger-v3`，不存在时会报错，不静默替换模型。
 

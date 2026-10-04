@@ -58,3 +58,11 @@ class ForgeClient:
             "threshold": self.config["tag_threshold"], "queue": "", "name_in_queue": "",
         })
         return result["caption"]["tag"]
+
+    def tag_bytes(self, content, model, threshold=0.0):
+        """对同一份图片字节使用指定模型，保留未过滤概率供复合判别。"""
+        result = self.request('POST', '/tagger/v1/interrogate', json={
+            'image': base64.b64encode(content).decode('ascii'), 'model': model,
+            'threshold': threshold, 'queue': '', 'name_in_queue': '',
+        })
+        return result['caption']['tag']

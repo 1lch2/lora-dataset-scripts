@@ -136,7 +136,7 @@ def launch(config_path, forge_dir, port, timeout, open_browser=True, frontend_po
         if failures:
             print('部分图片准备失败，可在审核页查看：\n' + '\n'.join(failures), flush=True)
     print('正在启动审核服务。关闭本终端可停止审核服务；Forge 终端独立保留。', flush=True)
-    serve(config['run_dir'], port, open_browser, frontend_port)
+    serve(config['run_dir'], port, open_browser, frontend_port, config=config)
 
 
 def main():

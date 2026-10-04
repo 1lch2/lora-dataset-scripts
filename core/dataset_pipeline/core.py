@@ -23,6 +23,7 @@ DEFAULTS = {
     "input_dir": "dataset-raw", "run_dir": "runs/default", "output_dir": "dataset-ready",
     "forge_url": "http://127.0.0.1:7860", "upscaler_1": "4x-UltraSharpV2", "upscaler_2": "ScuNET",
     "blend": 0.3, "tagger_model": "wd-eva02-large-tagger-v3", "tag_threshold": 0.3,
+    "pixai_tagger_model": "pixai-tagger-v1.0",
     "target_area": TARGET_AREA, "min_area": MIN_AREA, "duplicate_iou": 0.95,
     "copyright": "arknights", "drop_tags": [], "tags_csv": "",
     "identity": "",
@@ -83,6 +84,11 @@ def read_config(path):
 
 
 def validate_config(config):
+    for key in ("tagger_model", "pixai_tagger_model"):
+        if not isinstance(config[key], str) or not config[key].strip():
+            raise ValueError(f"{key} 必须是非空模型名称")
+    if config["tagger_model"] == config["pixai_tagger_model"]:
+        raise ValueError("WD 与 PixAI 必须使用不同的模型")
     roots = [Path(config[key]).resolve() for key in ("input_dir", "run_dir", "output_dir")]
     for i, root in enumerate(roots):
         for other in roots[i + 1:]:
@@ -139,6 +145,7 @@ class Run:
         self.directory = Path(directory).resolve()
         self.data = data
         self.config = data["config"]
+        self.config.setdefault("pixai_tagger_model", DEFAULTS["pixai_tagger_model"])
         validate_config(self.config)
         if Path(self.config["run_dir"]).resolve() != self.directory:
             raise ValueError("运行目录与记录不一致")

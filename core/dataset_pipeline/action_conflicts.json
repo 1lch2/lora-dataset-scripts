@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "description": "只描述同一人物、同一时刻的互斥姿态；不用于多人、多视图或动作序列。标签采用输出时的空格形式。",
+  "families": {
+    "standing": ["standing", "standing on one leg", "standing split", "standing on liquid", "standing on object", "standing on person"],
+    "sitting": ["sitting", "seiza", "wariza", "yokozuwari", "butterfly sitting", "figure four sitting", "sitting backwards", "sitting sideways", "sitting on lap", "sitting on stairs", "sitting on object", "sitting in tree", "sitting on table", "sitting on shoulder", "sitting on rock", "sitting on branch", "sitting on throne", "sitting on animal", "sitting on head", "sitting on water", "sitting on food", "sitting on tree stump", "sitting on pillow", "sitting on car", "sitting on roof", "sitting in window", "sitting on box", "sitting on log", "sitting on fence", "sitting on arm"],
+    "lying": ["lying", "on back", "on stomach", "on side"],
+    "kneeling": ["kneeling"],
+    "squatting": ["squatting", "slav squatting"],
+    "one_hand_up": ["hand up"],
+    "both_hands_up": ["hands up"],
+    "one_arm_up": ["arm up"],
+    "both_arms_up": ["arms up"],
+    "arms_down": ["arms at sides"],
+    "one_leg_up": ["leg up", "one leg raised"],
+    "both_legs_up": ["legs up"]
+  },
+  "exclusive_pairs": [
+    {"families": ["standing", "sitting"], "reason": "同一人物的站立与坐姿互斥"},
+    {"families": ["standing", "lying"], "reason": "同一人物的站立与躺卧互斥"},
+    {"families": ["sitting", "lying"], "reason": "同一人物的坐姿与躺卧互斥；不包括 reclining 半躺"},
+    {"families": ["standing", "kneeling"], "reason": "站立与以膝支撑的跪姿互斥"},
+    {"families": ["standing", "squatting"], "reason": "站立与完全蹲姿互斥；不包括 partial squatting"},
+    {"families": ["one_hand_up", "both_hands_up"], "reason": "恰好一只手上举与双手上举互斥"},
+    {"families": ["one_arm_up", "both_arms_up"], "reason": "恰好一只手臂上举与双臂上举互斥"},
+    {"families": ["one_arm_up", "arms_down"], "reason": "单臂上举与双臂垂在身体两侧互斥"},
+    {"families": ["both_arms_up", "arms_down"], "reason": "双臂上举与双臂垂在身体两侧互斥"},
+    {"families": ["one_leg_up", "both_legs_up"], "reason": "恰好一腿上举与双腿上举互斥"}
+  ],
+  "aliases": {
+    "standing up": "standing", "seated": "sitting", "siting": "sitting", "sittig": "sitting", "sittin": "sitting",
+    "laying": "lying", "laying down": "lying", "laying flat": "lying", "laying position": "lying", "lying down": "lying",
+    "one arm raised": "arm up", "one arm up": "arm up", "arms above head": "arms up", "arms up over head": "arms up", "hands above head": "arms up",
+    "one leg up": "leg up", "raised leg": "leg up", "one leg raised": "leg up", "legs lift": "legs up", "raised legs": "legs up",
+    "kneel": "kneeling", "on knees": "kneeling", "on-knees": "kneeling", "crouch": "squatting", "squat": "squatting"
+  }
+}
