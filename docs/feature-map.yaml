@@ -1,9 +1,17 @@
 path_base: repository-root
-scope: 已核对审核前端、数据集分析、LoRA 文件工具与 BAT 启动主链路；Python 处理模块保留原有组织结构。
+scope: 已核对审核前端、数据集分析、LoRA 文件工具、BAT 启动主链路，以及独立缩放、翻转和角色标签脚本；Python 处理模块保留原有组织结构。
 not_yet_mapped:
-  - 其他独立图片与标签工具的内部算法
+  - addTags、deduplicate 等其他独立图片与标签工具的内部算法
   - 检测、几何裁框与模型客户端的内部实现
 features:
+  - id: dataset-utilities
+    name: 独立图片缩放、水平翻转与角色标签脚本
+    keywords: [resize, reverse, edit_caption, 缩放, 翻转, 角色标签, dataset-raw]
+    doc: docs/features/dataset-utilities.md
+    entrypoints:
+      - core/resize.py
+      - core/reverse.py
+      - core/edit_caption.py
   - id: review-app
     name: React 审核前端、裁切与标签编辑
     keywords: [React, Vite, app/src, 裁框, 标签, 批量编辑, 筛选, 预览, 导出]
