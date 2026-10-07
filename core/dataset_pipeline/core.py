@@ -171,7 +171,7 @@ class Run:
                 tag = candidate.get("tag")
                 if not tag or not tag.get("image"):
                     continue
-                path = asset(self.directory, tag["image"]).with_suffix(".txt")
+                path = self.tag_file(tag)
                 if not path.is_file():
                     continue
                 tags = list(dict.fromkeys(normalize(t) for t in re.split(r"[,\r\n]+", path.read_text(encoding="utf-8-sig")) if normalize(t)))
@@ -179,8 +179,14 @@ class Run:
                     tag["operations"].append({"mode": "set", "tags": tags, "origin": "txt"})
                     tag["tags"] = tags
 
+    def tag_file(self, tag):
+        return asset(self.directory, tag.get('caption', Path(tag['image']).with_suffix('.txt').as_posix()))
+
+    def preserve_filename(self, source):
+        return source.get('preserve_filename', self.config.get('crop_mode') in ('manual', 'prepared'))
+
     def write_tag_file(self, tag):
-        path = asset(self.directory, tag["image"]).with_suffix(".txt")
+        path = self.tag_file(tag)
         content = ", ".join(tag["tags"]) + "\n"
         if path.is_file() and path.read_text(encoding="utf-8-sig") == content:
             return
@@ -200,7 +206,7 @@ class Run:
             if isinstance(value, dict):
                 if "image" in value and "tags" in value and "raw" in value:
                     image = asset(self.directory, value["image"])
-                    if image.is_file() and not image.with_suffix(".txt").exists():
+                    if image.is_file() and not self.tag_file(value).exists():
                         self.write_tag_file(value)
                         written += 1
                 for item in value.values():
@@ -386,6 +392,8 @@ class Run:
         return bool(tag and not tag.get("stale") and tag["key"] == self.tag_key(source, candidate))
 
     def _materialize(self, source, candidate, key):
+        if candidate['kind'] == 'full' and self.preserve_filename(source):
+            return source['original']
         relative = f"images/{source['id']}_{candidate['id']}-{key[:16]}.png"
         destination = asset(self.directory, relative)
         if destination.exists():
@@ -454,6 +462,9 @@ class Run:
                            "suggestions": tag_suggestions(raw, removed, candidate["box"], source["detection"]),
                            "restore_raw": old.get("restore_raw", False), "stale": False,
                            "seconds": round(time.monotonic() - started, 3)}
+                    if candidate['kind'] == 'full' and self.preserve_filename(source):
+                        caption_name = source.get('caption_name', Path(source['relative']).with_suffix('.txt').name)
+                        tag['caption'] = Path(relative).with_name(caption_name).as_posix()
                     tag["tags"] = edited_tags(tag)
                     self.write_tag_file(tag)
                     candidate["tag"] = tag
@@ -575,22 +586,44 @@ class Run:
                     if relative not in previous and relative not in pending:
                         raise ValueError(f"输出含非本运行生成的文件: {relative}")
         with tempfile.TemporaryDirectory(dir=self.directory) as temporary:
-            staging = Path(temporary)
+            staging = Path(temporary) / 'output'
+            # 标签身份清理仍按角色分组执行，最终文件路径独立保留原目录结构。
+            captions = Path(temporary) / 'captions'
+            caption_outputs = []
             for source, candidate in selected:
                 tag = candidate["tag"]
-                folder = staging / source["group"]
-                folder.mkdir(parents=True, exist_ok=True)
                 name = f"{source['id']}_{candidate['id']}"
                 image_path = asset(self.directory, tag["image"])
-                shutil.copyfile(image_path, folder / f"{name}{image_path.suffix.lower()}")
+                if candidate['kind'] == 'full' and self.preserve_filename(source):
+                    image_path = Path(source['source_path'])
+                    relative_image = Path(source['relative'])
+                    relative_caption = relative_image.with_name(source.get('caption_name', relative_image.with_suffix('.txt').name))
+                else:
+                    relative_image = Path(source['group']) / f'{name}{image_path.suffix}'
+                    relative_caption = relative_image.with_suffix('.txt')
+                destination = asset(staging, relative_image)
+                if destination.exists():
+                    raise ValueError(f'导出文件名冲突：{relative_image}')
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(image_path, destination)
                 protected = manual_additions(tag)
                 extra_drop = self.data.get("drop_tags_override", self.config["drop_tags"])
                 drop = (character_tags | {normalize(t) for t in extra_drop}) - protected
                 tags = [t for t in tag["tags"] if t not in drop]
                 # Existing caption routine skips an empty file; seed its identity in that case.
                 caption = ", ".join(tags) or f"{source['group']} ({self.config['copyright']})"
-                (folder / f"{name}.txt").write_text(caption, encoding="utf-8")
-            process_text_files_in_dataset(str(staging), self.config["copyright"])
+                caption_file = asset(captions, Path(source['group']) / f'{name}.txt')
+                caption_file.parent.mkdir(parents=True, exist_ok=True)
+                caption_file.write_text(caption, encoding='utf-8')
+                caption_outputs.append((caption_file, relative_caption))
+            process_text_files_in_dataset(str(captions), self.config["copyright"])
+            for caption_file, relative in caption_outputs:
+                destination = asset(staging, relative)
+                content = caption_file.read_bytes()
+                if destination.exists() and destination.read_bytes() != content:
+                    raise ValueError(f'导出标签文件名冲突：{relative}')
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(content)
             new_files = {p.relative_to(staging).as_posix(): file_digest(p)
                          for p in staging.rglob("*") if p.is_file()}
             # Persist intended hashes before copying, so interrupted exports can resume.
@@ -604,7 +637,10 @@ class Run:
                 temporary_file = destination.with_suffix(destination.suffix + ".tmp")
                 shutil.copyfile(staging / relative, temporary_file)
                 temporary_file.replace(destination)
+            new_destinations = {os.path.normcase(os.path.normpath(relative)) for relative in new_files}
             for relative in set(previous) - set(new_files):
+                if os.path.normcase(os.path.normpath(relative)) in new_destinations:
+                    continue
                 old_file = output / relative
                 if inside(old_file, output) and old_file.is_file():
                     old_file.unlink()

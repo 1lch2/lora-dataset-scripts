@@ -12,7 +12,7 @@ import requests
 from PIL import Image
 
 import launch_webui
-from dataset_pipeline.core import DEFAULTS, Run, prepare
+from dataset_pipeline.core import DEFAULTS, Run, file_digest, prepare
 from dataset_pipeline.datasets import import_config, import_sources, list_datasets
 from dataset_pipeline.review import make_server
 
@@ -79,9 +79,10 @@ class DatasetTests(unittest.TestCase):
     def test_import_prepared_captions_and_switch_back_without_models(self):
         folder = self.root / 'finished'
         folder.mkdir()
-        image = folder / 'done.png'
+        image = folder / '示例 image.01.JpEg'
         Image.new('RGB', (1500, 1700), 'blue').save(image)
-        image.with_suffix('.txt').write_text('custom_trigger, blue_hair\n', encoding='utf-8')
+        caption = image.with_suffix('.TXT')
+        caption.write_text('custom_trigger, blue_hair\n', encoding='utf-8')
         self.server()
         values = {'directory': str(folder), 'identity': 'character', 'cropMode': 'prepared', 'importCaptions': True}
         with patch('dataset_pipeline.core.ForgeClient.check', side_effect=AssertionError('Unexpected model call')), \
@@ -97,10 +98,18 @@ class DatasetTests(unittest.TestCase):
             full = source['candidates'][0]
             self.assertTrue(run.current_tag(source, full))
             self.assertEqual(full['tag']['tags'], ['custom trigger', 'blue hair'])
+            self.assertEqual(Path(source['original']).name, image.name)
+            self.assertEqual(run.tag_file(full['tag']).name, caption.name)
+            self.assertEqual(file_digest(imported / source['original']), file_digest(image))
+            self.assertEqual(run.tag_file(full['tag']).read_bytes(), caption.read_bytes())
             with Image.open(imported / full['tag']['image']) as actual:
                 self.assertEqual(actual.size, (1500, 1700))
             run.edit_tags([[source['id'], 'full']], {'mode': 'add', 'tags': ['manual edit']})
             run.export()
+            output = Path(run.config['output_dir'])
+            self.assertEqual({p.name for p in output.iterdir()}, {image.name, caption.name})
+            self.assertEqual(file_digest(output / image.name), file_digest(image))
+            self.assertIn('manual edit', (output / caption.name).read_text(encoding='utf-8'))
             self.assertEqual(self.post('/api/datasets/open', {'runDir': str(self.run.directory)}).status_code, 202)
             self.finished()
             self.assertEqual(self.post('/api/datasets/import', values).status_code, 202)
@@ -109,6 +118,81 @@ class DatasetTests(unittest.TestCase):
             self.assertIn('manual edit', next(iter(reloaded.data['sources'].values()))['candidates'][0]['tag']['tags'])
         listing = list_datasets(self.run.directory)
         self.assertEqual(len(listing['datasets']), 2)
+
+    def test_nested_names_and_legacy_import_paths_preserve_latest_tags(self):
+        folder = self.root / 'nested-finished'
+        for group, color in [('first', 'red'), ('second', 'blue')]:
+            nested = folder / group / 'nested'
+            nested.mkdir(parents=True)
+            Image.new('RGB', (100, 120), color).save(nested / 'Same Name.JPG')
+            (nested / 'Same Name.TXT').write_text('blue_hair', encoding='utf-8')
+        config = import_config({'directory': str(folder), 'identity': ''}, self.config)
+        run, errors = import_sources(config)
+        self.assertEqual(errors, [])
+        first = next(s for s in run.data['sources'].values() if s['group'] == 'first')
+        run.edit_tags([[first['id'], 'full']], {'mode': 'add', 'tags': ['manual edit']})
+        tag = first['candidates'][0]['tag']
+        legacy = run.directory / 'original' / 'legacy.jpg'
+        legacy.write_bytes((run.directory / first['original']).read_bytes())
+        legacy.with_suffix('.txt').write_bytes(run.tag_file(tag).read_bytes())
+        first.update(original='original/legacy.jpg', working='original/legacy.jpg')
+        tag.update(image='original/legacy.jpg')
+        tag.pop('caption')
+        first.pop('preserve_filename')
+        first.pop('caption_name')
+        run.save()
+        run, errors = import_sources(config)
+        self.assertEqual(errors, [])
+        first = run.data['sources'][first['id']]
+        self.assertEqual(Path(first['original']).name, 'Same Name.JPG')
+        self.assertEqual(run.tag_file(first['candidates'][0]['tag']).name, 'Same Name.TXT')
+        self.assertTrue(run.current_tag(first, first['candidates'][0]))
+        self.assertEqual(run.export(), 2)
+        output = Path(config['output_dir'])
+        self.assertEqual({p.relative_to(output).as_posix() for p in output.rglob('*') if p.is_file()},
+                         {'first/nested/Same Name.JPG', 'first/nested/Same Name.TXT',
+                          'second/nested/Same Name.JPG', 'second/nested/Same Name.TXT'})
+        for image in folder.rglob('*.JPG'):
+            self.assertEqual(file_digest(output / image.relative_to(folder)), file_digest(image))
+        self.assertIn('manual edit', (output / 'first/nested/Same Name.TXT').read_text(encoding='utf-8'))
+        self.assertNotIn('manual edit', (output / 'second/nested/Same Name.TXT').read_text(encoding='utf-8'))
+
+    def test_image_only_import_keeps_original_format_after_manual_tagging(self):
+        folder = self.root / 'pictures-only'
+        folder.mkdir()
+        image = folder / 'Original Image.JPEG'
+        Image.new('RGB', (200, 300), 'green').save(image)
+        config = import_config({'directory': str(folder), 'identity': 'character'}, self.config)
+        run, errors = import_sources(config)
+        self.assertEqual(errors, [])
+        with patch('dataset_pipeline.core.ForgeClient.check'), \
+                patch('dataset_pipeline.core.ForgeClient.tag', return_value={'blue_hair': .9}):
+            self.assertEqual(run.tag_all(), [])
+        source = next(iter(run.data['sources'].values()))
+        self.assertEqual(Path(source['candidates'][0]['tag']['image']).name, image.name)
+        self.assertEqual(run.export(), 1)
+        output = Path(config['output_dir'])
+        self.assertEqual({p.name for p in output.iterdir()}, {image.name, 'Original Image.txt'})
+        self.assertEqual(file_digest(output / image.name), file_digest(image))
+
+    def test_reexport_after_extension_case_change_keeps_current_image(self):
+        folder = self.root / 'case-change'
+        folder.mkdir()
+        image = folder / 'Photo.JPG'
+        Image.new('RGB', (100, 120), 'red').save(image)
+        (folder / 'Photo.TXT').write_text('blue_hair', encoding='utf-8')
+        config = import_config({'directory': str(folder), 'identity': 'character'}, self.config)
+        run, errors = import_sources(config)
+        self.assertEqual(errors, [])
+        run.export()
+        renamed = image.with_suffix('.jpg')
+        image.rename(renamed)
+        run, errors = import_sources(config)
+        self.assertEqual(errors, [])
+        self.assertEqual(run.export(), 1)
+        output = Path(config['output_dir'])
+        self.assertEqual({p.name for p in output.iterdir()}, {'Photo.jpg', 'Photo.TXT'})
+        self.assertEqual(file_digest(output / renamed.name), file_digest(renamed))
 
     def test_restarting_launcher_opens_empty_ui_without_loading_default_dataset(self):
         (self.folder / 'new-role').mkdir()

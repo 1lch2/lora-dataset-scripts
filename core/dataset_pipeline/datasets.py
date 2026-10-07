@@ -77,6 +77,7 @@ def import_sources(config):
     for source in run.data['sources'].values():
         source['active'] = False
     failures = []
+    captions_by_directory = {}
     files = sorted(p for p in folder.rglob('*') if p.is_file() and p.suffix.lower() in EXTENSIONS)
     for path in files:
         relative = path.relative_to(folder)
@@ -87,14 +88,20 @@ def import_sources(config):
         source.update(active=True, group=config['identity'] or (relative.parts[0] if len(relative.parts) > 1 else folder.name))
         try:
             fingerprint = file_digest(path)
+            if path.parent not in captions_by_directory:
+                captions_by_directory[path.parent] = {p.stem.casefold(): p for p in path.parent.iterdir()
+                                                      if p.suffix.lower() == '.txt' and p.is_file()}
+            caption = captions_by_directory[path.parent].get(path.stem.casefold())
+            source['preserve_filename'] = True
+            source['caption_name'] = caption.name if caption else source.get('caption_name', path.with_suffix('.txt').name)
+            original = f'original/{source_id}-{fingerprint[:16]}/{relative.as_posix()}'
+            destination = asset(directory, original)
             unchanged = (fingerprint == source.get('fingerprint')
                          and source.get('original') and asset(directory, source['original']).is_file()
                          and source.get('working') and asset(directory, source['working']).is_file())
             if not unchanged:
                 with Image.open(path) as image:
                     size = list(ImageOps.exif_transpose(image).size)
-                original = f'original/{source_id}-{fingerprint[:16]}{path.suffix.lower()}'
-                destination = asset(directory, original)
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 if not destination.exists():
                     shutil.copy2(path, destination)
@@ -111,23 +118,39 @@ def import_sources(config):
                 if previous.get('tag'):
                     full['tag'] = copy.deepcopy(previous['tag'])
                     full['tag']['stale'] = True
+            if unchanged:
+                previous_original = source['original']
+                if not destination.exists():
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(path, destination)
+                source['original'] = original
+                if source['working'] == previous_original:
+                    source['working'] = original
+                full = source['candidates'][0]
+                if full.get('tag'):
+                    old_caption = run.tag_file(full['tag'])
+                    full['tag'].update(image=original, caption=Path(original).with_name(source['caption_name']).as_posix())
+                    new_caption = run.tag_file(full['tag'])
+                    if old_caption != new_caption:
+                        if old_caption.is_file():
+                            shutil.copy2(old_caption, new_caption)
+                        else:
+                            run.write_tag_file(full['tag'])
             if config.get('import_captions'):
                 full = source['candidates'][0]
                 if not unchanged and full.get('tag'):
-                    full['tag'].update(key=run.tag_key(source, full), image=source['original'], stale=False)
+                    full['tag'].update(key=run.tag_key(source, full), image=source['original'], stale=False,
+                                       caption=Path(original).with_name(source['caption_name']).as_posix())
                     run.write_tag_file(full['tag'])
                 if not full.get('tag'):
-                    caption = path.with_suffix('.txt')
-                    if not caption.is_file():
-                        caption = next((p for p in path.parent.iterdir() if p.is_file()
-                                        and p.stem == path.stem and p.suffix.lower() == '.txt'), caption)
-                    text = caption.read_text(encoding='utf-8-sig') if caption.is_file() else ''
+                    text = caption.read_text(encoding='utf-8-sig') if caption else ''
                     tags = list(dict.fromkeys(normalize(t) for t in re.split(r'[,\r\n]+', text) if normalize(t)))
                     full['tag'] = {'key': run.tag_key(source, full), 'image': source['original'], 'raw': tags,
                                    'tags': tags, 'scores': {}, 'auto_removed': [], 'operations': [],
-                                   'suggestions': [], 'stale': False, 'origin': 'imported_caption'}
-                    if caption.is_file():
-                        shutil.copy2(caption, asset(directory, source['original']).with_suffix('.txt'))
+                                   'suggestions': [], 'stale': False, 'origin': 'imported_caption',
+                                   'caption': Path(original).with_name(source['caption_name']).as_posix()}
+                    if caption:
+                        shutil.copy2(caption, run.tag_file(full['tag']))
                     else:
                         source['notes'].append('成品目录中此图没有同名 TXT，已保留图片，可手动补充标签。')
             source.pop('error', None)

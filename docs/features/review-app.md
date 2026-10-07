@@ -22,6 +22,8 @@
 
 网页首次进入只读取状态，不加载目录；空白会话返回 `datasetLoaded=false`。显式导入、打开已接入数据集或顶部刷新通过带会话 token 的 `sync_sources` 调用 `import_sources`，不执行图片处理；切换重置筛选和选择。`start_upscale`、`start_detect`、`start_tag` 与导出共用任务互斥；前两者接受 `group` 指定角色范围。含 TXT 的成品禁止自动超分/识别，缺少对应 TXT 的图片以空标签导入并提示；已有标签编辑优先。导入成品保留原格式与尺寸，导出沿用实际图片扩展名，避免 JPEG 字节被错误命名为 PNG。
 
+文件名称由 `import_sources` 记录：`preserve_filename` 标记导入素材，原图片存入版本父目录并保留 `relative` 的原名、扩展名大小写与层级；`caption_name` 与标签的 `caption` 路径保留原 TXT 名称。旧记录同步时更新完整图及标签存储路径，保留当前编辑。`Run.tag_file` 统一读写已登记的标签路径；`_materialize` 对导入完整图返回原文件。`Run.export` 按原相对路径导出完整图和标签，图片直接复制源字节；标签先按角色清理再写入原路径，冲突在写入输出目录前报错。新裁片仍使用生成名称和 PNG，其他几何处理不受此命名规则影响。
+
 Python 源文件整体移入 `core/`，原顶层脚本与 `dataset_pipeline/` 的相对关系不变。数据、配置、虚拟环境、测试与 BAT 仍在仓库根目录。原脚本中相对 `__file__` 的数据目录已校正到仓库根目录。
 
 ## 开发与验证
