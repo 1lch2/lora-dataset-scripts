@@ -1,4 +1,16 @@
-import type { EditRequest, EditResult, JobInfo, LoraFilesInfo, LoraRenameChange, LoraRenameResult, RunInfo, SessionInfo } from './types';
+import type {
+  DatasetImportRequest,
+  DatasetListInfo,
+  DatasetOpenResult,
+  EditRequest,
+  EditResult,
+  JobInfo,
+  LoraFilesInfo,
+  LoraRenameChange,
+  LoraRenameResult,
+  RunInfo,
+  SessionInfo,
+} from './types';
 
 export async function request<T>(url: string, data?: unknown, token?: string): Promise<T> {
   const response = await fetch(
@@ -18,6 +30,11 @@ export async function request<T>(url: string, data?: unknown, token?: string): P
 export const getSessionInfo = () => request<SessionInfo>('/api/session');
 export const getRunInfo = () => request<RunInfo>('/api/state');
 export const getJobInfo = () => request<JobInfo>('/api/job');
+export const getAllDatasetList = () => request<DatasetListInfo>('/api/datasets');
+export const importDataset = (data: DatasetImportRequest, token: string) =>
+  request<DatasetOpenResult>('/api/datasets/import', data, token);
+export const openDataset = (runDir: string, token: string) =>
+  request<DatasetOpenResult>('/api/datasets/open', { runDir }, token);
 export const updateReview = (data: EditRequest, token: string) =>
   request<EditResult>('/api/edit', data, token);
 export const getLoraFilesInfo = (directory: string) =>

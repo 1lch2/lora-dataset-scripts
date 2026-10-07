@@ -50,9 +50,9 @@ python -m pip install -r requirements.txt
 .\start-webui.bat --config preprocess.local.json --forge-dir 'E:\stable-diffusion-webui-forge-classic'
 ```
 
-启动器先启动或复用 Forge API，再为新运行准备素材，随后启动 Python API 与 Vite 并打开浏览器。默认 API 端口为 8765，页面地址为 `http://127.0.0.1:5173`；可通过 `--port` 和 `--frontend-port` 修改端口。
+启动器直接启动 Python API 与 Vite 并打开空白审核页，不扫描或加载配置中的默认数据集。进入网页后选择需要加载的目录或子目录；导入仅登记图片和已有 TXT。Forge 在手动执行需要它的超分或打标时才启动或复用。默认 API 端口为 8765，页面地址为 `http://127.0.0.1:5173`；可通过 `--port` 和 `--frontend-port` 修改端口。
 
-处理流程为：**准备素材 → 裁切审核 → 打标 → 标签编辑 → 导出**。启动入口不会自动接受裁框或自动打标。关闭审核入口会停止本次创建的前端与 API，独立 Forge 进程继续运行。
+含 TXT 的目录视为已完成超分、裁切和打标，可直接编辑已有标签并导出；只有图片时，手动选择 **按尺寸超分 → 识别并生成裁切候选 → 裁切审核 → 打标 → 标签编辑 → 导出**，超分和识别可按需跳过。刷新只同步目录文件，不执行模型处理。关闭审核入口会停止本次创建的前端与 API，独立 Forge 进程继续运行。
 
 也可手动准备素材并打开已有运行：
 

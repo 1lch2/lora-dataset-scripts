@@ -35,6 +35,11 @@
 
 修改前端代码前，必须读取并遵守 [React + TypeScript 代码规范](docs/frontend-code-standards.md)。该文档保留组件、类型、样式、命名、注释、状态管理与单元测试约束；Python 部分不适用此前端规范。
 
+## 前端设计
+
+- 新建页面、优化视觉或评审界面设计时，按适用条件使用项目级 [frontend-design skill](.agents/skills/frontend-design/SKILL.md)。来源：[1lch2/personal-productivity-skills](https://github.com/1lch2/personal-productivity-skills/tree/master/frontend-design)。
+- 设计建议须遵守本项目的 React + TypeScript 代码规范，沿用现有组件结构、CSS Modules 与主题 token；skill 中的单文件 HTML、内联样式和原生事件委托建议不替代现有 React 实现方式。局部调整保持任务范围，严格遵守既有设计系统的任务按该 skill 的不适用条件处理。
+
 ## 开发与验证
 
 前端依赖与常用命令：

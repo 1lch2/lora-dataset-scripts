@@ -14,7 +14,7 @@ features:
       - core/edit_caption.py
   - id: review-app
     name: React 审核前端、裁切与标签编辑
-    keywords: [React, Vite, app/src, 裁框, 标签, 批量编辑, 筛选, 预览, 导出]
+    keywords: [React, Vite, app/src, 裁框, 标签, 批量编辑, 筛选, 预览, 导出, 数据集目录, 接入, 已裁切, 同步, dataset-raw, 预处理, 放大, 倍率]
     doc: docs/features/review-app.md
     entrypoints:
       - app/src/Pages/review/ReviewPage/ReviewPage.tsx

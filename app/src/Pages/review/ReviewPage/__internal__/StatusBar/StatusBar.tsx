@@ -9,8 +9,11 @@ export function StatusBar() {
       </span>
       <progress
         id='jobProgress'
-        hidden={v.job.status !== 'running' || v.job.action !== 'start_tag'}
-        aria-label='打标进度'
+        hidden={
+          v.job.status !== 'running' ||
+          !['start_tag', 'start_upscale', 'start_detect'].includes(v.job.action || '')
+        }
+        aria-label='处理进度'
         max={Math.max(v.job.total, 1)}
         value={v.job.done}
       ></progress>

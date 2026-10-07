@@ -25,12 +25,14 @@ export function useReview(session: SessionInfo) {
   const [preview, setPreview] = useState<PreviewInfo>();
   const [previewImage, setPreviewImage] = useState('');
   const [reviewAdvance, setReviewAdvance] = useState(0);
+  const [datasetSwitching, setDatasetSwitching] = useState(false);
   const handledJob = useRef<string | undefined>(undefined);
   const initialized = useRef(false);
   const mutation = useMutation({
     mutationFn: (data: EditRequest) => updateReview(data, session.token),
     onSuccess: async (_result, data) => {
-      if (data.action === 'start_tag' || data.action === 'export') return;
+      if (['start_tag', 'export', 'sync_sources', 'start_upscale', 'start_detect'].includes(data.action))
+        return;
       await client.fetchQuery({ queryKey: ['run'], queryFn: getRunInfo });
     },
   });
@@ -47,7 +49,7 @@ export function useReview(session: SessionInfo) {
   });
   const state = runQuery.data;
   const job: JobInfo = jobQuery.data || { status: 'idle', total: 0, done: 0, errors: [] };
-  const busy = mutation.isPending;
+  const busy = mutation.isPending || datasetSwitching;
   const processing = busy || job.status === 'running';
   function message(text: string, error = false) {
     setNotice({ text, error });
@@ -85,20 +87,23 @@ export function useReview(session: SessionInfo) {
   useEffect(() => {
     if (!state) return;
     const firstLoad = !initialized.current;
+    const groups = [
+      ...new Set(
+        Object.values(state.sources)
+          .filter((s) => s.active)
+          .map((s) => s.group),
+      ),
+    ].sort();
     setFields((previous) => ({
       ...previous,
       group: firstLoad
-        ? [
-            ...new Set(
-              Object.values(state.sources)
-                .filter((s) => s.active)
-                .map((s) => s.group),
-            ),
-          ].sort()[0] || ''
-        : previous.group,
+        ? groups[0] || ''
+        : previous.group && !groups.includes(previous.group)
+          ? ''
+          : previous.group,
       dropTags: (state.drop_tags_override || state.config.drop_tags).join(', '),
     }));
-    initialized.current = true;
+    initialized.current = groups.length > 0;
   }, [state]);
   useEffect(() => {
     if (!notice.text || notice.error || notice.text === '处理中…') return;
@@ -124,10 +129,29 @@ export function useReview(session: SessionInfo) {
             ? `处理未完成，已保存成功项，可重试。\n${job.errors.join('\n')}`
             : job.action === 'start_tag'
               ? `打标完成，共 ${job.total} 份样本。可编辑标签并导出训练集。`
-              : `已导出 ${job.count} 组图片和标签至 ${data.config.output_dir}`,
+              : job.action === 'sync_sources'
+                ? `数据集已导入，共 ${Object.values(data.sources).filter((s) => s.active).length} 张图片。${data.config.crop_mode === 'prepared' ? '已接入 TXT 标签，可编辑并导出。' : '未执行图片处理，可手动选择超分、识别或打标。'}`
+                : job.action === 'start_upscale'
+                  ? `按尺寸超分完成，共 ${job.total} 张图片。可继续识别并生成裁切候选。`
+                  : job.action === 'start_detect'
+                    ? `识别完成，共 ${job.total} 张图片。请审核生成的裁切候选。`
+                    : `已导出 ${job.count} 组图片和标签至 ${data.config.output_dir}`,
         );
         if (job.status === 'complete' && job.action === 'start_tag')
           setStage((previous) => (previous === 'analysis' || previous === 'lora' ? previous : 'tag'));
+        if (
+          job.status === 'complete' &&
+          job.action === 'sync_sources' &&
+          data.config.crop_mode === 'prepared'
+        )
+          setStage((previous) =>
+            previous === 'crop' &&
+            !Object.values(data.sources).some(
+              (s) => s.active && s.candidates.some((c) => c.status === 'pending'),
+            )
+              ? 'tag'
+              : previous,
+          );
       })
       .catch((error) => {
         handledJob.current = undefined;
@@ -164,6 +188,26 @@ export function useReview(session: SessionInfo) {
       restoreDraft(source ? result.data!.sources[source.id] : undefined, candidate?.id);
     setPreview(undefined);
     return result.data!;
+  }
+  async function handleDatasetChange() {
+    initialized.current = false;
+    handledJob.current = undefined;
+    setFields(INITIAL_FIELDS);
+    setSourceId(undefined);
+    setCandidateId(undefined);
+    setBox(null);
+    setPreview(undefined);
+    setPreviewImage('');
+    setJobStatus('');
+    tags.setSelected(new Set());
+    tags.setSingleKey(undefined);
+    tags.setImageBasket(new Set());
+    tags.setImageFilter(null);
+    tags.setClickedTags(new Set());
+    setStage('crop');
+    setFocusCrop(false);
+    setReviewStarted(true);
+    await Promise.all([runQuery.refetch(), jobQuery.refetch()]);
   }
   function advanceReview(
     data: RunInfo,
@@ -232,7 +276,7 @@ export function useReview(session: SessionInfo) {
     }
   }
   async function startJob(action: string) {
-    if (processing || !state) return;
+    if (processing || !state?.datasetLoaded) return;
     if (action === 'start_tag' && box && (!candidate?.box || box.some((v, i) => v !== candidate.box![i]))) {
       message('当前裁框尚未保存，请先保存并审核，再开始打标。', true);
       return;
@@ -246,7 +290,10 @@ export function useReview(session: SessionInfo) {
       return;
     }
     try {
-      await mutation.mutateAsync({ action });
+      await mutation.mutateAsync({
+        action,
+        ...(['start_upscale', 'start_detect'].includes(action) ? { group: fields.group } : {}),
+      });
       client.setQueryData(['job'], { ...job, status: 'running', action });
       message('');
     } catch (error) {
@@ -261,13 +308,15 @@ export function useReview(session: SessionInfo) {
   const tagging = stage === 'tag';
   const stageStatus = !state
     ? '读取进度…'
-    : tagging
-      ? `${samples.length} 份样本 · ${untagged} 份待打标`
-      : pending
-        ? `还有 ${pending} 个裁框待审（全部图片）`
-        : ready
-          ? `裁切审核完成 · ${samples.length} 份样本可打标`
-          : '请先完成图片准备';
+    : !state.datasetLoaded
+      ? '请选择要加载的数据集'
+      : tagging
+        ? `${samples.length} 份样本 · ${untagged} 份待打标`
+        : pending
+          ? `还有 ${pending} 个裁框待审（全部图片）`
+          : ready
+            ? `无待审裁框 · ${samples.length} 份样本可打标`
+            : '请先完成图片准备';
   const startLabel =
     job.status === 'running' && job.action === 'start_tag'
       ? '正在打标…'
@@ -312,8 +361,20 @@ export function useReview(session: SessionInfo) {
   const actions: Record<string, () => void | Promise<unknown>> = {
     dismissMessage: () => message(''),
     startTag: () => startJob('start_tag'),
+    upscaleDataset: () => startJob('start_upscale'),
+    detectDataset: () => startJob('start_detect'),
     exportDataset: () => startJob('export'),
-    refresh: () => reload().catch((error) => message(error.message, true)),
+    refresh: async () => {
+      try {
+        if (!processing && state?.datasetLoaded) {
+          await mutation.mutateAsync({ action: 'sync_sources' });
+          await jobQuery.refetch();
+        }
+        await reload();
+      } catch (error) {
+        message((error as Error).message, true);
+      }
+    },
     openWorkdir: async () => {
       try {
         await updateReview({ action: 'open_workdir' }, session.token);
@@ -431,6 +492,8 @@ export function useReview(session: SessionInfo) {
     processing,
     stage,
     handleStage,
+    handleDatasetChange,
+    setDatasetSwitching,
     focusCrop,
     fields,
     setField,
@@ -475,8 +538,14 @@ export function useReview(session: SessionInfo) {
       ? `${jobQuery.error.message}，正在重连；可用“刷新数据”核对已保存结果。`
       : job.status === 'running'
         ? job.action === 'start_tag'
-          ? `已打标 ${job.done} / ${job.total} 份（含已完成缓存）。正在裁切、缩放和打标，可刷新页面查看进度。`
-          : '正在导出训练集…'
+          ? `已打标 ${job.done} / ${job.total} 份（含已完成缓存）。`
+          : job.action === 'sync_sources'
+            ? '正在导入图片和已有 TXT 标签，不执行超分、识别或打标…'
+            : job.action === 'start_upscale'
+              ? `正在按尺寸超分 ${job.done} / ${job.total} 张图片…`
+              : job.action === 'start_detect'
+                ? `正在识别并生成裁切候选 ${job.done} / ${job.total} 张图片…`
+                : '正在导出训练集…'
         : jobStatus,
   };
 }

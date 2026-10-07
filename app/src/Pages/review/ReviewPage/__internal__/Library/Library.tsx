@@ -15,7 +15,7 @@ export function Library() {
       <section id='cropLibrary' className='sourcePanel' hidden={v.stage === 'tag'}>
         <div className='sourceHeading'>
           <strong>图片列表</strong>
-          <span id='sourceProgress'>{`${v.tags.filteredSources.filter((s) => !s.error && !s.candidates.some((c) => c.status === 'pending')).length} / ${v.tags.filteredSources.length} 张已完成`}</span>
+          <span id='sourceProgress'>{`${v.tags.filteredSources.filter((s) => !s.error && !s.candidates.some((c) => c.status === 'pending')).length} / ${v.tags.filteredSources.length} 张无待审裁框`}</span>
         </div>
         <div id='sources' aria-label='源图片'>
           {v.tags.filteredSources.map((s) => {
@@ -34,7 +34,7 @@ export function Library() {
                 <span className={`sourceMeta${!pending && !s.error ? ' complete' : ''}`}>
                   {s.error
                     ? '处理失败'
-                    : `${pending ? `待审 ${pending} 个裁框` : '✓ 裁切已完成'} · ${s.scale}×`}
+                    : `${pending ? `待审 ${pending} 个裁框` : '无待审裁框'} · ${s.scale}×`}
                 </span>
               </button>
             );

@@ -8,7 +8,7 @@ MIN_AREA = math.ceil(TARGET_AREA * 0.9)
 
 def default_scale(size):
     area = size[0] * size[1]
-    return 1.5 if area < 1024**2 else 2.0 if area < 2048**2 else 1.0
+    return 1.5 if area < TARGET_AREA * 0.8 else 1.0
 
 
 def area(box):

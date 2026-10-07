@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from dataset_pipeline.core import prepare, read_config, run_lock
+from dataset_pipeline.core import read_config
 from dataset_pipeline.review import serve
 from dataset_pipeline.frontend import start_frontend, stop_frontend
 
@@ -111,17 +111,19 @@ def launch(config_path, forge_dir, port, timeout, open_browser=True, frontend_po
     existing = False
     if listening('127.0.0.1', port):
         try:
-            response = requests.get(review_url + '/api/state', timeout=5)
+            response = requests.get(review_url + '/api/session', timeout=5)
             response.raise_for_status()
             data = response.json()
-            existing = Path(data['config']['run_dir']).resolve() == Path(config['run_dir']).resolve()
+            existing = data.get('manualWorkflow') is True and not data.get('analysisOnly')
+            existing = existing and all(Path(data['startupConfig'][key]).resolve() == Path(config[key]).resolve()
+                           for key in ('run_dir', 'input_dir', 'output_dir'))
+            existing = existing and data['startupConfig'].get('identity', '') == config['identity']
         except (requests.RequestException, ValueError, KeyError, TypeError):
             pass
         if not existing:
             raise ValueError(f'审核端口 {port} 被其他服务或数据集占用，请使用 --port 指定其他端口')
-    ensure_forge(config['forge_url'], forge_dir, timeout)
     if existing:
-        print(f'复用当前数据集的审核页：{review_url}', flush=True)
+        print(f'复用审核页：{review_url}', flush=True)
         frontend = start_frontend(port, frontend_port, open_browser)
         if frontend is not None:
             try:
@@ -129,14 +131,9 @@ def launch(config_path, forge_dir, port, timeout, open_browser=True, frontend_po
             finally:
                 stop_frontend(frontend)
         return
-    if not (Path(config['run_dir']) / 'manifest.json').is_file():
-        print('首次运行，正在准备图片；进度显示在此终端。', flush=True)
-        with run_lock(config['run_dir']):
-            _, failures = prepare(config)
-        if failures:
-            print('部分图片准备失败，可在审核页查看：\n' + '\n'.join(failures), flush=True)
-    print('正在启动审核服务。关闭本终端可停止审核服务；Forge 终端独立保留。', flush=True)
-    serve(config['run_dir'], port, open_browser, frontend_port)
+    print('正在启动 UI；请在网页中选择数据集，导入后手动执行所需处理。', flush=True)
+    serve(None, port, open_browser, frontend_port, config=config,
+          model_setup=lambda selected: ensure_forge(selected['forge_url'], forge_dir, timeout))
 
 
 def main():

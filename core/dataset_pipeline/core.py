@@ -26,6 +26,8 @@ DEFAULTS = {
     "target_area": TARGET_AREA, "min_area": MIN_AREA, "duplicate_iou": 0.95,
     "copyright": "arknights", "drop_tags": [], "tags_csv": "",
     "identity": "",
+    "crop_mode": "auto",
+    "import_captions": False,
 }
 EXTENSIONS = {".png", ".jpg", ".jpeg", ".jfif", ".webp", ".bmp", ".tif", ".tiff", ".gif"}
 
@@ -100,6 +102,10 @@ def validate_config(config):
     if not isinstance(config["drop_tags"], list) or any(not isinstance(t, str) for t in config["drop_tags"]):
         raise ValueError("drop_tags 必须是标签列表")
     identity = config["identity"]
+    if config.get("crop_mode", "auto") not in ("auto", "prepared", "manual"):
+        raise ValueError("crop_mode 必须是 auto、prepared 或 manual")
+    if not isinstance(config.get("import_captions", False), bool):
+        raise ValueError("import_captions 必须是布尔值")
     if identity and (identity in (".", "..") or any(c in identity for c in '/\\:*?"<>|') or identity.endswith((".", " "))):
         raise ValueError("identity 必须是可用的单层目录名")
 
@@ -207,6 +213,8 @@ class Run:
 
     def _prepare_key(self, fingerprint, scale):
         keys = ("forge_url", "upscaler_1", "upscaler_2", "blend", "target_area", "min_area", "duplicate_iou")
+        if self.config.get("crop_mode", "auto") == "prepared":
+            return digest([fingerprint, scale, "prepared-v1"])
         return digest([fingerprint, scale, {k: self.config[k] for k in keys}, "crop-v1-imgutils-0.19.0"])
 
     def prepare_source(self, record, scale=None):
@@ -219,7 +227,8 @@ class Run:
             original = ImageOps.exif_transpose(image).copy()
         if original.mode not in ("RGB", "RGBA"):
             original = original.convert("RGBA" if "transparency" in original.info else "RGB")
-        selected_scale = scale if scale is not None else record.get("scale_override", default_scale(original.size))
+        prepared = self.config.get("crop_mode", "auto") == "prepared"
+        selected_scale = scale if scale is not None else record.get("scale_override", 1 if prepared else default_scale(original.size))
         if selected_scale not in (1, 1.5, 2):
             raise ValueError("倍率只能为 1、1.5 或 2")
         key = self._prepare_key(fingerprint, selected_scale)
@@ -262,7 +271,10 @@ class Run:
             else:
                 working = original.copy()
             working.save(working_file)
-        if cached:
+        if prepared:
+            analysis = {"detection": {"persons": [], "heads": []}, "crops": [],
+                        "notes": ["按已裁切素材接入，保留现有尺寸；需要补裁时可手动新建裁框。"]}
+        elif cached:
             crops, notes = propose(working.size, record["detection"], self.config["target_area"],
                                    self.config["min_area"], self.config["duplicate_iou"])
             analysis = {"detection": record["detection"], "crops": crops, "notes": notes}
@@ -379,12 +391,13 @@ class Run:
         if destination.exists():
             return relative
         with Image.open(asset(self.directory, source["original"] if candidate["kind"] == "full" else source["working"])) as image:
-            output = image.copy() if candidate["box"] is None else image.crop(candidate["box"])
+            oriented = ImageOps.exif_transpose(image)
+            output = oriented.copy() if candidate["box"] is None else oriented.crop(candidate["box"])
         if candidate["box"] and output.width * output.height < self.config["min_area"]:
             raise ValueError("裁片低于像素下限")
         # Match resize.py without encoding and reopening the full-resolution PNG.
         shortest = min(output.size)
-        if shortest >= 1280:
+        if shortest >= 1280 and self.config.get("crop_mode", "auto") == "auto":
             ratio = 1280 / shortest
             output = output.resize((int(output.width * ratio), int(output.height * ratio)), Image.LANCZOS)
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -400,6 +413,10 @@ class Run:
         self.read_tag_files()
         self.ensure_tag_files()
         failures = []
+        if not any(s.get('active', True) and c['status'] == 'accepted'
+                   and (not self.current_tag(s, c) or not asset(self.directory, c['tag']['image']).is_file())
+                   for s in self.data['sources'].values() for c in s['candidates']):
+            return failures
         self.client.check(tagging=True)
         for source in self.data["sources"].values():
             if not source.get("active", True):
@@ -422,7 +439,7 @@ class Run:
                         scores = self.client.tag(Path(source["source_path"]))
                     else:
                         with Image.open(asset(self.directory, source["working"])) as image:
-                            with image.crop(candidate["box"]) as crop:
+                            with ImageOps.exif_transpose(image).crop(candidate["box"]) as crop:
                                 scores = self.client.tag(crop)
                     # Training-size images are generated only after interrogation.
                     relative = self._materialize(source, candidate, key)
@@ -447,6 +464,19 @@ class Run:
                     failures.append(f"{source['relative']}/{candidate['id']}: {error}")
                     self.save()
         return failures
+
+    def import_caption(self, source):
+        candidate = source['candidates'][0]
+        caption = Path(source['source_path']).with_suffix('.txt')
+        if candidate.get('tag') or not caption.is_file():
+            return
+        tags = list(dict.fromkeys(normalize(t) for t in re.split(r'[,\r\n]+', caption.read_text(encoding='utf-8-sig')) if normalize(t)))
+        key = self.tag_key(source, candidate)
+        tag = {'key': key, 'image': self._materialize(source, candidate, key), 'raw': tags,
+               'tags': tags, 'scores': {}, 'auto_removed': [], 'operations': [],
+               'suggestions': [], 'stale': False, 'origin': 'imported_caption'}
+        self.write_tag_file(tag)
+        candidate['tag'] = tag
 
     def edit_tags(self, selections, operation, preview=False):
         self.read_tag_files()
@@ -551,7 +581,8 @@ class Run:
                 folder = staging / source["group"]
                 folder.mkdir(parents=True, exist_ok=True)
                 name = f"{source['id']}_{candidate['id']}"
-                shutil.copyfile(asset(self.directory, tag["image"]), folder / f"{name}.png")
+                image_path = asset(self.directory, tag["image"])
+                shutil.copyfile(image_path, folder / f"{name}{image_path.suffix.lower()}")
                 protected = manual_additions(tag)
                 extra_drop = self.data.get("drop_tags_override", self.config["drop_tags"])
                 drop = (character_tags | {normalize(t) for t in extra_drop}) - protected
@@ -693,6 +724,8 @@ def prepare(config, client=None, analyzer=None):
         record["group"] = config["identity"] or relative.parts[0]
         try:
             changed = run.prepare_source(record)
+            if config.get('crop_mode', 'auto') == 'prepared' and config.get('import_captions', False):
+                run.import_caption(record)
             print(f"{'Prepared' if changed else 'Skipped'}: {relative}")
         except Exception as error:
             record["error"] = str(error)

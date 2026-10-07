@@ -38,7 +38,7 @@ export function CropEditor() {
             <p id='cropProgress' className='hint'>
               {v.source?.candidates.some((c) => c.status === 'pending')
                 ? `${v.source.candidates.filter((c) => c.box).length - v.source.candidates.filter((c) => c.status === 'pending').length} / ${v.source.candidates.filter((c) => c.box).length} 个已处理 · 剩余 ${v.source.candidates.filter((c) => c.status === 'pending').length} 个`
-                : '✓ 本图裁切审核完成'}
+                : '本图无待审裁框'}
             </p>
             <div id='candidates'>
               {v.source?.candidates.map((c) => (
@@ -84,8 +84,12 @@ export function CropEditor() {
                 <option value='2'>2 倍</option>
               </select>
             </label>
-            <button id='setScale' disabled={v.processing} onClick={() => v.handleAction('setScale')}>
-              重新准备此图
+            <button
+              id='setScale'
+              disabled={v.processing || v.state?.config.crop_mode === 'prepared'}
+              onClick={() => v.handleAction('setScale')}
+            >
+              仅更新此图倍率
             </button>
             <label>
               主体
@@ -99,7 +103,11 @@ export function CropEditor() {
                 ))}
               </select>
             </label>
-            <button id='setPerson' disabled={v.processing} onClick={() => v.handleAction('setPerson')}>
+            <button
+              id='setPerson'
+              disabled={v.processing || !v.source?.detection?.persons.length}
+              onClick={() => v.handleAction('setPerson')}
+            >
               生成主体裁框
             </button>
           </details>

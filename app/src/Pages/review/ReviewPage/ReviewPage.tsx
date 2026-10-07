@@ -1,6 +1,7 @@
 import { ReviewContext } from '../context';
 import { useReview } from '../useReview';
 import { Header } from './__internal__/Header';
+import { DatasetManager } from './__internal__/DatasetManager';
 import { Library } from './__internal__/Library';
 import { CropEditor } from './__internal__/CropEditor';
 import { TagEditor } from './__internal__/TagEditor';
@@ -17,9 +18,14 @@ export function ReviewPage({ session }: ReviewPageProps) {
     <ReviewContext value={review}>
       <div className={styles.page}>
         <Header />
+        <DatasetManager />
         <div className='appShell'>
           <AnalysisView token={session.token} active={review.stage === 'analysis'} />
-          <LoraTools token={session.token} defaultDirectory={session.loraOutputDir} active={review.stage === 'lora'} />
+          <LoraTools
+            token={session.token}
+            defaultDirectory={session.loraOutputDir}
+            active={review.stage === 'lora'}
+          />
           <Library />
           <CropEditor />
           <TagEditor />

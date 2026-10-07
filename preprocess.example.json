@@ -1,6 +1,8 @@
 {
   "input_dir": "dataset-raw",
   "identity": "",
+  "crop_mode": "auto",
+  "import_captions": false,
   "run_dir": "runs/default",
   "output_dir": "dataset-ready",
   "forge_url": "http://127.0.0.1:7860",

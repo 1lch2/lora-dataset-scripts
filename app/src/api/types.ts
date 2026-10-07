@@ -29,10 +29,38 @@ export interface Source {
   candidates: Candidate[];
 }
 export interface RunInfo {
+  datasetLoaded: boolean;
   sources: Record<string, Source>;
   updated_at: string;
   drop_tags_override?: string[];
-  config: { run_dir: string; output_dir: string; min_area: number; drop_tags: string[] };
+  config: {
+    input_dir: string;
+    run_dir: string;
+    output_dir: string;
+    min_area: number;
+    drop_tags: string[];
+    crop_mode?: CropMode;
+  };
+}
+export type CropMode = 'auto' | 'prepared' | 'manual';
+export interface DatasetInfo {
+  runDir: string;
+  inputDir: string;
+  name: string;
+  cropMode: CropMode;
+}
+export interface DatasetListInfo {
+  datasets: DatasetInfo[];
+  currentRunDir: string | null;
+  defaultInputDir: string;
+}
+export interface DatasetImportRequest {
+  directory: string;
+  identity: string;
+}
+export interface DatasetOpenResult {
+  ok: boolean;
+  runDir: string;
 }
 export interface SessionInfo {
   token: string;

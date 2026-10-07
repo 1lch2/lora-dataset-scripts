@@ -55,10 +55,13 @@ class FakeForge:
 
 class GeometryTests(unittest.TestCase):
     def test_scale_boundaries(self):
-        self.assertEqual(default_scale((1023, 1024)), 1.5)
-        self.assertEqual(default_scale((1024, 1024)), 2)
-        self.assertEqual(default_scale((2047, 2048)), 2)
-        self.assertEqual(default_scale((2048, 2048)), 1)
+        for size, expected in [((819, 1024), 1.5), ((820, 1024), 1),
+                               ((1024, 819), 1.5), ((1024, 820), 1),
+                               ((800, 1200), 1), ((1023, 1024), 1),
+                               ((1024, 1024), 1), ((2047, 2048), 1),
+                               ((2048, 2048), 1)]:
+            with self.subTest(size=size):
+                self.assertEqual(default_scale(size), expected)
 
     def test_expansion_and_total_area_not_short_edge(self):
         box = expand_box([0, 0, 700, 200], (800, 1800))
@@ -146,6 +149,21 @@ class PipelineTests(unittest.TestCase):
             if candidate["status"] == "pending":
                 run.change_crop(source["id"], candidate["id"], status="accepted")
 
+    def test_automatic_upscale_only_below_eighty_percent(self):
+        for size, scale, calls in [((819, 1024), 1.5, 1), ((820, 1024), 1, 1),
+                                   ((1024, 1024), 1, 1), ((1200, 1800), 1, 1)]:
+            with self.subTest(size=size):
+                Image.new("RGB", size, "red").save(self.original, format="JPEG")
+                run, source = self.prepared()
+                self.assertEqual(source["scale"], scale)
+                self.assertEqual(self.client.upscales, calls)
+                if scale == 1:
+                    self.assertEqual(source["working_size"], list(size))
+                else:
+                    self.assertEqual(source["working_size"], [round(v * scale / 8) * 8 for v in size])
+                self.assertFalse(run.prepare_source(source))
+                self.assertEqual(self.client.upscales, calls)
+
     def test_end_to_end_and_resume_preserve_source_and_manual_tags(self):
         run, source = self.prepared()
         self.accept(run, source)
@@ -174,7 +192,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(run2.tag_all(), [])
         self.assertEqual(self.client.tags, first_calls)
-        self.assertEqual(self.client.upscales, 1)
+        self.assertEqual(self.client.upscales, 0)
         self.assertEqual(run2.export(), count)
         self.assertEqual(file_digest(self.original), self.original_hash)
 
@@ -255,7 +273,7 @@ class PipelineTests(unittest.TestCase):
             self.assertEqual([c for c in source['candidates'] if c['kind'] != 'lower'], others)
             self.assertEqual(any(c['kind'] == 'lower' for c in source['candidates']), preserve is not None)
             self.assertFalse(run.prepare_source(source))
-        self.assertEqual(self.client.upscales, 1)
+        self.assertEqual(self.client.upscales, 0)
 
     def test_crop_edit_retags_without_overwriting_manual_edits(self):
         run, source = self.prepared()

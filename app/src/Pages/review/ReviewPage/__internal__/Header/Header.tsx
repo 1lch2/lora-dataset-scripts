@@ -72,7 +72,7 @@ export function Header() {
             id='exportDataset'
             className='primary'
             hidden={v.stage !== 'tag'}
-            disabled={false}
+            disabled={v.processing || !v.state?.datasetLoaded}
             onClick={() => v.handleAction('exportDataset')}
           >
             导出训练集
@@ -80,15 +80,15 @@ export function Header() {
           <button
             id='openWorkdir'
             title='在文件资源管理器中打开当前图片工作目录'
-            disabled={v.busy}
+            disabled={v.processing || !v.state?.datasetLoaded}
             onClick={() => v.handleAction('openWorkdir')}
           >
             打开工作目录
           </button>
           <button
             id='refresh'
-            title='重新读取已保存的数据'
-            disabled={v.busy}
+            title='同步目录文件和已保存记录，不执行图片处理'
+            disabled={v.processing || !v.state?.datasetLoaded}
             onClick={() => v.handleAction('refresh')}
           >
             刷新
