@@ -295,7 +295,7 @@ export function useReview(session: SessionInfo) {
       message((error as Error).message, true);
     }
   }
-  async function startJob(action: string) {
+  async function startJob(action: string, targetSourceId?: string) {
     if (processing || !state?.datasetLoaded) return;
     if (action === 'start_tag' && box && (!candidate?.box || box.some((v, i) => v !== candidate.box![i]))) {
       message('当前裁框尚未保存，请先保存并审核，再开始打标。', true);
@@ -312,7 +312,7 @@ export function useReview(session: SessionInfo) {
     try {
       await mutation.mutateAsync({
         action,
-        ...(['start_upscale', 'start_detect'].includes(action) ? { group: fields.group } : {}),
+        ...(targetSourceId ? { source: targetSourceId } : {}),
       });
       client.setQueryData(['job'], { ...job, status: 'running', action });
       message('');
@@ -383,6 +383,10 @@ export function useReview(session: SessionInfo) {
     startTag: () => startJob('start_tag'),
     upscaleDataset: () => startJob('start_upscale'),
     detectDataset: () => startJob('start_detect'),
+    detectSource: () => {
+      if (!source) return;
+      return startJob('start_detect', source.id);
+    },
     exportDataset: () => startJob('export'),
     refresh: async () => {
       try {

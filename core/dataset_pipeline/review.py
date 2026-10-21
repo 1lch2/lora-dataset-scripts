@@ -30,7 +30,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
     template = dict(config if config is not None else Run.load(directory).config if directory else {})
     analysis_only = directory is None and config is None
 
-    def process_job(action, group=None):
+    def process_job(action, group=None, source_id=None):
         try:
             with run_lock(directory):
                 run = Run.load(directory)
@@ -38,8 +38,9 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                     run, errors = import_sources(run.config)
                 elif action in ('start_upscale', 'start_detect'):
                     errors = []
-                    sources = [s for s in run.data['sources'].values() if s.get('active', True)
-                               and (not group or s['group'] == group)]
+                    sources = ([run.locate(source_id)] if source_id is not None else
+                               [s for s in run.data['sources'].values() if s.get('active', True)
+                                and (not group or s['group'] == group)])
                     if action == 'start_upscale':
                         sources = [s for s in sources if default_scale(s['original_size']) > s['scale']]
                     with mutex:
@@ -72,23 +73,27 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
             with mutex:
                 job.update(status="failed", errors=[str(error)])
 
-    def start_job(action, group=None):
+    def start_job(action, group=None, source_id=None):
         with mutex:
             if directory is None:
                 raise ValueError('请先选择并导入数据集')
             if group is not None and not isinstance(group, str):
                 raise ValueError('角色范围无效')
+            if source_id is not None and (action != 'start_detect' or not isinstance(source_id, str) or not source_id):
+                raise ValueError('单图识别参数无效')
             if job["status"] == "running":
                 if action == "sync_sources":
                     return
                 raise ValueError("已有任务正在运行")
             with run_lock(directory):
                 run = Run.load(directory)
-                sources = [s for s in run.data["sources"].values() if s.get("active", True)]
+                sources = ([run.locate(source_id)] if source_id is not None else
+                           [s for s in run.data["sources"].values() if s.get("active", True)
+                            and (action not in ('start_upscale', 'start_detect') or not group or s['group'] == group)])
                 if action in ('start_upscale', 'start_detect'):
                     if run.config.get('crop_mode') == 'prepared':
                         raise ValueError('完整打标数据集保留导入尺寸，无需超分或识别')
-                    if not any(not group or s['group'] == group for s in sources):
+                    if not sources:
                         raise ValueError('所选范围没有可用图片')
                 if action in ('start_tag', 'export'):
                     if not sources or any(s.get("error") for s in sources):
@@ -99,7 +104,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                                               for s in sources for c in s["candidates"] if c["status"] == "accepted"):
                         raise ValueError("请先完成所有接受样本的打标")
             job.update(id=secrets.token_hex(8), status="running", action=action, errors=[], count=None, total=0, done=0)
-        threading.Thread(target=process_job, args=(action, group), daemon=True).start()
+        threading.Thread(target=process_job, args=(action, group, source_id), daemon=True).start()
 
     class Handler(BaseHTTPRequestHandler):
         def valid_host(self):
@@ -264,7 +269,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                     self.reply(200, {"ok": True, "result": {}})
                     return
                 if data.get("action") in ("start_tag", "export", "sync_sources", 'start_upscale', 'start_detect'):
-                    start_job(data["action"], data.get('group'))
+                    start_job(data["action"], data.get('group'), data.get('source'))
                     self.reply(202, {"ok": True, "result": {}})
                     return
                 with mutex, run_lock(directory):

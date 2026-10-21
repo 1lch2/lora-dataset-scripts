@@ -21,6 +21,7 @@ export interface Source {
   group: string;
   relative: string;
   scale: number;
+  original_size?: [number, number];
   error?: string;
   notes?: string[];
   working?: string;

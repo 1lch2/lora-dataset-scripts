@@ -53,7 +53,7 @@ export function DatasetManager() {
           </div>
           {v.state?.datasetLoaded && v.state.config.crop_mode !== 'prepared' ? (
             <div className={styles.processing}>
-              <span className='hint'>处理范围：{v.fields.group || '全部角色'}</span>
+              <span className='hint'>处理范围：当前数据集全部图片（不受筛选影响）</span>
               <button
                 id='upscaleDataset'
                 type='button'
@@ -68,7 +68,7 @@ export function DatasetManager() {
                 disabled={disabled || !v.sources.length}
                 onClick={() => v.handleAction('detectDataset')}
               >
-                识别并生成裁切候选
+                识别主体并生成裁切候选
               </button>
               <span className='hint'>总像素不足 1024² × 80% 时放大 1.5 倍，各步骤独立执行。</span>
             </div>

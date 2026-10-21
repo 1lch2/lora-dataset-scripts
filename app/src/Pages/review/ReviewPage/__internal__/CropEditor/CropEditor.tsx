@@ -2,8 +2,22 @@ import { useReviewContext } from '../../../context';
 import { CROP_NAMES, imageUrl } from '../../../utils';
 import { CropCanvas } from '../../../CropCanvas';
 
+function formatScaleOption(label: string, scale: number, size?: [number, number]) {
+  if (!size) return label;
+  const dimensions = size.map((dimension) => {
+    if (scale === 1) return dimension;
+    const scaled = (dimension * scale) / 8;
+    const lower = Math.floor(scaled);
+    // 与后端 Python round 一致，恰好位于中点时取偶数，再对齐到 8 的倍数。
+    const rounded = scaled - lower === 0.5 ? lower + (lower % 2) : Math.round(scaled);
+    return rounded * 8;
+  });
+  return `${label}（${dimensions[0]} × ${dimensions[1]}）`;
+}
+
 export function CropEditor() {
   const v = useReviewContext();
+  const persons = v.source?.detection?.persons || [];
   return (
     <main id='cropView' role='tabpanel' aria-labelledby='cropTab' hidden={v.stage !== 'crop'}>
       <section className='editor' hidden={!v.source}>
@@ -79,9 +93,9 @@ export function CropEditor() {
                 value={v.fields.scale}
                 onChange={(event) => v.handleField('scale', event.target.value)}
               >
-                <option value='1'>不放大</option>
-                <option value='1.5'>1.5 倍</option>
-                <option value='2'>2 倍</option>
+                <option value='1'>{formatScaleOption('不放大', 1, v.source?.original_size)}</option>
+                <option value='1.5'>{formatScaleOption('1.5 倍', 1.5, v.source?.original_size)}</option>
+                <option value='2'>{formatScaleOption('2 倍', 2, v.source?.original_size)}</option>
               </select>
             </label>
             <button
@@ -91,25 +105,34 @@ export function CropEditor() {
             >
               仅更新此图倍率
             </button>
-            <label>
-              主体
-              <select
-                id='person'
-                value={v.fields.person}
-                onChange={(event) => v.handleField('person', event.target.value)}
-              >
-                {(v.source?.detection?.persons || []).map((p, i) => (
-                  <option key={i} value={i}>{`人物 ${i + 1} (${p.score.toFixed(2)})`}</option>
-                ))}
-              </select>
-            </label>
             <button
-              id='setPerson'
-              disabled={v.processing || !v.source?.detection?.persons.length}
-              onClick={() => v.handleAction('setPerson')}
+              id='detectSource'
+              disabled={v.processing || !v.source || v.state?.config.crop_mode === 'prepared'}
+              onClick={() => v.handleAction('detectSource')}
             >
-              生成主体裁框
+              识别此图主体
             </button>
+            {persons.length > 0 ? (
+              <>
+                <label>
+                  主体
+                  <select
+                    id='person'
+                    value={v.fields.person}
+                    onChange={(event) => v.handleField('person', event.target.value)}
+                  >
+                    {persons.map((p, i) => (
+                      <option key={i} value={i}>{`人物 ${i + 1} (${p.score.toFixed(2)})`}</option>
+                    ))}
+                  </select>
+                </label>
+                <button id='setPerson' disabled={v.processing} onClick={() => v.handleAction('setPerson')}>
+                  生成主体裁框
+                </button>
+              </>
+            ) : (
+              <p className='hint'>暂无主体识别结果，请先识别此图主体。</p>
+            )}
           </details>
           <details>
             <summary>检测提示</summary>

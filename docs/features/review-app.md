@@ -10,9 +10,10 @@
 - [app/src/App/App.tsx](../../app/src/App/App.tsx)：从 `/api/session` 获取审核会话，再挂载页面。
 - [ReviewPage](../../app/src/Pages/review/ReviewPage/ReviewPage.tsx)：组合页头、启动主页、图片库、裁切编辑、标签工具、分析页、LoRA 文件工具、底部状态与大图弹窗；主页隐藏审核工作区与底部状态，专属一级组件位于同目录 `__internal__/`。
 - [useReview](../../app/src/Pages/review/useReview.ts)：审核状态、裁框草稿、阶段切换、编辑 mutation、任务轮询与提示；服务端数据由 TanStack Query 管理，客户端状态使用 Hooks。
-- [DatasetManager](../../app/src/Pages/review/ReviewPage/__internal__/DatasetManager/DatasetManager.tsx)：IDE 风格主页，提供已有数据集的名称/路径搜索、打开、刷新，以及显式选择完整打标/待处理类型后填写目录的导入表单；工作区显示当前目录与切换入口，待处理模式提供按当前身份范围超分和识别的独立按钮。
+- [DatasetManager](../../app/src/Pages/review/ReviewPage/__internal__/DatasetManager/DatasetManager.tsx)：IDE 风格主页，提供已有数据集的名称/路径搜索、打开、刷新，以及显式选择完整打标/待处理类型后填写目录的导入表单；工作区显示当前目录与切换入口，待处理模式顶部明确标注超分和主体识别作用于数据集全部图片，不受筛选影响。
 - [useTags](../../app/src/Pages/review/useTags.ts)：筛选、选择、图片过滤篮、标签统计与操作范围。
 - [CropCanvas](../../app/src/Pages/review/CropCanvas/CropCanvas.tsx)：原裁框坐标与拖动算法；通过 ref 管理 Canvas 与图片加载，卸载时释放 ResizeObserver。
+- [CropEditor](../../app/src/Pages/review/ReviewPage/__internal__/CropEditor/CropEditor.tsx)：裁切审核与倍率/主体设置，提供“识别此图主体”的单图后台任务；仅在当前图检测到人物时显示主体下拉框及生成主体裁框按钮。倍率选项根据 `original_size` 在括号内显示输出分辨率，不放大保留原尺寸，1.5/2 倍按后端 Python `round` 的中点取偶规则对齐到 8 的倍数。
 - [styles.module.css](../../app/src/Pages/review/ReviewPage/styles.module.css)：统一使用桌面审核布局，无移动端或窄屏宽度断点；全局选择器用于保持已有 DOM 样式契约，局部 `.page` 不生成布局盒。主页样式位于 DatasetManager 同目录的 CSS Module，保留桌面窗口高度调整及减少动态效果的可访问性设置。
 - [app/src/api/client.ts](../../app/src/api/client.ts)：同源请求与会话 token；请求 URL、操作载荷沿用 Python 协议。
 - [core/dataset_pipeline/review.py](../../core/dataset_pipeline/review.py)：API、图片、编辑/后台任务、会话，以及可选的 `app/dist` 静态资源。
@@ -22,7 +23,7 @@
 
 普通审核启动进入 `home`，首次只读取状态和已有运行列表，不加载目录；空白会话返回 `datasetLoaded=false`，裁切/标签 tab 在加载数据集前禁用。独立分析及 `?analysis` 入口仍进入分析页。显式导入、打开已有数据集或顶部刷新通过带会话 token 的 `sync_sources` 调用 `import_sources`，不执行图片处理；切换重置筛选和选择。完整打标数据集在没有待审裁框时进入标签页，待处理数据集进入裁切页；返回主页保留当前工作，继续按钮恢复本次会话的审核阶段。主页不会被后台打标完成自动跳转。
 
-`start_upscale`、`start_detect`、`start_tag` 与导出共用任务互斥；前两者接受 `group` 指定角色范围。完整打标模式禁止自动超分/识别，缺少对应 TXT 的图片以空标签导入并提示；待处理模式不导入源 TXT 标签。已有标签编辑优先，同一目录和角色以不同模式导入使用独立运行。导入成品保留原格式与尺寸，导出沿用实际图片扩展名，避免 JPEG 字节被错误命名为 PNG。
+`start_upscale`、`start_detect`、`start_tag` 与导出共用任务互斥。顶部超分/主体识别不发送 `group`，作用于全部活跃图片；超分仅执行尺寸判定后需要放大的项。单图识别发送 `start_detect` 与 `source`，后端验证图片存在且活跃，只处理指定图片并保留已有审核和手动裁框。API 的超分/识别仍兼容 `group` 角色范围，单图 `source` 优先。完整打标模式禁止自动超分/识别，缺少对应 TXT 的图片以空标签导入并提示；待处理模式不导入源 TXT 标签。已有标签编辑优先，同一目录和角色以不同模式导入使用独立运行。导入成品保留原格式与尺寸，导出沿用实际图片扩展名，避免 JPEG 字节被错误命名为 PNG。
 
 文件名称由 `import_sources` 记录：`preserve_filename` 标记导入素材，原图片存入版本父目录并保留 `relative` 的原名、扩展名大小写与层级；`caption_name` 与标签的 `caption` 路径保留原 TXT 名称。旧记录同步时更新完整图及标签存储路径，保留当前编辑。`Run.tag_file` 统一读写已登记的标签路径；`_materialize` 对导入完整图返回原文件。`Run.export` 按原相对路径导出完整图和标签，图片直接复制源字节；标签先按角色清理再写入原路径，冲突在写入输出目录前报错。新裁片仍使用生成名称和 PNG，其他几何处理不受此命名规则影响。
 
