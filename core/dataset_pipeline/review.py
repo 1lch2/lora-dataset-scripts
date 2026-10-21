@@ -99,7 +99,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                     if not sources or any(s.get("error") for s in sources):
                         raise ValueError("没有可用图片或图片准备失败，请先完成准备")
                     if any(c["status"] == "pending" for s in sources for c in s["candidates"]):
-                        raise ValueError("请先接受或拒绝所有待审裁框")
+                        raise ValueError("请先接受或删除所有待审裁框")
                     if action == "export" and any(not run.current_tag(s, c)
                                               for s in sources for c in s["candidates"] if c["status"] == "accepted"):
                         raise ValueError("请先完成所有接受样本的打标")
@@ -169,6 +169,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                         data = run.data
                         data['datasetLoaded'] = True
                         for source in data["sources"].values():
+                            source['candidates'] = [c for c in source.get('candidates', []) if c['status'] != 'rejected']
                             for candidate in source.get("candidates", []):
                                 candidate["tag_current"] = run.current_tag(source, candidate) if source.get("prepare_key") else False
                         self.reply(200, data)
@@ -279,6 +280,9 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                     action = data["action"]
                     if action == "crop":
                         result = run.change_crop(data["source"], data.get("candidate"), data.get("box"), data.get("status"))
+                    elif action == 'delete_crop':
+                        run.delete_crop(data['source'], data.get('candidate'))
+                        result = {}
                     elif action in ('crop_subject', 'restore_original'):
                         replace_source_image(run, run.locate(data['source']), data.get('box'), action == 'restore_original')
                         result = {}

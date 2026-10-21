@@ -22,6 +22,7 @@ export interface Source {
   relative: string;
   scale: number;
   original_size?: [number, number];
+  working_size?: [number, number];
   original_backup?: { original: string; original_size: [number, number] };
   manual_processing?: boolean;
   error?: string;

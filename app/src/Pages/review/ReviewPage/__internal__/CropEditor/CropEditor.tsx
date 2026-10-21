@@ -23,6 +23,7 @@ export function CropEditor() {
   const [subjectCropSourceId, setSubjectCropSourceId] = useState<string>();
   const [subjectBox, setSubjectBox] = useState<Box | null>(null);
   const subjectCropping = !!v.source && subjectCropSourceId === v.source.id;
+  const imageSize = subjectCropping ? v.source?.original_size : v.source?.working_size;
   const allowProcessing = v.state?.config.crop_mode !== 'prepared' || v.source?.manual_processing;
   useEffect(() => {
     setSubjectCropSourceId(undefined);
@@ -49,9 +50,16 @@ export function CropEditor() {
     <main id='cropView' role='tabpanel' aria-labelledby='cropTab' hidden={v.stage !== 'crop'}>
       <section className='editor' hidden={!v.source}>
         <div className='editorHeading'>
-          <h2 id='sourceName' title={v.source ? `${v.source.group} / ${v.source.relative}` : ''}>
-            {v.source ? `${v.source.group} / ${v.source.relative}` : '选择图片'}
-          </h2>
+          <div className='sourceHeadingInfo'>
+            <h2 id='sourceName' title={v.source ? `${v.source.group} / ${v.source.relative}` : ''}>
+              {v.source ? `${v.source.group} / ${v.source.relative}` : '选择图片'}
+            </h2>
+            {imageSize ? (
+              <span className='sourceResolution' aria-label='当前图片分辨率'>
+                {imageSize[0]} × {imageSize[1]}
+              </span>
+            ) : null}
+          </div>
           <button
             id='focusCrop'
             aria-pressed={v.focusCrop}
@@ -98,7 +106,7 @@ export function CropEditor() {
                       v.setCandidateId(c.id);
                       v.setBox(c.box ? [...c.box] : null);
                     }}
-                  >{`${[c.kind, ...(c.aliases || [])].map((k) => CROP_NAMES[k]).join(' / ')} · ${c.kind === 'full' ? '固定保留' : ({ pending: '待审', accepted: '已接受', rejected: '已拒绝' } as Record<string, string>)[c.status]}`}</button>
+                  >{`${[c.kind, ...(c.aliases || [])].map((k) => CROP_NAMES[k]).join(' / ')} · ${c.kind === 'full' ? '固定保留' : ({ pending: '待审', accepted: '已接受' } as Record<string, string>)[c.status]}`}</button>
                   {c.kind === 'full' ? (
                     <button
                       id='cropSubject'
@@ -275,12 +283,12 @@ export function CropEditor() {
                   保存修改
                 </button>
                 <button
-                  id='rejectCrop'
-                  className='reject'
-                  disabled={v.processing || !v.candidate || v.full}
-                  onClick={() => v.handleAction('rejectCrop')}
+                  id='deleteCrop'
+                  className='destructive'
+                  disabled={v.processing || v.full || (!v.candidate && !v.box)}
+                  onClick={() => v.handleAction('deleteCrop')}
                 >
-                  拒绝并继续
+                  删除裁切
                 </button>
                 <button
                   id='acceptCrop'

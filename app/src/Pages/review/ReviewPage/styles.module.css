@@ -203,7 +203,7 @@ button:global(.primary) {
 button:global(.primary):hover {
   background: #265b3c;
 }
-button:global(.reject),
+button:global(.destructive),
 :global(.bad) {
   color: #a33730;
 }
@@ -364,16 +364,22 @@ h3 {
   align-items: baseline;
   gap: var(--review-space-2);
 }
-:global(.sourceIndex) {
+:global(.sourceIndex),
+:global(.sourceResolution) {
   flex: none;
-  min-width: 2.5em;
   padding-inline: var(--review-space-2);
   border-radius: var(--review-radius);
   background: var(--color-review-line);
   color: var(--color-review-ink);
   font-size: var(--review-text-xs);
   font-variant-numeric: tabular-nums;
+}
+:global(.sourceIndex) {
+  min-width: 2.5em;
   text-align: center;
+}
+:global(.sourceResolution) {
+  white-space: nowrap;
 }
 :global(.sourceName) {
   flex: 1;
@@ -422,6 +428,12 @@ h3 {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+:global(.sourceHeadingInfo) {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--review-space-2);
 }
 :global(.images) {
   min-height: 0;

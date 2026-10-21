@@ -234,14 +234,14 @@ export function useReview(session: SessionInfo) {
     previousSource: string,
     previousCandidate: string | undefined,
     result: string,
+    nextIndex?: number,
   ) {
     setReviewAdvance((previous) => previous + 1);
     const s = data.sources[previousSource],
       crops = s.candidates;
     const index = crops.findIndex((c) => c.id === previousCandidate);
-    const next = [...crops.slice(index + 1), ...crops.slice(0, index + 1)].find(
-      (c) => c.status === 'pending',
-    );
+    const start = nextIndex ?? index + 1;
+    const next = [...crops.slice(start), ...crops.slice(0, start)].find((c) => c.status === 'pending');
     if (next) {
       setSourceId(previousSource);
       setCandidateId(next.id);
@@ -277,20 +277,31 @@ export function useReview(session: SessionInfo) {
     if (processing) return;
     const previousSource = source?.id,
       previousCandidate = candidate?.id;
+    const previousIndex = source?.candidates.findIndex((c) => c.id === previousCandidate);
     message('处理中…');
     try {
       const result = await mutation.mutateAsync(data);
       if (result.result.id) setCandidateId(result.result.id);
       const updated = client.getQueryData<RunInfo>(['run'])!;
       setPreview(undefined);
+      if (data.action === 'delete_crop' && previousSource && previousCandidate) {
+        const key = `${previousSource}/${previousCandidate}`;
+        tags.setSelected((previous) => new Set([...previous].filter((item) => item !== key)));
+        tags.setImageBasket((previous) => new Set([...previous].filter((item) => item !== key)));
+        tags.setImageFilter((previous) => previous && new Set([...previous].filter((item) => item !== key)));
+        if (tags.singleKey === key) tags.setSingleKey(undefined);
+        setCandidateId(undefined);
+        setBox(null);
+      }
       if (advance && previousSource)
         advanceReview(
           updated,
           previousSource,
           previousCandidate,
-          data.status === 'rejected' ? '已拒绝' : '已接受',
+          data.action === 'delete_crop' ? '已删除裁切' : '已接受',
+          data.action === 'delete_crop' ? previousIndex : undefined,
         );
-      else message(data.action === 'crop' ? '裁框已保存，尚待接受或拒绝' : '已保存');
+      else message(data.action === 'crop' ? '裁框已保存，尚待接受或删除' : '已保存');
     } catch (error) {
       message((error as Error).message, true);
     }
@@ -445,8 +456,15 @@ export function useReview(session: SessionInfo) {
         { action: 'crop', source: source?.id, candidate: candidate?.id ?? null, box, status: 'accepted' },
         true,
       ),
-    rejectCrop: () =>
-      edit({ action: 'crop', source: source?.id, candidate: candidate?.id, status: 'rejected' }, true),
+    deleteCrop: () => {
+      if (!source || full || processing) return;
+      if (!candidate) {
+        restoreDraft(source);
+        message('已删除未保存的裁切');
+        return;
+      }
+      return edit({ action: 'delete_crop', source: source.id, candidate: candidate.id }, true);
+    },
     acceptSource: () => edit({ action: 'accept_source', source: source?.id }, true),
     setScale: () => edit({ action: 'scale', source: source?.id, scale: Number(fields.scale) }),
     setPerson: () => edit({ action: 'person', source: source?.id, index: Number(fields.person) }),

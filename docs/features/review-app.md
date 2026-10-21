@@ -2,7 +2,7 @@
 
 [返回功能导航](../feature-map.yaml)
 
-核对日期：2026-10-21。覆盖 React 入口、启动主页、数据集接入/切换/同步、手动超分/识别与裁切/标签 API 主链路；检测模型内部未在本专题展开。
+核对日期：2026-10-22。覆盖 React 入口、启动主页、数据集接入/切换/同步、手动超分/识别与裁切/标签 API 主链路；检测模型内部未在本专题展开。
 
 ## 入口与职责
 
@@ -16,6 +16,8 @@
 - [CropCanvas](../../app/src/Pages/review/CropCanvas/CropCanvas.tsx)：图片四周增加长边 4% 的背景留白，让贴边手柄完整显示并可从留白区域起拖；绘制与鼠标坐标扣除留白偏移，选框新建、移动和缩放均限制在图片内，保存坐标仍相对图片。普通裁切与主体裁切共用该逻辑；通过 ref 管理 Canvas 与图片加载，卸载时释放 ResizeObserver。
 - [CropEditor](../../app/src/Pages/review/ReviewPage/__internal__/CropEditor/CropEditor.tsx)：裁切审核与倍率/主体设置，提供“识别此图主体”的单图后台任务；仅在当前图检测到人物时显示主体下拉框及生成主体裁框按钮。倍率选项根据 `original_size` 在括号内显示输出分辨率，不放大保留原尺寸，1.5/2 倍按后端 Python `round` 的中点取偶规则对齐到 8 的倍数。
 - CropEditor 的完整图按钮右侧提供“裁切主体”：画布切换为当前完整底图，在原图坐标内手动画框后应用；恢复入口在存在 `original_backup` 时显示。取消只放弃草稿，应用及恢复调用 `useReview.replaceSourceImage` 并清理本图的编辑选择。
+- 工作区文件名后显示灰底分辨率标记，与左侧序号共用基础样式；普通裁切显示 `working_size`，主体裁切模式显示 `original_size`，对应当前画布的图片尺寸，不包含画布留白。
+- “删除裁切”对未保存画框丢弃草稿，对已保存候选调用 `delete_crop`；`Run.delete_crop` 保留删除历史并从活动候选数组移除对应项，完整图禁止删除。`advanceReview` 从删除项原位置继续定位待审候选。`/api/state` 隐藏旧版 `rejected` 记录，前端只展示待审/已接受状态；文件同步保留已删除后的候选清单。
 - [styles.module.css](../../app/src/Pages/review/ReviewPage/styles.module.css)：统一使用桌面审核布局，无移动端或窄屏宽度断点；全局选择器用于保持已有 DOM 样式契约，局部 `.page` 不生成布局盒。主页样式位于 DatasetManager 同目录的 CSS Module，保留桌面窗口高度调整及减少动态效果的可访问性设置。
 - [app/src/api/client.ts](../../app/src/api/client.ts)：同源请求与会话 token；请求 URL、操作载荷沿用 Python 协议。
 - [core/dataset_pipeline/review.py](../../core/dataset_pipeline/review.py)：API、图片、编辑/后台任务、会话，以及可选的 `app/dist` 静态资源。

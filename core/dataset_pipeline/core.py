@@ -366,6 +366,17 @@ class Run:
         self.save()
         return candidate
 
+    def delete_crop(self, source_id, candidate_id):
+        if not isinstance(candidate_id, str):
+            raise ValueError('请选择要删除的裁切')
+        source, candidate = self.locate(source_id, candidate_id)
+        if candidate['kind'] == 'full':
+            raise ValueError('完整图固定保留，不可删除')
+        source.setdefault('history', []).append({'at': time.time(), 'action': 'delete_crop',
+                                                'candidate': copy.deepcopy(candidate)})
+        source['candidates'].remove(candidate)
+        self.save()
+
     def select_person(self, source_id, index):
         source = self.locate(source_id)
         crops, notes = propose(source["working_size"], source["detection"], self.config["target_area"],
@@ -563,7 +574,7 @@ class Run:
                     or file_digest(source["source_path"]) != source["fingerprint"]):
                 raise ValueError("输入已变化或 prepare 失败，请先重新处理")
             if any(c["status"] == "pending" for c in source["candidates"]):
-                raise ValueError("仍有待审核裁框，请接受或拒绝后再导出")
+                raise ValueError("仍有待审核裁框，请接受或删除后再导出")
             for candidate in source["candidates"]:
                 if candidate["status"] == "accepted":
                     if not self.current_tag(source, candidate):
