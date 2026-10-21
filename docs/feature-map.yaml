@@ -14,7 +14,7 @@ features:
       - core/edit_caption.py
   - id: review-app
     name: 启动主页、数据集导入与 React 审核前端
-    keywords: [React, Vite, app/src, 主页, 欢迎页, IDE, 已有数据集, 导入, 完整打标, 待处理, 裁框, 标签, 批量编辑, 筛选, 预览, 导出, 数据集目录, 接入, 已裁切, 同步, dataset-raw, 预处理, 放大, 倍率, 批量超分, 单图识别, 主体, 原文件名, 扩展名]
+    keywords: [React, Vite, app/src, 主页, 欢迎页, IDE, 已有数据集, 导入, 完整打标, 待处理, 图片列表, 序号, 裁框, 标签, 批量编辑, 筛选, 预览, 导出, 数据集目录, 接入, 已裁切, 同步, dataset-raw, 预处理, 放大, 倍率, 批量超分, 单图识别, 主体, 裁切主体, 替换完整图, 恢复原始图, 原文件名, 扩展名]
     doc: docs/features/review-app.md
     entrypoints:
       - app/src/Pages/review/ReviewPage/ReviewPage.tsx

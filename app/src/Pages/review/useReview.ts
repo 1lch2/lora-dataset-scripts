@@ -321,6 +321,32 @@ export function useReview(session: SessionInfo) {
     }
     await jobQuery.refetch();
   }
+  async function replaceSourceImage(action: 'crop_subject' | 'restore_original', subjectBox?: Box) {
+    if (processing || !source) return false;
+    message('处理中…');
+    try {
+      await mutation.mutateAsync({ action, source: source.id, ...(subjectBox ? { box: subjectBox } : {}) });
+      setCandidateId('full');
+      setBox(null);
+      setPreview(undefined);
+      setPreviewImage('');
+      const belongsToSource = (key: string) => key.startsWith(`${source.id}/`);
+      tags.setSelected((previous) => new Set([...previous].filter((key) => !belongsToSource(key))));
+      tags.setImageBasket((previous) => new Set([...previous].filter((key) => !belongsToSource(key))));
+      tags.setImageFilter(null);
+      if (tags.singleKey && belongsToSource(tags.singleKey)) tags.setSingleKey(undefined);
+      setJobStatus('');
+      message(
+        action === 'crop_subject'
+          ? '主体已替换完整图，本图裁框、识别结果和标签已清空，可重新处理。'
+          : '原始图已恢复，本图裁框、识别结果和标签已清空，可重新处理。',
+      );
+      return true;
+    } catch (error) {
+      message((error as Error).message, true);
+      return false;
+    }
+  }
   const pending = sources.reduce((n, s) => n + s.candidates.filter((c) => c.status === 'pending').length, 0);
   const samples = sources.flatMap((s) => s.candidates.filter((c) => c.status === 'accepted'));
   const untagged = samples.filter((c) => !c.tag_current).length;
@@ -558,6 +584,7 @@ export function useReview(session: SessionInfo) {
     previewPending: previewMutation.isPending,
     handleAction,
     edit,
+    replaceSourceImage,
     sources,
     jobStatus: jobQuery.error
       ? `${jobQuery.error.message}，正在重连；可用“刷新数据”核对已保存结果。`

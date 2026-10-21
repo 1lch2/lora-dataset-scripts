@@ -13,7 +13,7 @@ from rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
 from .core import DEFAULTS, Run, asset, run_lock
 from .geometry import default_scale
 from .analysis_job import AnalysisJob
-from .datasets import detect_source, import_config, import_sources, list_datasets, upscale_source
+from .datasets import detect_source, import_config, import_sources, list_datasets, replace_source_image, upscale_source
 
 
 def make_server(directory=None, port=8765, config=None, model_setup=None):
@@ -91,7 +91,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                            [s for s in run.data["sources"].values() if s.get("active", True)
                             and (action not in ('start_upscale', 'start_detect') or not group or s['group'] == group)])
                 if action in ('start_upscale', 'start_detect'):
-                    if run.config.get('crop_mode') == 'prepared':
+                    if run.config.get('crop_mode') == 'prepared' and not (source_id and sources[0].get('manual_processing')):
                         raise ValueError('完整打标数据集保留导入尺寸，无需超分或识别')
                     if not sources:
                         raise ValueError('所选范围没有可用图片')
@@ -279,12 +279,15 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                     action = data["action"]
                     if action == "crop":
                         result = run.change_crop(data["source"], data.get("candidate"), data.get("box"), data.get("status"))
+                    elif action in ('crop_subject', 'restore_original'):
+                        replace_source_image(run, run.locate(data['source']), data.get('box'), action == 'restore_original')
+                        result = {}
                     elif action == "scale":
-                        if run.config.get('crop_mode') == 'prepared':
+                        source = run.locate(data['source'])
+                        if run.config.get('crop_mode') == 'prepared' and not source.get('manual_processing'):
                             raise ValueError('成品数据集保留导入尺寸')
                         if data['scale'] != 1 and model_setup:
                             model_setup(run.config)
-                        source = run.locate(data['source'])
                         upscale_source(run, source, data['scale'])
                         source['scale_override'] = data['scale']
                         run.save()

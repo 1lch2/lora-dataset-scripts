@@ -18,7 +18,7 @@ export function Library() {
           <span id='sourceProgress'>{`${v.tags.filteredSources.filter((s) => !s.error && !s.candidates.some((c) => c.status === 'pending')).length} / ${v.tags.filteredSources.length} 张无待审裁框`}</span>
         </div>
         <div id='sources' aria-label='源图片'>
-          {v.tags.filteredSources.map((s) => {
+          {v.tags.filteredSources.map((s, index) => {
             const pending = s.candidates.filter((c) => c.status === 'pending').length;
             return (
               <button
@@ -30,7 +30,10 @@ export function Library() {
                   v.restoreDraft(s);
                 }}
               >
-                <span>{s.relative}</span>
+                <span className='sourceTitle'>
+                  <span className='sourceIndex'>{index + 1}</span>
+                  <span className='sourceName'>{s.relative}</span>
+                </span>
                 <span className={`sourceMeta${!pending && !s.error ? ' complete' : ''}`}>
                   {s.error
                     ? '处理失败'

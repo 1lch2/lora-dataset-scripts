@@ -383,6 +383,8 @@ class Run:
 
     def tag_key(self, source, candidate):
         image_key = source["fingerprint"] if candidate["kind"] == "full" else source["prepare_key"]
+        if candidate['kind'] == 'full' and source.get('original_backup'):
+            image_key = digest([image_key, source['original']])
         return digest([image_key, candidate["box"], 1280, self.config["tagger_model"],
                        self.config["tag_threshold"],
                        source.get("detection") if candidate["box"] else None, "tag-v2-before-resize"])
@@ -444,7 +446,8 @@ class Run:
                 try:
                     key = self.tag_key(source, candidate)
                     if candidate["box"] is None:
-                        scores = self.client.tag(Path(source["source_path"]))
+                        image = asset(self.directory, source['original']) if source.get('original_backup') else Path(source['source_path'])
+                        scores = self.client.tag(image)
                     else:
                         with Image.open(asset(self.directory, source["working"])) as image:
                             with ImageOps.exif_transpose(image).crop(candidate["box"]) as crop:
@@ -595,7 +598,7 @@ class Run:
                 name = f"{source['id']}_{candidate['id']}"
                 image_path = asset(self.directory, tag["image"])
                 if candidate['kind'] == 'full' and self.preserve_filename(source):
-                    image_path = Path(source['source_path'])
+                    image_path = asset(self.directory, source['original']) if source.get('original_backup') else Path(source['source_path'])
                     relative_image = Path(source['relative'])
                     relative_caption = relative_image.with_name(source.get('caption_name', relative_image.with_suffix('.txt').name))
                 else:

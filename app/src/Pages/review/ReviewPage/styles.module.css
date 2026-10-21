@@ -359,6 +359,25 @@ h3 {
 :global(#sources) button span {
   display: block;
 }
+:global(#sources) :global(.sourceTitle) {
+  display: flex;
+  align-items: baseline;
+  gap: var(--review-space-2);
+}
+:global(.sourceIndex) {
+  flex: none;
+  min-width: 2.5em;
+  padding-inline: var(--review-space-2);
+  border-radius: var(--review-radius);
+  background: var(--color-review-line);
+  color: var(--color-review-ink);
+  font-size: var(--review-text-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+:global(.sourceName) {
+  flex: 1;
+}
 :global(.sourceMeta) {
   color: #6c746c;
   font-size: 12px;
@@ -449,6 +468,16 @@ canvas {
 }
 :global(#candidates) button {
   text-align: left;
+}
+:global(.candidateRow) {
+  display: flex;
+  gap: 5px;
+}
+:global(.candidateRow) > button:first-child {
+  flex: 1;
+}
+:global(#cropSubject) {
+  flex: none;
 }
 :global(.cropParts) > button {
   width: 100%;

@@ -119,6 +119,8 @@ def import_sources(config):
                               candidates=[full], detection={'persons': [], 'heads': []}, notes=[])
                 source.pop('scale_override', None)
                 source.pop('person_index', None)
+                source.pop('original_backup', None)
+                source.pop('manual_processing', None)
                 if previous.get('tag'):
                     full['tag'] = copy.deepcopy(previous['tag'])
                     full['tag']['stale'] = True
@@ -127,20 +129,21 @@ def import_sources(config):
                 if not destination.exists():
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(path, destination)
-                source['original'] = original
+                current_original = previous_original if source.get('original_backup') else original
+                source['original'] = current_original
                 if source['working'] == previous_original:
-                    source['working'] = original
+                    source['working'] = current_original
                 full = source['candidates'][0]
                 if full.get('tag'):
                     old_caption = run.tag_file(full['tag'])
-                    full['tag'].update(image=original, caption=Path(original).with_name(source['caption_name']).as_posix())
+                    full['tag'].update(image=current_original, caption=Path(current_original).with_name(source['caption_name']).as_posix())
                     new_caption = run.tag_file(full['tag'])
                     if old_caption != new_caption:
                         if old_caption.is_file():
                             shutil.copy2(old_caption, new_caption)
                         else:
                             run.write_tag_file(full['tag'])
-            if config.get('import_captions'):
+            if config.get('import_captions') and not source.get('manual_processing'):
                 full = source['candidates'][0]
                 if not unchanged and full.get('tag'):
                     full['tag'].update(key=run.tag_key(source, full), image=source['original'], stale=False,
@@ -172,6 +175,58 @@ def check_source(run, source):
         raise ValueError('源文件已变化，请先刷新数据集')
 
 
+def replace_source_image(run, source, box=None, restore=False):
+    """替换处理底图并重置衍生结果，输入目录中的原文件始终保留。"""
+    check_source(run, source)
+    backup = source.get('original_backup')
+    if restore:
+        if not backup:
+            raise ValueError('当前图片没有可恢复的主体裁切')
+        original = backup['original']
+        with Image.open(asset(run.directory, original)) as image:
+            size = list(ImageOps.exif_transpose(image).size)
+    else:
+        if not isinstance(box, (list, tuple)):
+            raise ValueError('请先手动画出主体范围')
+        with Image.open(asset(run.directory, source['original'])) as image:
+            oriented = ImageOps.exif_transpose(image)
+            box = validate_box(box, oriented.size)
+            key = digest([source['fingerprint'], source['original'], box, 'subject-original-v1'])
+            original = f"subject/{source['id']}-{key[:16]}/{source['relative']}"
+            destination = asset(run.directory, original)
+            if not destination.exists():
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                cropped = oriented.crop(box)
+                image_format = Image.registered_extensions()[Path(source['relative']).suffix.lower()]
+                if image_format == 'JPEG' and cropped.mode not in ('RGB', 'L'):
+                    cropped = cropped.convert('RGB')
+                options = {'quality': 95} if image_format == 'JPEG' else {'lossless': True} if image_format == 'WEBP' else {}
+                temporary = destination.with_suffix(destination.suffix + '.tmp')
+                try:
+                    cropped.save(temporary, format=image_format, **options)
+                    temporary.replace(destination)
+                finally:
+                    temporary.unlink(missing_ok=True)
+            size = [box[2] - box[0], box[3] - box[1]]
+    source.setdefault('history', []).append({
+        'at': time.time(), 'action': 'restore_original' if restore else 'crop_subject',
+        'original': source['original'], 'original_size': source['original_size'][:],
+        'working': source['working'], 'candidates': copy.deepcopy(source['candidates']),
+    })
+    if restore:
+        source.pop('original_backup')
+    elif not backup:
+        source['original_backup'] = {'original': source['original'], 'original_size': source['original_size'][:]}
+    source.update(original=original, original_size=size, working=original, working_size=size[:], scale=1,
+                  preserve_filename=True, manual_processing=True,
+                  prepare_key=digest([source['fingerprint'], original, 'subject-base-v1']),
+                  candidates=[{'id': 'full', 'kind': 'full', 'box': None, 'aliases': [], 'status': 'accepted'}],
+                  detection={'persons': [], 'heads': []}, notes=['处理底图已重置，请重新识别、裁切和打标。'])
+    for key in ('person_index', 'scale_override', 'error'):
+        source.pop(key, None)
+    run.save()
+
+
 def upscale_source(run, source, scale):
     """只变更工作图倍率，已有裁框跟随实际尺寸映射，不触发检测。"""
     check_source(run, source)
@@ -179,7 +234,8 @@ def upscale_source(run, source, scale):
         raise ValueError('倍率只能为 1、1.5 或 2')
     if source['scale'] == scale:
         return False
-    key = digest([source['fingerprint'], scale,
+    image_key = [source['fingerprint'], source['original']] if source.get('original_backup') else source['fingerprint']
+    key = digest([image_key, scale,
                   {k: run.config[k] for k in ('forge_url', 'upscaler_1', 'upscaler_2', 'blend')}, 'upscale-only-v1'])
     working = source['original'] if scale == 1 else f"working/{source['id']}-{key[:16]}.png"
     destination = asset(run.directory, working)

@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import type { Box } from '../../../../../api/types';
 import { useReviewContext } from '../../../context';
 import { CROP_NAMES, imageUrl } from '../../../utils';
 import { CropCanvas } from '../../../CropCanvas';
@@ -18,6 +20,31 @@ function formatScaleOption(label: string, scale: number, size?: [number, number]
 export function CropEditor() {
   const v = useReviewContext();
   const persons = v.source?.detection?.persons || [];
+  const [subjectCropSourceId, setSubjectCropSourceId] = useState<string>();
+  const [subjectBox, setSubjectBox] = useState<Box | null>(null);
+  const subjectCropping = !!v.source && subjectCropSourceId === v.source.id;
+  const allowProcessing = v.state?.config.crop_mode !== 'prepared' || v.source?.manual_processing;
+  useEffect(() => {
+    setSubjectCropSourceId(undefined);
+    setSubjectBox(null);
+  }, [v.source?.id, v.stage]);
+  function handleStartSubjectCrop() {
+    if (!v.source) return;
+    v.setCandidateId('full');
+    setSubjectCropSourceId(v.source.id);
+    setSubjectBox(null);
+  }
+  function handleCancelSubjectCrop() {
+    setSubjectCropSourceId(undefined);
+    setSubjectBox(null);
+  }
+  async function handleApplySubjectCrop() {
+    if (!subjectBox) return;
+    if (await v.replaceSourceImage('crop_subject', subjectBox)) handleCancelSubjectCrop();
+  }
+  async function handleRestoreOriginal() {
+    if (await v.replaceSourceImage('restore_original')) handleCancelSubjectCrop();
+  }
   return (
     <main id='cropView' role='tabpanel' aria-labelledby='cropTab' hidden={v.stage !== 'crop'}>
       <section className='editor' hidden={!v.source}>
@@ -36,13 +63,19 @@ export function CropEditor() {
         </div>
         <div className='images'>
           <figure className='workingFigure'>
-            <figcaption>工作图 · 拖动裁框移动，拖动角点缩放</figcaption>
+            <figcaption>
+              {subjectCropping ? '裁切主体 · 在完整图上拖出主体范围' : '工作图 · 拖动裁框移动，拖动角点缩放'}
+            </figcaption>
             <CropCanvas
-              image={v.source?.working ? imageUrl(v.source, 'working', v.state!.updated_at) : ''}
-              box={v.box}
-              disabled={v.processing || v.full}
+              image={
+                v.source?.working
+                  ? imageUrl(v.source, subjectCropping ? 'original' : 'working', v.state!.updated_at)
+                  : ''
+              }
+              box={subjectCropping ? subjectBox : v.box}
+              disabled={v.processing || (!subjectCropping && v.full)}
               visible={v.stage === 'crop'}
-              onChange={v.setBox}
+              onChange={subjectCropping ? setSubjectBox : v.setBox}
             />
           </figure>
         </div>
@@ -56,21 +89,45 @@ export function CropEditor() {
             </p>
             <div id='candidates'>
               {v.source?.candidates.map((c) => (
-                <button
-                  key={c.id}
-                  data-candidate={c.id}
-                  className={c.id === v.candidate?.id ? 'active' : ''}
-                  disabled={v.busy}
-                  onClick={() => {
-                    v.setCandidateId(c.id);
-                    v.setBox(c.box ? [...c.box] : null);
-                  }}
-                >{`${[c.kind, ...(c.aliases || [])].map((k) => CROP_NAMES[k]).join(' / ')} · ${c.kind === 'full' ? '固定保留' : ({ pending: '待审', accepted: '已接受', rejected: '已拒绝' } as Record<string, string>)[c.status]}`}</button>
+                <div className='candidateRow' key={c.id}>
+                  <button
+                    data-candidate={c.id}
+                    className={c.id === v.candidate?.id ? 'active' : ''}
+                    disabled={v.busy || subjectCropping}
+                    onClick={() => {
+                      v.setCandidateId(c.id);
+                      v.setBox(c.box ? [...c.box] : null);
+                    }}
+                  >{`${[c.kind, ...(c.aliases || [])].map((k) => CROP_NAMES[k]).join(' / ')} · ${c.kind === 'full' ? '固定保留' : ({ pending: '待审', accepted: '已接受', rejected: '已拒绝' } as Record<string, string>)[c.status]}`}</button>
+                  {c.kind === 'full' ? (
+                    <button
+                      id='cropSubject'
+                      disabled={v.processing || subjectCropping || !v.source?.original_size}
+                      onClick={handleStartSubjectCrop}
+                    >
+                      裁切主体
+                    </button>
+                  ) : null}
+                </div>
               ))}
             </div>
+            {v.source?.original_backup ? (
+              <button
+                id='restoreOriginal'
+                disabled={v.processing}
+                onClick={() => void handleRestoreOriginal()}
+              >
+                恢复原始图
+              </button>
+            ) : null}
+            {subjectCropping ? (
+              <p className='hint'>
+                应用后以选中范围替换完整图，并清空本图已有裁框、识别结果和标签。原图可恢复。
+              </p>
+            ) : null}
             <button
               id='newCrop'
-              disabled={v.processing}
+              disabled={v.processing || subjectCropping}
               onClick={() => v.handleAction('newCrop')}
               className={v.candidateId === null ? 'active' : ''}
             >
@@ -78,7 +135,9 @@ export function CropEditor() {
             </button>
             <button
               id='acceptSource'
-              disabled={v.processing || !v.source?.candidates.some((c) => c.status === 'pending')}
+              disabled={
+                v.processing || subjectCropping || !v.source?.candidates.some((c) => c.status === 'pending')
+              }
               onClick={() => v.handleAction('acceptSource')}
             >
               接受本图全部待审裁框
@@ -100,14 +159,14 @@ export function CropEditor() {
             </label>
             <button
               id='setScale'
-              disabled={v.processing || v.state?.config.crop_mode === 'prepared'}
+              disabled={v.processing || subjectCropping || !allowProcessing}
               onClick={() => v.handleAction('setScale')}
             >
               仅更新此图倍率
             </button>
             <button
               id='detectSource'
-              disabled={v.processing || !v.source || v.state?.config.crop_mode === 'prepared'}
+              disabled={v.processing || subjectCropping || !v.source || !allowProcessing}
               onClick={() => v.handleAction('detectSource')}
             >
               识别此图主体
@@ -126,7 +185,11 @@ export function CropEditor() {
                     ))}
                   </select>
                 </label>
-                <button id='setPerson' disabled={v.processing} onClick={() => v.handleAction('setPerson')}>
+                <button
+                  id='setPerson'
+                  disabled={v.processing || subjectCropping}
+                  onClick={() => v.handleAction('setPerson')}
+                >
                   生成主体裁框
                 </button>
               </>
@@ -141,7 +204,9 @@ export function CropEditor() {
             </p>
           </details>
           <figure className='originalFigure'>
-            <figcaption>完整原图 · 固定保留</figcaption>
+            <figcaption>
+              {v.source?.original_backup ? '主体完整图 · 固定保留' : '完整原图 · 固定保留'}
+            </figcaption>
             <button
               id='originalPreview'
               className='imageButton'
@@ -162,14 +227,18 @@ export function CropEditor() {
         <div className='cropActions'>
           <div className='cropSize'>
             <strong id='dimensions'>
-              {v.box
-                ? `${v.width} × ${v.height} · ${(v.width * v.height).toLocaleString()} 像素`
-                : v.full
-                  ? '完整原图 · 固定保留'
-                  : '在工作图上拖出矩形'}
+              {subjectCropping
+                ? subjectBox
+                  ? `${Math.round(subjectBox[2]) - Math.round(subjectBox[0])} × ${Math.round(subjectBox[3]) - Math.round(subjectBox[1])} · 主体范围`
+                  : '在完整图上拖出主体范围'
+                : v.box
+                  ? `${v.width} × ${v.height} · ${(v.width * v.height).toLocaleString()} 像素`
+                  : v.full
+                    ? '完整原图 · 固定保留'
+                    : '在工作图上拖出矩形'}
             </strong>
             <span id='areaStatus' className={v.box && !v.enough ? 'bad' : ''}>
-              {v.box
+              {!subjectCropping && v.box
                 ? v.enough
                   ? '✓ 达到像素下限'
                   : `不足 ${v.state?.config.min_area.toLocaleString()} 像素，请扩大裁框`
@@ -177,29 +246,52 @@ export function CropEditor() {
             </span>
           </div>
           <div className='toolbar' role='group' aria-label='当前裁框操作'>
-            <button
-              id='saveCrop'
-              disabled={v.processing || !v.box || v.full}
-              onClick={() => v.handleAction('saveCrop')}
-            >
-              保存修改
-            </button>
-            <button
-              id='rejectCrop'
-              className='reject'
-              disabled={v.processing || !v.candidate || v.full}
-              onClick={() => v.handleAction('rejectCrop')}
-            >
-              拒绝并继续
-            </button>
-            <button
-              id='acceptCrop'
-              className='primary'
-              disabled={v.processing || !v.enough || v.full}
-              onClick={() => v.handleAction('acceptCrop')}
-            >
-              接受并继续
-            </button>
+            {subjectCropping ? (
+              <>
+                <button disabled={v.processing} onClick={handleCancelSubjectCrop}>
+                  取消主体裁切
+                </button>
+                <button
+                  id='applySubjectCrop'
+                  className='primary'
+                  disabled={
+                    v.processing ||
+                    !subjectBox ||
+                    Math.round(subjectBox[2]) <= Math.round(subjectBox[0]) ||
+                    Math.round(subjectBox[3]) <= Math.round(subjectBox[1])
+                  }
+                  onClick={() => void handleApplySubjectCrop()}
+                >
+                  应用主体裁切
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  id='saveCrop'
+                  disabled={v.processing || !v.box || v.full}
+                  onClick={() => v.handleAction('saveCrop')}
+                >
+                  保存修改
+                </button>
+                <button
+                  id='rejectCrop'
+                  className='reject'
+                  disabled={v.processing || !v.candidate || v.full}
+                  onClick={() => v.handleAction('rejectCrop')}
+                >
+                  拒绝并继续
+                </button>
+                <button
+                  id='acceptCrop'
+                  className='primary'
+                  disabled={v.processing || !v.enough || v.full}
+                  onClick={() => v.handleAction('acceptCrop')}
+                >
+                  接受并继续
+                </button>
+              </>
+            )}
           </div>
         </div>
       </section>

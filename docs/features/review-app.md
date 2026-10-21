@@ -12,12 +12,15 @@
 - [useReview](../../app/src/Pages/review/useReview.ts)：审核状态、裁框草稿、阶段切换、编辑 mutation、任务轮询与提示；服务端数据由 TanStack Query 管理，客户端状态使用 Hooks。
 - [DatasetManager](../../app/src/Pages/review/ReviewPage/__internal__/DatasetManager/DatasetManager.tsx)：IDE 风格主页，提供已有数据集的名称/路径搜索、打开、刷新，以及显式选择完整打标/待处理类型后填写目录的导入表单；工作区显示当前目录与切换入口，待处理模式顶部明确标注超分和主体识别作用于数据集全部图片，不受筛选影响。
 - [useTags](../../app/src/Pages/review/useTags.ts)：筛选、选择、图片过滤篮、标签统计与操作范围。
+- [Library](../../app/src/Pages/review/ReviewPage/__internal__/Library/Library.tsx)：左侧图片列表与当前图选择；按筛选后的显示顺序从 1 编号，序号以独立背景色块显示在文件名前。
 - [CropCanvas](../../app/src/Pages/review/CropCanvas/CropCanvas.tsx)：原裁框坐标与拖动算法；通过 ref 管理 Canvas 与图片加载，卸载时释放 ResizeObserver。
 - [CropEditor](../../app/src/Pages/review/ReviewPage/__internal__/CropEditor/CropEditor.tsx)：裁切审核与倍率/主体设置，提供“识别此图主体”的单图后台任务；仅在当前图检测到人物时显示主体下拉框及生成主体裁框按钮。倍率选项根据 `original_size` 在括号内显示输出分辨率，不放大保留原尺寸，1.5/2 倍按后端 Python `round` 的中点取偶规则对齐到 8 的倍数。
+- CropEditor 的完整图按钮右侧提供“裁切主体”：画布切换为当前完整底图，在原图坐标内手动画框后应用；恢复入口在存在 `original_backup` 时显示。取消只放弃草稿，应用及恢复调用 `useReview.replaceSourceImage` 并清理本图的编辑选择。
 - [styles.module.css](../../app/src/Pages/review/ReviewPage/styles.module.css)：统一使用桌面审核布局，无移动端或窄屏宽度断点；全局选择器用于保持已有 DOM 样式契约，局部 `.page` 不生成布局盒。主页样式位于 DatasetManager 同目录的 CSS Module，保留桌面窗口高度调整及减少动态效果的可访问性设置。
 - [app/src/api/client.ts](../../app/src/api/client.ts)：同源请求与会话 token；请求 URL、操作载荷沿用 Python 协议。
 - [core/dataset_pipeline/review.py](../../core/dataset_pipeline/review.py)：API、图片、编辑/后台任务、会话，以及可选的 `app/dist` 静态资源。
 - [core/dataset_pipeline/datasets.py](../../core/dataset_pipeline/datasets.py)：发现运行、验证目录并生成独立路径；`import_config` 使用请求的 `cropMode=prepared/manual`，未传或为 `auto` 的旧请求仍按 TXT 存在与否判断；`import_sources` 只复制原始图片和按模式接入同名标签，保留未变化的审核记录；`upscale_source` 只更新工作图并映射已有裁框，`detect_source` 在当前工作图生成候选并保留已审核/编辑的裁框。
+- `datasets.replace_source_image` 负责 `crop_subject` / `restore_original`：新底图保存于工作目录，首轮主体裁切保存可恢复的 `original_backup`；每次替换重置倍率、全部裁框、检测结果和活动标签，完整图重新登记为已接受。输入目录不被覆盖，多次主体裁切仍可恢复首轮裁切前原图。`manual_processing` 阻止同步重新导入旧 TXT，并允许成品数据集中重置后的单图重新识别和超分；源文件内容变化后同步会丢弃旧底图替换状态。
 - [core/dataset_pipeline/core.py](../../core/dataset_pipeline/core.py)：保留原来的运行记录、预处理、标签与导出组织；其相邻模块的相对导入不变。
 - [core/dataset_pipeline/geometry.py](../../core/dataset_pipeline/geometry.py)：`default_scale` 决定按尺寸超分倍率；总像素小于 `1024² × 80%` 时为 1.5 倍，其余为 1 倍。网页 `start_upscale` 只处理需要提高倍率的图片；CLI `Run.prepare_source` 仍支持完整自动预处理，手动或保存的 `scale_override` 优先。
 
@@ -26,6 +29,8 @@
 `start_upscale`、`start_detect`、`start_tag` 与导出共用任务互斥。顶部超分/主体识别不发送 `group`，作用于全部活跃图片；超分仅执行尺寸判定后需要放大的项。单图识别发送 `start_detect` 与 `source`，后端验证图片存在且活跃，只处理指定图片并保留已有审核和手动裁框。API 的超分/识别仍兼容 `group` 角色范围，单图 `source` 优先。完整打标模式禁止自动超分/识别，缺少对应 TXT 的图片以空标签导入并提示；待处理模式不导入源 TXT 标签。已有标签编辑优先，同一目录和角色以不同模式导入使用独立运行。导入成品保留原格式与尺寸，导出沿用实际图片扩展名，避免 JPEG 字节被错误命名为 PNG。
 
 文件名称由 `import_sources` 记录：`preserve_filename` 标记导入素材，原图片存入版本父目录并保留 `relative` 的原名、扩展名大小写与层级；`caption_name` 与标签的 `caption` 路径保留原 TXT 名称。旧记录同步时更新完整图及标签存储路径，保留当前编辑。`Run.tag_file` 统一读写已登记的标签路径；`_materialize` 对导入完整图返回原文件。`Run.export` 按原相对路径导出完整图和标签，图片直接复制源字节；标签先按角色清理再写入原路径，冲突在写入输出目录前报错。新裁片仍使用生成名称和 PNG，其他几何处理不受此命名规则影响。
+
+主体裁切后的 `original` 指向新底图，`original_size` 与倍率选项同步更新；完整图打标和导出改为读取该底图，保留原相对文件名与扩展名，恢复后重新使用原始输入。`tag_key` 与超分缓存键包含主体底图身份，避免复用未裁切时的结果。刷新/重新打开保留未变化图片的主体底图及备份，历史标签不会自动回填为当前结果。
 
 Python 源文件整体移入 `core/`，原顶层脚本与 `dataset_pipeline/` 的相对关系不变。数据、配置、虚拟环境、测试与 BAT 仍在仓库根目录。原脚本中相对 `__file__` 的数据目录已校正到仓库根目录。
 
