@@ -57,6 +57,7 @@ export interface DatasetListInfo {
 export interface DatasetImportRequest {
   directory: string;
   identity: string;
+  cropMode: 'prepared' | 'manual';
 }
 export interface DatasetOpenResult {
   ok: boolean;

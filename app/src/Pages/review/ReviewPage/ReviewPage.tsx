@@ -19,7 +19,7 @@ export function ReviewPage({ session }: ReviewPageProps) {
       <div className={styles.page}>
         <Header />
         <DatasetManager />
-        <div className='appShell'>
+        <div className='appShell' hidden={review.stage === 'home'}>
           <AnalysisView token={session.token} active={review.stage === 'analysis'} />
           <LoraTools
             token={session.token}
@@ -30,7 +30,7 @@ export function ReviewPage({ session }: ReviewPageProps) {
           <CropEditor />
           <TagEditor />
         </div>
-        <StatusBar />
+        {review.stage !== 'home' ? <StatusBar /> : null}
         <PreviewDialog />
       </div>
     </ReviewContext>

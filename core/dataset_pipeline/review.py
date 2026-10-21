@@ -87,7 +87,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                 sources = [s for s in run.data["sources"].values() if s.get("active", True)]
                 if action in ('start_upscale', 'start_detect'):
                     if run.config.get('crop_mode') == 'prepared':
-                        raise ValueError('含 TXT 的数据集按成品导入，无需超分或识别')
+                        raise ValueError('完整打标数据集保留导入尺寸，无需超分或识别')
                     if not any(not group or s['group'] == group for s in sources):
                         raise ValueError('所选范围没有可用图片')
                 if action in ('start_tag', 'export'):

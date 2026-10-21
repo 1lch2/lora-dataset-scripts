@@ -149,14 +149,6 @@ body:global(.loraTools) :global(.appShell) {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-@media (max-width: 600px) {
-  :global(#analysisView) {
-    padding: 10px;
-  }
-  :global(.analysisMetrics) {
-    grid-template-columns: 1fr;
-  }
-}
 * {
   box-sizing: border-box;
   min-width: 0;
@@ -185,7 +177,6 @@ textarea {
 }
 button {
   cursor: pointer;
-  touch-action: manipulation;
 }
 button:hover {
   background: #f0f3ee;
@@ -758,42 +749,6 @@ body:global(.tagEditing) :global(#tagView) {
   margin-bottom: 8px;
   width: 100%;
 }
-@media (max-width: 850px) {
-  body:global(.tagEditing) :global(#tagView) {
-    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
-    grid-template-rows: minmax(0, 1fr);
-  }
-}
-@media (max-width: 1150px) {
-  :global(.tagConditionGrid) {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-  }
-  :global(.tagSearchToolbar) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  :global(.sampleFilterToolbar) {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-}
-@media (max-width: 600px) {
-  body:global(.tagEditing) :global(#tagView) {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(180px, 42%) minmax(0, 1fr);
-  }
-  body:global(.tagEditing) :global(#tagCards) {
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    padding: 8px;
-    gap: 6px;
-  }
-  :global(.tagToolTabs) {
-    padding: 6px 8px;
-  }
-  :global(.tagToolTabs) button {
-    padding: 5px;
-  }
-}
 :global(.card) {
   position: relative;
   border: 1px solid #d3d9cf;
@@ -1143,104 +1098,4 @@ dialog img {
 }
 [hidden] {
   display: none !important;
-}
-@media (max-width: 1150px) {
-  :global(.appHeader) {
-    gap: 12px;
-  }
-  :global(#stageStatus) {
-    display: none;
-  }
-  :global(.appShell) {
-    grid-template-columns: 260px minmax(0, 1fr);
-  }
-  :global(.editor) {
-    grid-template-columns: minmax(0, 1fr) 220px;
-  }
-  :global(#tagView) {
-    grid-template-columns: minmax(0, 1fr) 260px;
-  }
-  :global(.cropActions) {
-    flex-wrap: wrap;
-  }
-}
-@media (max-width: 850px) {
-  :global(.appShell) {
-    grid-template-columns: 220px minmax(0, 1fr);
-  }
-  :global(#tagView) {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr) minmax(0, 40%);
-  }
-  :global(.tagTools) {
-    border-top: 1px solid #dce0d8;
-  }
-  :global(.editor) {
-    grid-template-columns: minmax(0, 1fr) 150px;
-  }
-  :global(.cropInspector) {
-    padding: 8px;
-  }
-  :global(.appHeader) h1 {
-    display: none;
-  }
-  :global(.tabs) button {
-    padding: 0 10px;
-  }
-}
-@media (max-width: 600px) {
-  :global(.appHeader) {
-    height: 50px;
-    padding: 0 8px;
-    gap: 8px;
-  }
-  :global(.stageActions) {
-    gap: 4px;
-  }
-  :global(.stageActions) button {
-    font-size: 11px;
-    padding: 5px;
-  }
-  :global(.appShell) {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: 140px minmax(0, 1fr);
-  }
-  :global(.libraryPanel) {
-    flex-direction: row;
-    border-bottom: 1px solid #dce0d8;
-  }
-  :global(.filters) {
-    width: 42%;
-    padding: 8px;
-    overflow-y: auto;
-  }
-  :global(.sourcePanel),
-  :global(#tagFilters) {
-    flex: 1;
-  }
-  :global(.sourceHeading) {
-    padding: 6px 8px;
-  }
-  :global(#tagFilters) {
-    padding: 8px;
-  }
-  :global(.editor) {
-    grid-template-columns: minmax(0, 1fr) 130px;
-  }
-  :global(.cropActions) {
-    padding: 6px;
-    gap: 4px;
-  }
-  :global(.cropActions) :global(.toolbar) {
-    gap: 4px;
-  }
-  :global(.cropActions) button {
-    padding: 5px;
-  }
-  body:global(.focusCrop) :global(.appShell) {
-    grid-template-rows: minmax(0, 1fr);
-  }
-  :global(.appStatus) {
-    padding: 4px 8px;
-  }
 }

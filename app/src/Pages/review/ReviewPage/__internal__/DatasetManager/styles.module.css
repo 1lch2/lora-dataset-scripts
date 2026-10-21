@@ -1,55 +1,366 @@
-.manager {
-  flex: none;
-  min-width: 0;
-  padding: 8px 14px;
-  border-bottom: 1px solid #dce0d8;
-}
-
-.manager summary {
-  cursor: pointer;
-}
-
-.content {
-  display: grid;
-  gap: 10px;
-  max-height: min(44dvh, 340px);
+/* 技术工具风格：面向本地素材管理，以非对称启动面板连接已有工作与新素材。 */
+.home {
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  padding: 10px 0 2px;
+  padding: var(--review-space-6) var(--review-page-gutter) var(--review-space-3);
+  display: flex;
+  flex-direction: column;
 }
 
-.content label {
-  min-width: 0;
-  margin: 0;
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: var(--review-space-8);
+  width: 100%;
+  max-width: 1240px;
+  min-height: 0;
+  flex: 1;
+  margin: 0 auto;
+  align-items: center;
 }
 
-.content :global(.hint) {
+.welcome {
+  max-height: 100%;
+  overflow: auto;
+  padding-block: var(--review-space-8);
+  animation: enter var(--review-duration) ease-out;
+}
+
+.eyebrow {
+  color: var(--color-review-muted);
+  font-size: var(--review-text-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+}
+
+.welcome h2 {
+  margin-block: var(--review-space-4) var(--review-space-6);
+  font-size: clamp(2.8rem, 4.6vw, 4.8rem);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.055em;
+  text-wrap: balance;
+}
+
+.description,
+.formHint,
+.homeFooter {
+  color: var(--color-review-muted);
+  line-height: 1.8;
+}
+
+.description {
+  font-size: var(--review-text-md);
+}
+
+.startActions {
+  display: grid;
+  justify-items: start;
+  gap: var(--review-space-3);
+  margin-top: var(--review-space-8);
+}
+
+.importButton,
+.resumeButton {
+  display: flex;
+  gap: var(--review-space-4);
+  align-items: center;
+  padding: var(--review-space-3) var(--review-space-4);
+  font-size: var(--review-text-md);
+}
+
+.resumeButton {
+  border-color: transparent;
+  background: transparent;
+  color: var(--color-review-accent);
+}
+
+.workflow {
+  margin-top: var(--review-space-8);
+  padding-top: var(--review-space-6);
+  border-top: 1px solid var(--color-review-line);
+}
+
+.workflow p {
+  margin-top: var(--review-space-3);
+  line-height: 1.8;
+}
+
+.workflow p span {
+  color: var(--color-review-muted);
+  margin-inline: var(--review-space-1);
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  overflow: auto;
+  padding: var(--review-space-6);
+  border: 1px solid var(--color-review-line);
+  border-radius: var(--review-radius);
+  background: var(--color-review-surface);
+}
+
+.sectionHeading {
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--review-space-3);
+  align-items: center;
+  margin-bottom: var(--review-space-6);
+}
+
+.sectionHeading h2 {
+  font-size: var(--review-text-lg);
+  margin-top: var(--review-space-2);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.sectionHeading > button {
+  flex: none;
+}
+
+.search {
+  flex: none;
+  margin: 0 0 var(--review-space-4);
+  color: var(--color-review-muted);
+}
+
+.search input,
+.form input:not([type='radio']) {
+  padding: var(--review-space-3);
+  background: var(--color-review-canvas);
+  border-color: var(--color-review-control);
+}
+
+.datasetList {
+  list-style: none;
+  padding: 0;
   margin: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.datasetList li + li {
+  border-top: 1px solid var(--color-review-line);
+}
+
+.dataset {
+  position: relative;
+  width: 100%;
+  display: grid;
+  gap: var(--review-space-2);
+  padding: var(--review-space-4) var(--review-space-6) var(--review-space-4) var(--review-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--review-radius);
+  text-align: left;
+  background: transparent;
+}
+
+.dataset:hover {
+  background: var(--color-review-tint);
+  border-color: transparent;
+}
+
+.dataset:focus-visible {
+  outline-offset: -2px;
+}
+
+.datasetHeading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--review-space-2);
+}
+
+.datasetHeading strong {
+  font-size: var(--review-text-md);
+  overflow-wrap: anywhere;
+}
+
+.badge,
+.currentLabel {
+  flex: none;
+  font-size: var(--review-text-xs);
+  color: var(--color-review-accent);
+}
+
+.badge {
+  padding: var(--review-space-1) var(--review-space-2);
+  border-radius: var(--review-radius);
+  background: var(--color-review-tint);
+}
+
+.datasetPath {
+  font-family: ui-monospace, monospace;
+  font-size: var(--review-text-xs);
+  color: var(--color-review-muted);
+  overflow-wrap: anywhere;
+}
+
+.openArrow {
+  position: absolute;
+  right: var(--review-space-2);
+  top: var(--review-space-4);
+  color: var(--color-review-accent);
+}
+
+.empty {
+  padding-block: var(--review-space-8);
+  color: var(--color-review-muted);
+  line-height: 1.8;
+}
+
+.empty h3 {
+  color: var(--color-review-ink);
+  font-size: var(--review-text-md);
+  margin-bottom: var(--review-space-2);
+}
+
+.empty button {
+  margin-top: var(--review-space-4);
 }
 
 .form {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: var(--review-space-4);
 }
 
-.wide {
-  grid-column: 1 / -1;
+.form > label {
+  margin: 0;
 }
 
+.typePicker {
+  display: grid;
+  gap: var(--review-space-2);
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.typePicker legend {
+  margin-bottom: var(--review-space-3);
+}
+
+.typeOption {
+  display: flex;
+  flex-direction: row;
+  align-items: start;
+  gap: var(--review-space-3);
+  margin: 0;
+  padding: var(--review-space-4);
+  border: 1px solid var(--color-review-control);
+  border-radius: var(--review-radius);
+  cursor: pointer;
+}
+
+.typeOption:has(input:checked) {
+  border-color: var(--color-review-accent);
+  background: var(--color-review-tint);
+}
+
+.typeOption input {
+  accent-color: var(--color-review-accent);
+  flex: none;
+  margin: var(--review-space-1) 0 0;
+}
+
+.typeOption strong,
+.typeOption small {
+  display: block;
+}
+
+.typeOption small {
+  margin-top: var(--review-space-1);
+  font-size: var(--review-text-xs);
+  color: var(--color-review-muted);
+  line-height: 1.8;
+}
+
+.form > button {
+  justify-self: start;
+  padding: var(--review-space-3) var(--review-space-4);
+}
+
+.activity {
+  margin-top: var(--review-space-4);
+  color: var(--color-review-accent);
+  overflow-wrap: anywhere;
+}
+
+.homeFooter {
+  flex: none;
+  padding-top: var(--review-space-4);
+  font-size: var(--review-text-xs);
+  text-align: center;
+}
+
+.manager {
+  flex: none;
+  padding: var(--review-space-2) var(--review-page-gutter);
+  border-bottom: 1px solid var(--color-review-line);
+}
+
+.current,
 .processing {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: var(--review-space-3);
   align-items: center;
-  padding-top: 8px;
 }
 
-.content button {
-  justify-self: start;
+.currentPath {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-review-muted);
 }
 
-@media (max-width: 600px) {
-  .form {
-    grid-template-columns: minmax(0, 1fr);
+.processing {
+  margin-top: var(--review-space-2);
+}
+
+.processing :global(.hint) {
+  margin: 0;
+}
+
+@keyframes enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome {
+    animation: none;
+  }
+}
+
+@media (max-height: 740px) {
+  .welcome {
+    padding-block: var(--review-space-4);
+  }
+  .welcome h2 {
+    font-size: clamp(2.8rem, 4vw, 4rem);
+    margin-bottom: var(--review-space-4);
+  }
+  .startActions {
+    margin-top: var(--review-space-4);
+  }
+  .workflow {
+    margin-top: var(--review-space-6);
+    padding-top: var(--review-space-4);
   }
 }

@@ -82,17 +82,3 @@
 .section li {
   overflow-wrap: anywhere;
 }
-
-@media (max-width: 600px) {
-  .view {
-    padding: 10px;
-  }
-
-  .directoryForm {
-    flex-wrap: wrap;
-  }
-
-  .directoryForm input {
-    flex-basis: 100%;
-  }
-}

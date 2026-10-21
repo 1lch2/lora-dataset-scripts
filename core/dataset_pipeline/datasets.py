@@ -41,13 +41,17 @@ def import_config(values, template):
         raise ValueError('请输入数据集目录')
     if not isinstance(identity, str):
         raise ValueError('角色名称无效')
+    mode = values.get('cropMode', 'auto')
+    if mode not in ('prepared', 'manual', 'auto'):
+        raise ValueError('请选择完整打标数据集或待处理数据集')
     folder = Path(requested).expanduser().resolve()
     if not folder.is_dir():
         raise ValueError(f'数据集目录不存在：{folder}')
     files = [p for p in folder.rglob('*') if p.is_file() and p.suffix.lower() in EXTENSIONS]
     if not files:
         raise ValueError('目录内没有支持的图片')
-    mode = 'prepared' if any(p.is_file() and p.suffix.lower() == '.txt' for p in folder.rglob('*')) else 'manual'
+    if mode == 'auto':
+        mode = 'prepared' if any(p.is_file() and p.suffix.lower() == '.txt' for p in folder.rglob('*')) else 'manual'
     identity = identity.strip()
     if not identity and any(p.parent == folder for p in files):
         identity = folder.name

@@ -10,7 +10,7 @@ import type { FieldName } from './types';
 export function useReview(session: SessionInfo) {
   const client = useQueryClient();
   const [stage, setStage] = useState(
-    session.analysisOnly || new URLSearchParams(location.search).has('analysis') ? 'analysis' : 'crop',
+    session.analysisOnly || new URLSearchParams(location.search).has('analysis') ? 'analysis' : 'home',
   );
   const [reviewStarted, setReviewStarted] = useState(stage !== 'analysis');
   const [focusCrop, setFocusCrop] = useState(false);
@@ -28,6 +28,7 @@ export function useReview(session: SessionInfo) {
   const [datasetSwitching, setDatasetSwitching] = useState(false);
   const handledJob = useRef<string | undefined>(undefined);
   const initialized = useRef(false);
+  const lastReviewStage = useRef<string | undefined>(undefined);
   const mutation = useMutation({
     mutationFn: (data: EditRequest) => updateReview(data, session.token),
     onSuccess: async (_result, data) => {
@@ -138,7 +139,7 @@ export function useReview(session: SessionInfo) {
                     : `已导出 ${job.count} 组图片和标签至 ${data.config.output_dir}`,
         );
         if (job.status === 'complete' && job.action === 'start_tag')
-          setStage((previous) => (previous === 'analysis' || previous === 'lora' ? previous : 'tag'));
+          setStage((previous) => (['home', 'analysis', 'lora'].includes(previous) ? previous : 'tag'));
         if (
           job.status === 'complete' &&
           job.action === 'sync_sources' &&
@@ -166,11 +167,23 @@ export function useReview(session: SessionInfo) {
     return () => document.body.classList.remove('analyzing', 'tagEditing', 'loraTools', 'focusCrop');
   }, [stage, focusCrop]);
   function handleStage(next: string) {
+    if (['crop', 'tag'].includes(next) && !state?.datasetLoaded) return;
+    if (['crop', 'tag'].includes(stage)) lastReviewStage.current = stage;
+    if (['crop', 'tag'].includes(next)) lastReviewStage.current = next;
     setStage(next);
     if (next !== 'crop') setFocusCrop(false);
+    if (next === 'home') {
+      setReviewStarted(true);
+      return;
+    }
     if (next === 'analysis' || next === 'lora') return;
     setReviewStarted(true);
-    restoreDraft(source, candidate?.id);
+    if (stage !== 'home') restoreDraft(source, candidate?.id);
+  }
+  function handleResumeDataset() {
+    handleStage(
+      lastReviewStage.current || (state?.config.crop_mode === 'prepared' && !pending ? 'tag' : 'crop'),
+    );
   }
   function restoreDraft(nextSource: Source | undefined, nextCandidateId?: string) {
     const restored =
@@ -204,10 +217,17 @@ export function useReview(session: SessionInfo) {
     tags.setImageBasket(new Set());
     tags.setImageFilter(null);
     tags.setClickedTags(new Set());
-    setStage('crop');
     setFocusCrop(false);
     setReviewStarted(true);
-    await Promise.all([runQuery.refetch(), jobQuery.refetch()]);
+    const [result] = await Promise.all([runQuery.refetch(), jobQuery.refetch()]);
+    if (result.error) throw result.error;
+    const data = result.data!;
+    const hasPending = Object.values(data.sources).some(
+      (s) => s.active && s.candidates.some((c) => c.status === 'pending'),
+    );
+    const nextStage = data.config.crop_mode === 'prepared' && !hasPending ? 'tag' : 'crop';
+    lastReviewStage.current = nextStage;
+    setStage(nextStage);
   }
   function advanceReview(
     data: RunInfo,
@@ -492,6 +512,7 @@ export function useReview(session: SessionInfo) {
     processing,
     stage,
     handleStage,
+    handleResumeDataset,
     handleDatasetChange,
     setDatasetSwitching,
     focusCrop,

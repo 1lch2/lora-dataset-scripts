@@ -6,15 +6,29 @@ export function Header() {
   return (
     <>
       <header className='appHeader'>
-        <h1>训练集审核</h1>
+        <h1>LoRA 数据工作台</h1>
         <nav className='tabs' role='tablist' aria-label='审核阶段' onKeyDown={handleTabKeys}>
+          {!v.session.analysisOnly ? (
+            <button
+              id='homeTab'
+              role='tab'
+              aria-selected={v.stage === 'home'}
+              aria-controls='homeView'
+              className={v.stage === 'home' ? 'active' : ''}
+              disabled={v.busy}
+              onClick={() => v.handleStage('home')}
+              tabIndex={v.stage === 'home' ? 0 : -1}
+            >
+              主页
+            </button>
+          ) : null}
           <button
             id='cropTab'
             role='tab'
             aria-selected={v.stage === 'crop'}
             aria-controls='cropView'
             className={v.stage === 'crop' ? 'active' : ''}
-            disabled={v.busy || v.session.analysisOnly}
+            disabled={v.busy || v.session.analysisOnly || !v.state?.datasetLoaded}
             onClick={() => v.handleStage('crop')}
             tabIndex={v.stage === 'crop' ? 0 : -1}
           >
@@ -26,7 +40,7 @@ export function Header() {
             aria-selected={v.stage === 'tag'}
             aria-controls='tagView'
             tabIndex={v.stage === 'tag' ? 0 : -1}
-            disabled={v.busy || v.session.analysisOnly}
+            disabled={v.busy || v.session.analysisOnly || !v.state?.datasetLoaded}
             onClick={() => v.handleStage('tag')}
             className={v.stage === 'tag' ? 'active' : ''}
           >
@@ -57,7 +71,7 @@ export function Header() {
             LoRA 文件
           </button>
         </nav>
-        <div className='stageActions'>
+        <div className='stageActions' hidden={v.stage === 'home'}>
           <span id='stageStatus'>{v.stageStatus}</span>
           <button
             id='startTag'

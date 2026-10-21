@@ -37,6 +37,7 @@
 
 ## 前端设计
 
+- WebUI 仅面向桌面端，统一使用桌面布局，不设计、实现或验证移动端、平板端适配；不新增按窄屏宽度、触控设备或移动端 UA 切换布局或交互的样式与逻辑。桌面窗口尺寸变化通过弹性布局和容器内滚动处理，保留通用可访问性支持。本规定优先于设计 skill 中的移动端适配建议。
 - 新建页面、优化视觉或评审界面设计时，按适用条件使用项目级 [frontend-design skill](.agents/skills/frontend-design/SKILL.md)。来源：[1lch2/personal-productivity-skills](https://github.com/1lch2/personal-productivity-skills/tree/master/frontend-design)。
 - 设计建议须遵守本项目的 React + TypeScript 代码规范，沿用现有组件结构、CSS Modules 与主题 token；skill 中的单文件 HTML、内联样式和原生事件委托建议不替代现有 React 实现方式。局部调整保持任务范围，严格遵守既有设计系统的任务按该 skill 的不适用条件处理。
 

@@ -10,6 +10,6 @@
 4. [frontend.py](../../core/dataset_pipeline/frontend.py) 在 `app/` 执行 `npm run dev`，通过 `REVIEW_API_URL` 配置代理，等待会话匹配后打开浏览器。
 5. 退出审核入口时停止本次创建的 Vite 进程树并关闭 API；独立 Forge 和复用的服务不被清理。
 
-审核默认 API 8765 / Vite 5173；使用 `--port` 与 `--frontend-port` 修改。审核服务复用要求启动配置的运行、输入、输出目录及身份一致，与网页当前加载的目录无关；端口上已有 Vite 时校验代理会话匹配。升级前不支持 `manualWorkflow` 的审核进程需关闭或使用新端口。网页目录接入与后台同步见[审核专题](review-app.md)。
+审核默认 API 8765 / Vite 5173；使用 `--port` 与 `--frontend-port` 修改。审核服务复用要求启动配置的运行、输入、输出目录及身份一致，与网页当前加载的目录无关；端口上已有 Vite 时校验代理会话匹配。升级前不支持 `manualWorkflow` 的审核进程需关闭或使用新端口。浏览器的普通审核入口默认显示主页，再选择已有数据集或导入完整打标/待处理素材；页面选择与后台同步见[审核专题](review-app.md)。
 
 已有验证：[test_launcher.py](../../tests/test_launcher.py)。安装及命令说明：[PREPROCESS.md](../../PREPROCESS.md)。
