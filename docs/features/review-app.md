@@ -13,7 +13,7 @@
 - [DatasetManager](../../app/src/Pages/review/ReviewPage/__internal__/DatasetManager/DatasetManager.tsx)：IDE 风格主页，提供已有数据集的名称/路径搜索、打开、刷新，以及显式选择完整打标/待处理类型后填写目录的导入表单；工作区显示当前目录与切换入口，待处理模式顶部明确标注超分和主体识别作用于数据集全部图片，不受筛选影响。
 - [useTags](../../app/src/Pages/review/useTags.ts)：筛选、选择、图片过滤篮、标签统计与操作范围。
 - [Library](../../app/src/Pages/review/ReviewPage/__internal__/Library/Library.tsx)：左侧图片列表与当前图选择；按筛选后的显示顺序从 1 编号，序号以独立背景色块显示在文件名前。
-- [CropCanvas](../../app/src/Pages/review/CropCanvas/CropCanvas.tsx)：原裁框坐标与拖动算法；通过 ref 管理 Canvas 与图片加载，卸载时释放 ResizeObserver。
+- [CropCanvas](../../app/src/Pages/review/CropCanvas/CropCanvas.tsx)：图片四周增加长边 4% 的背景留白，让贴边手柄完整显示并可从留白区域起拖；绘制与鼠标坐标扣除留白偏移，选框新建、移动和缩放均限制在图片内，保存坐标仍相对图片。普通裁切与主体裁切共用该逻辑；通过 ref 管理 Canvas 与图片加载，卸载时释放 ResizeObserver。
 - [CropEditor](../../app/src/Pages/review/ReviewPage/__internal__/CropEditor/CropEditor.tsx)：裁切审核与倍率/主体设置，提供“识别此图主体”的单图后台任务；仅在当前图检测到人物时显示主体下拉框及生成主体裁框按钮。倍率选项根据 `original_size` 在括号内显示输出分辨率，不放大保留原尺寸，1.5/2 倍按后端 Python `round` 的中点取偶规则对齐到 8 的倍数。
 - CropEditor 的完整图按钮右侧提供“裁切主体”：画布切换为当前完整底图，在原图坐标内手动画框后应用；恢复入口在存在 `original_backup` 时显示。取消只放弃草稿，应用及恢复调用 `useReview.replaceSourceImage` 并清理本图的编辑选择。
 - [styles.module.css](../../app/src/Pages/review/ReviewPage/styles.module.css)：统一使用桌面审核布局，无移动端或窄屏宽度断点；全局选择器用于保持已有 DOM 样式契约，局部 `.page` 不生成布局盒。主页样式位于 DatasetManager 同目录的 CSS Module，保留桌面窗口高度调整及减少动态效果的可访问性设置。

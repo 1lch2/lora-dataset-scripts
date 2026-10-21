@@ -3,10 +3,13 @@ import type { PointerEvent } from 'react';
 import type { Box } from '../../../api/types';
 import type { CropCanvasProps, CropDrag } from './types';
 
+const IMAGE_PADDING_RATIO = 0.04;
+
 export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement | null>(null);
+  const imagePaddingRef = useRef(0);
   const dragRef = useRef<CropDrag | null>(null);
   const boxRef = useRef(box);
   boxRef.current = box;
@@ -16,14 +19,17 @@ export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanv
       img = imageRef.current;
     if (!img) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0);
+    const padding = imagePaddingRef.current;
+    ctx.drawImage(img, padding, padding);
     const current = boxRef.current;
     if (!current) return;
+    ctx.save();
+    ctx.translate(padding, padding);
     const [x0, y0, x1, y1] = current,
       scale = canvas.width / Math.max(canvas.getBoundingClientRect().width, 1);
     ctx.fillStyle = 'rgba(0,0,0,.35)';
     ctx.beginPath();
-    ctx.rect(0, 0, canvas.width, canvas.height);
+    ctx.rect(0, 0, img.width, img.height);
     ctx.rect(x0, y0, x1 - x0, y1 - y0);
     ctx.fill('evenodd');
     ctx.strokeStyle = '#53c582';
@@ -36,6 +42,7 @@ export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanv
       [x1, y1],
       [x0, y1],
     ].forEach(([x, y]) => ctx.fillRect(x - 4 * scale, y - 4 * scale, 8 * scale, 8 * scale));
+    ctx.restore();
   }
   function fitCanvas() {
     if (!imageRef.current) return;
@@ -49,6 +56,8 @@ export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanv
   useEffect(() => {
     const canvas = canvasRef.current!;
     imageRef.current = null;
+    imagePaddingRef.current = 0;
+    dragRef.current = null;
     canvas.getContext('2d')!.clearRect(0, 0, canvas.width, canvas.height);
     if (!image) return;
     let active = true;
@@ -56,8 +65,10 @@ export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanv
     img.onload = () => {
       if (!active) return;
       imageRef.current = img;
-      canvas.width = img.width;
-      canvas.height = img.height;
+      const padding = Math.ceil(Math.max(img.width, img.height) * IMAGE_PADDING_RATIO);
+      imagePaddingRef.current = padding;
+      canvas.width = img.width + padding * 2;
+      canvas.height = img.height + padding * 2;
       fitCanvas();
     };
     img.src = image;
@@ -79,12 +90,13 @@ export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanv
     const canvas = canvasRef.current!,
       r = canvas.getBoundingClientRect();
     return [
-      ((event.clientX - r.left) * canvas.width) / r.width,
-      ((event.clientY - r.top) * canvas.height) / r.height,
+      ((event.clientX - r.left) * canvas.width) / r.width - imagePaddingRef.current,
+      ((event.clientY - r.top) * canvas.height) / r.height - imagePaddingRef.current,
     ];
   }
   function handlePointerDown(event: PointerEvent<HTMLCanvasElement>) {
-    if (disabled || !imageRef.current) return;
+    const img = imageRef.current;
+    if (disabled || !img || event.button !== 0) return;
     const canvas = canvasRef.current!,
       p = point(event),
       tolerance = (12 * canvas.width) / canvas.getBoundingClientRect().width;
@@ -98,7 +110,7 @@ export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanv
       : -1;
     const moving = box && p[0] > box[0] && p[0] < box[2] && p[1] > box[1] && p[1] < box[3];
     dragRef.current = {
-      p,
+      p: moving ? p : p.map((v, i) => Math.max(0, Math.min(v, i === 0 ? img.width : img.height))),
       before: box && [...box],
       mode: corner >= 0 ? 'corner' : moving ? 'move' : 'new',
       corner,
@@ -107,9 +119,9 @@ export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanv
   }
   function handlePointerMove(event: PointerEvent<HTMLCanvasElement>) {
     const drag = dragRef.current;
-    if (!drag) return;
-    const canvas = canvasRef.current!,
-      p = point(event).map((v, i) => Math.max(0, Math.min(v, i === 0 ? canvas.width : canvas.height)));
+    const img = imageRef.current;
+    if (!drag || !img) return;
+    const p = point(event).map((v, i) => Math.max(0, Math.min(v, i === 0 ? img.width : img.height)));
     let next: Box;
     if (drag.mode === 'new')
       next = [
@@ -120,8 +132,8 @@ export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanv
       ];
     else if (drag.mode === 'move') {
       const b = drag.before!,
-        dx = Math.max(-b[0], Math.min(p[0] - drag.p[0], canvas.width - b[2])),
-        dy = Math.max(-b[1], Math.min(p[1] - drag.p[1], canvas.height - b[3]));
+        dx = Math.max(-b[0], Math.min(p[0] - drag.p[0], img.width - b[2])),
+        dy = Math.max(-b[1], Math.min(p[1] - drag.p[1], img.height - b[3]));
       next = [b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy];
     } else {
       next = [...drag.before!];
@@ -132,6 +144,7 @@ export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanv
     onChange(next);
   }
   function handlePointerUp() {
+    if (!dragRef.current) return;
     dragRef.current = null;
     const b = boxRef.current;
     if (b)
