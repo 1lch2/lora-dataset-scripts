@@ -1,19 +1,26 @@
 path_base: repository-root
-scope: 已核对审核前端、数据集分析、LoRA 文件工具、BAT 启动主链路，以及独立缩放、翻转和角色标签脚本；Python 处理模块保留原有组织结构。
+scope: 已核对审核前端、数据集分析、LoRA 文件工具、BAT 启动主链路，以及独立工具脚本与当前系统的功能重合审计。
 not_yet_mapped:
-  - addTags、deduplicate 等其他独立图片与标签工具的内部算法
   - 检测、几何裁框与模型客户端的内部实现
 features:
+  - id: dataset-tools
+    name: 数据集处理工具、短边缩放、镜像翻转与去重另存
+    keywords: [处理工具, 范围, 子目录, 勾选, resize, reverse, deduplicate, 缩放, 镜像, 去重, 另存]
+    doc: docs/features/dataset-tools.md
+    entrypoints:
+      - app/src/Pages/tools/DatasetTools/DatasetTools.tsx
+      - core/dataset_pipeline/tools.py
+      - core/dataset_pipeline/review.py
   - id: dataset-utilities
-    name: 独立图片缩放、水平翻转与角色标签脚本
-    keywords: [resize, reverse, edit_caption, 缩放, 翻转, 角色标签, dataset-raw]
+    name: 独立图片标签工具、功能重合审计与合并
+    keywords: [resize, reverse, edit_caption, addTags, deduplicate, 缩放, 翻转, 角色标签, 去重, 重合, dataset-raw]
     doc: docs/features/dataset-utilities.md
     entrypoints:
       - core/resize.py
       - core/reverse.py
-      - core/edit_caption.py
+      - core/dataset_pipeline/edit_caption.py
   - id: review-app
-    name: 启动主页、数据集导入与 React 审核前端
+    name: 启动主页、数据集导入与管理删除、React 审核前端
     keywords: [React, Vite, app/src, 主页, 欢迎页, IDE, 已有数据集, 导入, 完整打标, 待处理, 图片列表, 序号, 裁框, 删除裁切, 标签, 批量编辑, 筛选, 预览, 导出, 数据集目录, 接入, 已裁切, 同步, dataset-raw, 预处理, 放大, 倍率, 批量超分, 单图识别, 主体, 裁切主体, 替换完整图, 恢复原始图, 原文件名, 扩展名]
     doc: docs/features/review-app.md
     entrypoints:
@@ -33,8 +40,8 @@ features:
     doc: docs/features/lora-files.md
     entrypoints:
       - app/src/Pages/lora/LoraTools/LoraTools.tsx
-      - core/rename.py
-      - core/generate_lora_tag.py
+      - core/dataset_pipeline/rename.py
+      - core/dataset_pipeline/generate_lora_tag.py
   - id: launcher
     name: BAT、Forge 与前后端启动
     keywords: [start-webui.bat, npm run dev, Forge, 启动, 等待, 端口, 独立终端]

@@ -7,13 +7,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from generate_lora_tag import generate_lora_tags
-from rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
+from .generate_lora_tag import generate_lora_tags
+from .rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
 
 from .core import DEFAULTS, Run, asset, run_lock
 from .geometry import default_scale
 from .analysis_job import AnalysisJob
-from .datasets import detect_source, import_config, import_sources, list_datasets, replace_source_image, upscale_source
+from .tools import DatasetToolsJob, scan_files
+from .datasets import delete_dataset, detect_source, import_config, import_sources, list_datasets, replace_source_image, upscale_source
 
 
 def make_server(directory=None, port=8765, config=None, model_setup=None):
@@ -23,6 +24,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
             Run.load(directory).ensure_tag_files()
     cache = (directory.parent if directory else Path(__file__).resolve().parents[2]/'runs')/'.models'
     analysis = AnalysisJob(cache if cache.is_dir() else None)
+    dataset_tools = DatasetToolsJob()
     token = secrets.token_urlsafe(24)
     mutex = threading.RLock()
     static = Path(__file__).resolve().parents[2] / 'app' / 'dist'
@@ -138,6 +140,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                         self.reply(404, {'error': '前端资源不存在，请使用 npm run dev 或先执行 npm run build'})
                         return
                     self.reply(200, path.read_bytes(), mimetypes.guess_type(path.name)[0] or 'application/octet-stream')
+                elif route.path == '/api/tools/status':
+                    self.reply(200, dataset_tools.status())
                 elif route.path == '/api/analysis/status':
                     self.reply(200, analysis.status())
                 elif route.path == '/api/analysis/report':
@@ -207,7 +211,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                 self.reply(403, {"error": "审核会话无效，请刷新页面"})
                 return
             if self.path not in ("/api/edit", '/api/analysis/start', '/api/analysis/cancel', '/api/lora/rename',
-                                 '/api/datasets/import', '/api/datasets/open'):
+                                 '/api/datasets/import', '/api/datasets/open', '/api/datasets/delete',
+                                 '/api/tools/scan', '/api/tools/preview', '/api/tools/execute', '/api/tools/cancel'):
                 self.reply(404, {"error": "接口不存在"})
                 return
             try:
@@ -217,6 +222,12 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                 data = json.loads(self.rfile.read(length))
                 if not isinstance(data,dict):
                     raise ValueError('请求必须为对象')
+                if self.path.startswith('/api/tools/'):
+                    actions = {'scan': scan_files, 'preview': dataset_tools.preview,
+                               'execute': dataset_tools.execute, 'cancel': lambda _: dataset_tools.cancel()}
+                    with mutex:
+                        self.reply(200, actions[self.path.rsplit('/', 1)[1]](data))
+                    return
                 if self.path == '/api/analysis/start':
                     self.reply(202, analysis.start(data))
                     return
@@ -233,6 +244,22 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                     with mutex:
                         changed = rename_files(requested, expected)
                     self.reply(200, {'ok': True, 'renamed': len(changed)})
+                    return
+                if self.path == '/api/datasets/delete':
+                    if analysis_only:
+                        raise ValueError('请在审核模式管理数据集')
+                    with mutex:
+                        if dataset_tools.status()['status'] in ('preparing', 'running'):
+                            raise ValueError('数据集工具任务正在运行，完成后可删除数据集')
+                        if job['status'] == 'running':
+                            raise ValueError('任务正在运行，完成后可删除数据集')
+                        requested = data.get('runDir')
+                        delete_dataset(requested, directory)
+                        cleared = directory is not None and directory.resolve() == Path(requested).resolve()
+                        if cleared:
+                            directory = None
+                            job.update(id=None, status='idle', action=None, errors=[], count=None)
+                    self.reply(200, {'ok': True, 'currentDeleted': cleared})
                     return
                 if self.path in ('/api/datasets/import', '/api/datasets/open'):
                     if analysis_only:

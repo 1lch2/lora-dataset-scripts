@@ -9,6 +9,7 @@ import { StatusBar } from './__internal__/StatusBar';
 import { PreviewDialog } from './__internal__/PreviewDialog';
 import { AnalysisView } from '../../analysis/AnalysisView';
 import { LoraTools } from '../../lora/LoraTools';
+import { DatasetTools } from '../../tools/DatasetTools';
 import type { ReviewPageProps } from './types';
 import styles from './styles.module.css';
 
@@ -21,6 +22,11 @@ export function ReviewPage({ session }: ReviewPageProps) {
         <DatasetManager />
         <div className='appShell' hidden={review.stage === 'home'}>
           <AnalysisView token={session.token} active={review.stage === 'analysis'} />
+          <DatasetTools
+            token={session.token}
+            active={review.stage === 'tools'}
+            currentDirectory={review.state?.datasetLoaded ? review.state.config.input_dir : undefined}
+          />
           <LoraTools
             token={session.token}
             defaultDirectory={session.loraOutputDir}

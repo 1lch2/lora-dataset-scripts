@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { getAllDatasetList, importDataset, openDataset } from '../../../../../api/client';
-import type { DatasetImportRequest } from '../../../../../api/types';
+import { deleteDataset, getAllDatasetList, importDataset, openDataset } from '../../../../../api/client';
+import type { DatasetImportRequest, DatasetInfo } from '../../../../../api/types';
 import { useReviewContext } from '../../../context';
 import styles from './styles.module.css';
 
 export function DatasetManager() {
   const v = useReviewContext();
   const [importing, setImporting] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [cropMode, setCropMode] = useState<DatasetImportRequest['cropMode']>();
   const [directory, setDirectory] = useState('');
   const [identity, setIdentity] = useState('');
@@ -30,7 +31,31 @@ export function DatasetManager() {
     onError: (error: Error) => v.message(error.message, true),
     onSettled: () => v.setDatasetSwitching(false),
   });
-  const disabled = v.processing || mutation.isPending;
+  const deletion = useMutation({
+    mutationFn: (runDir: string) => deleteDataset(runDir, v.session.token),
+    onMutate: () => v.setDatasetSwitching(true),
+    onSuccess: async (result) => {
+      if (result.currentDeleted) await v.handleDatasetChange();
+      await list.refetch();
+      v.message('已移除数据集，并清理工作记录和导出产物。');
+    },
+    onError: async (error: Error) => {
+      await list.refetch();
+      v.message(error.message, true);
+    },
+    onSettled: () => v.setDatasetSwitching(false),
+  });
+  const disabled = v.processing || v.busy || mutation.isPending || deletion.isPending;
+  function handleDelete(dataset: DatasetInfo) {
+    if (disabled || !dataset.deletable) return;
+    if (
+      !window.confirm(
+        `永久移除“${dataset.name}”？\n\n将清理工作记录、临时数据及导出产物：\n${dataset.runDir}\n${dataset.outputDir}\n\n导入来源的原始素材将保留。此操作无法撤销。`,
+      )
+    )
+      return;
+    deletion.mutate(dataset.runDir);
+  }
   const datasets = list.data?.datasets.filter((dataset) =>
     `${dataset.name} ${dataset.inputDir}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
   );
@@ -98,9 +123,23 @@ export function DatasetManager() {
             <div className={styles.startActions}>
               <button
                 type='button'
+                disabled={disabled}
+                aria-pressed={managing}
+                onClick={() => {
+                  setImporting(false);
+                  setManaging(!managing);
+                }}
+              >
+                {managing ? '完成管理' : '管理数据集'}
+              </button>
+              <button
+                type='button'
                 className={`primary ${styles.importButton}`}
                 disabled={disabled}
-                onClick={() => setImporting(true)}
+                onClick={() => {
+                  setManaging(false);
+                  setImporting(true);
+                }}
               >
                 <span aria-hidden='true'>＋</span> 导入数据集 <span aria-hidden='true'>→</span>
               </button>
@@ -225,6 +264,11 @@ export function DatasetManager() {
               </form>
             ) : (
               <>
+                {managing ? (
+                  <p className={styles.formHint}>
+                    删除会清理当前项目内的独立工作记录、临时数据及导出产物，并移除首页条目。导入来源的原始素材保留。
+                  </p>
+                ) : null}
                 <label className={styles.search}>
                   搜索数据集
                   <input
@@ -280,6 +324,26 @@ export function DatasetManager() {
                           ↗
                         </span>
                       </button>
+                      {managing ? (
+                        <div className={styles.manageActions}>
+                          <span className={styles.datasetPath}>
+                            {dataset.deletable
+                              ? `导出目录：${dataset.outputDir}`
+                              : '此数据集不在项目独立管理目录内，无法删除'}
+                          </span>
+                          <button
+                            type='button'
+                            className='danger'
+                            disabled={disabled || !dataset.deletable}
+                            onClick={() => handleDelete(dataset)}
+                            aria-label={`删除数据集 ${dataset.name}`}
+                          >
+                            {deletion.isPending && deletion.variables === dataset.runDir
+                              ? '正在删除…'
+                              : '删除数据集'}
+                          </button>
+                        </div>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -287,7 +351,11 @@ export function DatasetManager() {
             )}
             {disabled ? (
               <p className={styles.activity} role='status'>
-                {mutation.isPending ? '正在打开数据集…' : v.jobStatus || '正在处理，请稍候…'}
+                {deletion.isPending
+                  ? '正在清理数据集…'
+                  : mutation.isPending
+                    ? '正在打开数据集…'
+                    : v.jobStatus || '正在处理，请稍候…'}
               </p>
             ) : null}
           </section>

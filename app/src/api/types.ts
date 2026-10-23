@@ -48,6 +48,8 @@ export interface RunInfo {
 }
 export type CropMode = 'auto' | 'prepared' | 'manual';
 export interface DatasetInfo {
+  outputDir: string;
+  deletable: boolean;
   runDir: string;
   inputDir: string;
   name: string;

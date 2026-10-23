@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 
-DIR = Path(__file__).resolve().parent.parent / "output"
+DIR = Path(__file__).resolve().parents[2] / "output"
 NUMBERED = re.compile(r"^(.+)-(\d+)\.safetensors$", re.IGNORECASE)
 SAFETENSORS = re.compile(r"^(.+)\.safetensors$", re.IGNORECASE)
 
@@ -64,14 +64,3 @@ def rename_files(directory=DIR, expected=None):
             temporary.rename(folder / change["from"])
         raise
     return changes
-
-
-def rename():
-    changes = rename_files()
-    for change in changes:
-        print(f"{change['from']} -> {change['to']}")
-    print(f"已重命名 {len(changes)} 个 LoRA 文件")
-
-
-if __name__ == "__main__":
-    rename()

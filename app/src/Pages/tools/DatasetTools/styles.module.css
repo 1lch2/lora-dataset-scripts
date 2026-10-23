@@ -1,0 +1,144 @@
+.page {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--review-space-4) var(--review-page-gutter);
+  gap: var(--review-space-4);
+}
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--review-space-4);
+}
+.heading h2 {
+  font-size: var(--review-text-lg);
+  letter-spacing: -0.02em;
+}
+.heading p,
+.fields p,
+.empty {
+  color: var(--color-review-muted);
+}
+.eyebrow {
+  font-size: var(--review-text-xs);
+  color: var(--color-review-accent);
+  letter-spacing: 0.12em;
+}
+.count {
+  font-size: var(--review-text-lg);
+  color: var(--color-review-accent);
+  white-space: nowrap;
+}
+.count small {
+  font-size: var(--review-text-xs);
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: var(--review-space-4);
+  flex: 1;
+  min-height: 0;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--review-space-3);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--review-space-4);
+  border: 1px solid var(--color-review-line);
+  border-radius: var(--review-radius);
+  background: var(--color-review-surface);
+}
+.panel h3 {
+  font-size: var(--review-text-md);
+}
+.fields {
+  display: grid;
+  gap: var(--review-space-3);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.fields label {
+  margin: 0;
+}
+.fields input:not([type='checkbox']),
+.fields select {
+  width: 100%;
+  min-width: 0;
+}
+.check,
+.file {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--review-space-2);
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--review-space-2);
+}
+.fileList {
+  flex: 1;
+  min-height: 160px;
+  overflow: auto;
+  border-top: 1px solid var(--color-review-line);
+}
+.file {
+  padding: var(--review-space-2);
+  border-bottom: 1px solid var(--color-review-line);
+  margin: 0;
+}
+.file span {
+  flex: 1;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.file small {
+  color: var(--color-review-muted);
+  white-space: nowrap;
+}
+.file:has(input:checked) {
+  background: var(--color-review-tint);
+}
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: var(--review-space-3);
+  min-height: 0;
+}
+.path {
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, monospace;
+}
+.previewList {
+  overflow: auto;
+  min-height: 160px;
+}
+.previewList table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.previewList td,
+.previewList th {
+  padding: var(--review-space-2);
+  border-bottom: 1px solid var(--color-review-line);
+  overflow-wrap: anywhere;
+}
+.previewList details {
+  padding: var(--review-space-2);
+  background: var(--color-review-tint);
+  margin-bottom: var(--review-space-2);
+  overflow-wrap: anywhere;
+}
+.empty {
+  padding-block: var(--review-space-8);
+}

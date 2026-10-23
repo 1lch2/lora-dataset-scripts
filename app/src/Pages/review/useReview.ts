@@ -139,7 +139,9 @@ export function useReview(session: SessionInfo) {
                     : `已导出 ${job.count} 组图片和标签至 ${data.config.output_dir}`,
         );
         if (job.status === 'complete' && job.action === 'start_tag')
-          setStage((previous) => (['home', 'analysis', 'lora'].includes(previous) ? previous : 'tag'));
+          setStage((previous) =>
+            ['home', 'analysis', 'lora', 'tools'].includes(previous) ? previous : 'tag',
+          );
         if (
           job.status === 'complete' &&
           job.action === 'sync_sources' &&
@@ -162,7 +164,7 @@ export function useReview(session: SessionInfo) {
   useEffect(() => {
     document.body.classList.toggle('analyzing', stage === 'analysis');
     document.body.classList.toggle('tagEditing', stage === 'tag');
-    document.body.classList.toggle('loraTools', stage === 'lora');
+    document.body.classList.toggle('loraTools', stage === 'lora' || stage === 'tools');
     document.body.classList.toggle('focusCrop', focusCrop && stage === 'crop');
     return () => document.body.classList.remove('analyzing', 'tagEditing', 'loraTools', 'focusCrop');
   }, [stage, focusCrop]);
@@ -176,7 +178,7 @@ export function useReview(session: SessionInfo) {
       setReviewStarted(true);
       return;
     }
-    if (next === 'analysis' || next === 'lora') return;
+    if (next === 'analysis' || next === 'lora' || next === 'tools') return;
     setReviewStarted(true);
     if (stage !== 'home') restoreDraft(source, candidate?.id);
   }
@@ -222,6 +224,12 @@ export function useReview(session: SessionInfo) {
     const [result] = await Promise.all([runQuery.refetch(), jobQuery.refetch()]);
     if (result.error) throw result.error;
     const data = result.data!;
+    if (!data.datasetLoaded) {
+      lastReviewStage.current = undefined;
+      setReviewStarted(false);
+      setStage('home');
+      return;
+    }
     const hasPending = Object.values(data.sources).some(
       (s) => s.active && s.candidates.some((c) => c.status === 'pending'),
     );

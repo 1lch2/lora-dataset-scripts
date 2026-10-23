@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from .core import DEFAULTS, EXTENSIONS, Run, asset, digest, file_digest, inside, normalize, validate_config
+from .core import DEFAULTS, EXTENSIONS, Run, asset, digest, file_digest, inside, normalize, run_lock, validate_config
 from .geometry import area, iou, validate_box
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -29,9 +29,66 @@ def list_datasets(current=None):
             continue
         datasets.append({'runDir': str(run.directory), 'inputDir': run.config['input_dir'],
                          'name': run.config['identity'] or Path(run.config['input_dir']).name,
-                         'cropMode': run.config.get('crop_mode', 'auto')})
+                         'cropMode': run.config.get('crop_mode', 'auto'),
+                         'outputDir': run.config['output_dir'],
+                         'deletable': deletion_paths(run) is not None})
     return {'datasets': datasets, 'currentRunDir': str(current) if current else None,
             'defaultInputDir': str(ROOT / 'dataset-raw')}
+
+
+def deletion_paths(run):
+    directory = run.directory.resolve()
+    output = Path(run.config['output_dir']).resolve()
+    if (directory.parent != (ROOT / 'runs').resolve()
+            or output.parent != (ROOT / 'dataset-ready').resolve()
+            or directory.name != output.name or directory.name.startswith('.')
+            or Path(run.config['run_dir']).resolve() != directory
+            or not directory.is_relative_to(ROOT.resolve())
+            or not output.is_relative_to(ROOT.resolve())):
+        return None
+    return directory, output
+
+
+def delete_dataset(requested, current=None):
+    """只清理项目内独立运行及其导出目录，保留输入素材与共享模型。"""
+    known = {item['runDir'] for item in list_datasets(current)['datasets']}
+    if not isinstance(requested, str) or requested not in known:
+        raise ValueError('数据集不存在，请刷新列表')
+    selected = Path(requested)
+    for path in (selected, ROOT / 'runs', ROOT / 'dataset-ready', Path(Run.load(selected).config['output_dir'])):
+        if path.is_symlink() or (path.exists() and getattr(path.lstat(), 'st_file_attributes', 0) & 0x400):
+            raise ValueError('清理目录包含符号链接或目录联接，请先移除链接')
+    with run_lock(selected):
+        run = Run.load(selected)
+        targets = deletion_paths(run)
+        if targets is None:
+            raise ValueError('只能删除当前项目内具有独立工作目录和导出目录的数据集')
+        # 在任何删除之前检查全部路径，避免链接或其他数据集的输入被一并清理。
+        for target in targets:
+            for path in [target, *target.rglob('*')]:
+                if path.is_symlink() or (path.exists() and getattr(path.lstat(), 'st_file_attributes', 0) & 0x400):
+                    raise ValueError('清理目录包含符号链接或目录联接，请先移除链接')
+        for item in list_datasets(current)['datasets']:
+            other = Run.load(item['runDir'])
+            protected = [Path(other.config['input_dir']).resolve()]
+            if other.directory.resolve() != selected.resolve():
+                protected.extend([other.directory.resolve(), Path(other.config['output_dir']).resolve()])
+            if any(a == b or a.is_relative_to(b) or b.is_relative_to(a)
+                   for a in targets for b in protected):
+                raise ValueError('清理目录与素材或其他数据集目录重叠，无法删除')
+        directory, output = targets
+        if output.exists():
+            shutil.rmtree(output)
+        for child in directory.iterdir():
+            if child.name in ('manifest.json', '.lock'):
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        (directory / 'manifest.json').unlink()
+    (selected / '.lock').unlink(missing_ok=True)
+    selected.rmdir()
 
 
 def import_config(values, template):

@@ -151,6 +151,22 @@
   border-top: 1px solid var(--color-review-line);
 }
 
+.manageActions {
+  display: flex;
+  align-items: center;
+  gap: var(--review-space-3);
+  padding: var(--review-space-2);
+}
+
+.manageActions > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.manageActions > button {
+  flex: none;
+}
+
 .dataset {
   position: relative;
   width: 100%;

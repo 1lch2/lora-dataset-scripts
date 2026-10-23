@@ -14,7 +14,7 @@ from urllib.parse import urlparse
 
 from PIL import Image, ImageOps
 
-from edit_caption import process_text_files_in_dataset
+from .edit_caption import process_text_files_in_dataset
 from .forge import ForgeClient
 from .geometry import MIN_AREA, TARGET_AREA, area, default_scale, full_body_conflict, iou, propose, tag_suggestions, validate_box
 

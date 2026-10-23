@@ -59,6 +59,18 @@ export function Header() {
             数据集分析
           </button>
           <button
+            id='toolsTab'
+            role='tab'
+            aria-selected={v.stage === 'tools'}
+            aria-controls='toolsView'
+            tabIndex={v.stage === 'tools' ? 0 : -1}
+            disabled={v.busy}
+            onClick={() => v.handleStage('tools')}
+            className={v.stage === 'tools' ? 'active' : ''}
+          >
+            数据集处理工具
+          </button>
+          <button
             id='loraTab'
             role='tab'
             aria-selected={v.stage === 'lora'}

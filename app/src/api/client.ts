@@ -31,6 +31,8 @@ export const getSessionInfo = () => request<SessionInfo>('/api/session');
 export const getRunInfo = () => request<RunInfo>('/api/state');
 export const getJobInfo = () => request<JobInfo>('/api/job');
 export const getAllDatasetList = () => request<DatasetListInfo>('/api/datasets');
+export const deleteDataset = (runDir: string, token: string) =>
+  request<{ ok: boolean; currentDeleted: boolean }>('/api/datasets/delete', { runDir }, token);
 export const importDataset = (data: DatasetImportRequest, token: string) =>
   request<DatasetOpenResult>('/api/datasets/import', data, token);
 export const openDataset = (runDir: string, token: string) =>
