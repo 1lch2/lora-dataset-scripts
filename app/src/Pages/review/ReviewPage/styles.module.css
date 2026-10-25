@@ -5,8 +5,8 @@
   font:
     13px/1.5 system-ui,
     sans-serif;
-  color: #292d2a;
-  background: #f5f6f3;
+  color: var(--color-review-ink);
+  background: var(--color-review-canvas);
   color-scheme: light;
 }
 body:global(.analyzing) :global(.libraryPanel),
@@ -30,7 +30,7 @@ body:global(.loraTools) :global(.appShell) {
 :global(#analysisView) {
   height: 100%;
   overflow: auto;
-  padding: 20px;
+  padding: 24px var(--review-page-gutter);
 }
 :global(.analysisSetup),
 :global(#analysisResults) {
@@ -42,6 +42,11 @@ body:global(.loraTools) :global(.appShell) {
 :global(.analysisSetup) details,
 :global(#analysisOverview) {
   margin-bottom: 12px;
+}
+:global(.analysisSetup) > h2 {
+  font-size: var(--review-text-lg);
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 :global(.analysisOptions),
 :global(.analysisSettings),
@@ -79,9 +84,9 @@ body:global(.loraTools) :global(.appShell) {
 :global(.metricCard),
 :global(.analysisChart),
 :global(.analysisSection) {
-  background: #fff;
-  border: 1px solid #dce1d9;
-  border-radius: 8px;
+  background: var(--color-review-surface);
+  border: 1px solid var(--color-review-line);
+  border-radius: var(--review-panel-radius);
   padding: 16px;
   margin-top: 12px;
 }
@@ -91,7 +96,7 @@ body:global(.loraTools) :global(.appShell) {
 :global(.metricCard) strong {
   display: block;
   font-size: 26px;
-  color: #245137;
+  color: var(--color-review-ink);
   margin: 8px 0;
 }
 :global(.histogram) {
@@ -100,11 +105,11 @@ body:global(.loraTools) :global(.appShell) {
   align-items: flex-end;
   gap: 2px;
   margin-top: 12px;
-  border-bottom: 1px solid #ccd0ca;
+  border-bottom: 1px solid var(--color-review-line);
 }
 :global(.histogramBar) {
   flex: 1;
-  background: #719b80;
+  background: var(--color-review-muted);
   min-height: 1px;
 }
 :global(.analysisChart) :global(.histogram) {
@@ -125,7 +130,7 @@ body:global(.loraTools) :global(.appShell) {
   display: inline-block;
   margin: 4px;
   padding: 4px 8px;
-  background: #edf2ed;
+  background: var(--color-review-tint);
   border-radius: 4px;
 }
 :global(.analysisTableWrap) {
@@ -140,7 +145,7 @@ body:global(.loraTools) :global(.appShell) {
 :global(#analysisTable) th,
 :global(#analysisTable) td {
   padding: 8px;
-  border-bottom: 1px solid #e3e6e1;
+  border-bottom: 1px solid var(--color-review-line);
   text-align: left;
   white-space: nowrap;
 }
@@ -170,45 +175,51 @@ select,
 textarea {
   font: inherit;
   color: inherit;
-  background: white;
-  border: 1px solid #ccd0ca;
-  border-radius: 5px;
+  background: var(--color-review-surface);
+  border: 1px solid var(--color-review-line);
+  border-radius: var(--review-radius);
   padding: 6px 9px;
 }
 button {
   cursor: pointer;
 }
+input:not([type='checkbox'], [type='radio']),
+select,
+textarea {
+  border-color: var(--color-review-field-line);
+}
 button:hover {
-  background: #f0f3ee;
-  border-color: #a3afa5;
+  background: var(--color-review-tint);
+  border-color: var(--color-review-control);
 }
 button:global(.active) {
-  background: #e9f0e9;
-  border-color: #779680;
-  color: #245137;
+  background: var(--color-review-tint);
+  border-color: var(--color-review-accent);
+  color: var(--color-review-ink);
 }
 button:disabled {
   opacity: 0.45;
   cursor: default;
 }
 :is(button, input, select, textarea, summary, [tabindex]):focus-visible {
-  outline: 2px solid #31704b;
+  outline: 2px solid var(--color-review-accent);
   outline-offset: 2px;
 }
 button:global(.primary) {
-  background: #31704b;
-  border-color: #31704b;
-  color: white;
+  background: var(--color-review-accent);
+  border-color: var(--color-review-accent);
+  color: var(--color-review-surface);
 }
 button:global(.primary):hover {
-  background: #265b3c;
+  background: var(--color-review-accent-hover);
 }
 button:global(.destructive),
 :global(.bad) {
-  color: #a33730;
+  color: var(--color-review-ink);
+  font-weight: 600;
 }
 input[type='checkbox'] {
-  accent-color: #31704b;
+  accent-color: var(--color-review-accent);
   width: 16px;
   height: 16px;
   margin: 0;
@@ -248,7 +259,7 @@ h3 {
   font-size: 13px;
 }
 :global(.hint) {
-  color: #6c746c;
+  color: var(--color-review-muted);
   font-size: 12px;
   margin: 6px 0 10px;
   overflow-wrap: anywhere;
@@ -265,25 +276,27 @@ h3 {
   display: flex;
   align-items: center;
   gap: 24px;
-  padding: 0 16px;
-  background: white;
-  border-bottom: 1px solid #dce0d8;
+  padding: 0 var(--review-page-gutter);
+  background: var(--color-review-surface);
+  border-bottom: 1px solid var(--color-review-line);
 }
 :global(.tabs) {
   display: flex;
-  align-self: stretch;
-  gap: 8px;
+  align-self: center;
+  gap: 4px;
 }
 :global(.tabs) button {
-  padding: 0 18px;
+  padding: 8px 12px;
   border: 0;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
+  border-radius: var(--review-radius);
   background: transparent;
 }
+:global(.tabs) button:hover {
+  background: var(--color-review-canvas);
+}
 :global(.tabs) button:global(.active) {
-  border-color: #31704b;
-  color: #245137;
+  background: var(--color-review-tint);
+  color: var(--color-review-ink);
   font-weight: 600;
 }
 :global(.stageActions) {
@@ -294,7 +307,7 @@ h3 {
   gap: 8px;
 }
 :global(#stageStatus) {
-  color: #6c746c;
+  color: var(--color-review-muted);
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -313,13 +326,13 @@ h3 {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #dce0d8;
-  background: #fcfcfa;
+  border-right: 1px solid var(--color-review-line);
+  background: var(--color-review-canvas);
 }
 :global(.filters) {
   padding: 14px 14px 2px;
   flex: none;
-  border-bottom: 1px solid #e3e6df;
+  border-bottom: 1px solid var(--color-review-line);
 }
 :global(.sourcePanel) {
   display: flex;
@@ -339,7 +352,7 @@ h3 {
 }
 :global(.sourceHeading) span {
   font-size: 12px;
-  color: #6c746c;
+  color: var(--color-review-muted);
 }
 :global(#sources) {
   flex: 1;
@@ -385,12 +398,12 @@ h3 {
   flex: 1;
 }
 :global(.sourceMeta) {
-  color: #6c746c;
+  color: var(--color-review-muted);
   font-size: 12px;
   margin-top: 4px;
 }
 :global(.sourceMeta):global(.complete) {
-  color: #31704b;
+  color: var(--color-review-accent);
 }
 :global(.panelScroll) {
   min-height: 0;
@@ -419,8 +432,8 @@ h3 {
   justify-content: space-between;
   gap: 12px;
   padding: 5px 12px;
-  background: white;
-  border-bottom: 1px solid #e3e6df;
+  background: var(--color-review-surface);
+  border-bottom: 1px solid var(--color-review-line);
 }
 :global(#sourceName) {
   font-size: 13px;
@@ -450,7 +463,7 @@ figure {
 }
 figcaption {
   font-size: 12px;
-  color: #6c746c;
+  color: var(--color-review-muted);
   padding: 3px 0 8px;
 }
 :global(#canvasStage) {
@@ -460,7 +473,7 @@ figcaption {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  background: #e7e9e3;
+  background: var(--color-review-canvas-stage);
   border-radius: 4px;
 }
 canvas {
@@ -469,8 +482,8 @@ canvas {
   user-select: none;
 }
 :global(.cropInspector) {
-  border-left: 1px solid #e3e6df;
-  background: #fcfcfa;
+  border-left: 1px solid var(--color-review-line);
+  background: var(--color-review-canvas);
 }
 :global(#candidates) {
   display: flex;
@@ -500,7 +513,7 @@ canvas {
 }
 details {
   padding: 12px 0;
-  border-top: 1px solid #e3e6df;
+  border-top: 1px solid var(--color-review-line);
 }
 summary {
   cursor: pointer;
@@ -537,8 +550,8 @@ details label {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-top: 1px solid #dce0d8;
-  background: white;
+  border-top: 1px solid var(--color-review-line);
+  background: var(--color-review-surface);
 }
 :global(.cropSize) {
   display: flex;
@@ -550,10 +563,10 @@ details label {
 }
 :global(.cropSize) span {
   font-size: 11px;
-  color: #6c746c;
+  color: var(--color-review-muted);
 }
 :global(.cropSize) span:global(.bad) {
-  color: #a33730;
+  color: var(--color-review-ink);
 }
 :global(.cropActions) :global(.toolbar) {
   flex-shrink: 0;
@@ -579,8 +592,8 @@ body:global(.focusCrop) :global(.editor) {
   min-height: 0;
 }
 :global(.galleryHeading) {
-  border-bottom: 1px solid #e3e6df;
-  background: white;
+  border-bottom: 1px solid var(--color-review-line);
+  background: var(--color-review-surface);
 }
 :global(.galleryHeading) strong {
   font-weight: 500;
@@ -613,7 +626,7 @@ body:global(.tagEditing) :global(#tagView) {
   display: flex;
   gap: 4px;
   padding: 10px 14px;
-  border-bottom: 1px solid #dce0d8;
+  border-bottom: 1px solid var(--color-review-line);
   flex: none;
 }
 :global(.tagToolTabs) button {
@@ -688,7 +701,7 @@ body:global(.tagEditing) :global(#tagView) {
 }
 :global(#tagFilters) hr {
   border: 0;
-  border-top: 1px solid #e3e6df;
+  border-top: 1px solid var(--color-review-line);
   margin: 10px 0;
 }
 :global(#tagDatasetFilters) :global(.filters) {
@@ -696,7 +709,7 @@ body:global(.tagEditing) :global(#tagView) {
   width: auto;
   gap: 12px;
   padding: 10px 14px;
-  border-bottom: 1px solid #e3e6df;
+  border-bottom: 1px solid var(--color-review-line);
 }
 :global(#tagDatasetFilters) label {
   flex: 1;
@@ -729,7 +742,7 @@ body:global(.tagEditing) :global(#tagView) {
 :global(#tagFocusName) {
   flex: 1;
   overflow-wrap: anywhere;
-  color: #6c746c;
+  color: var(--color-review-muted);
 }
 :global(.tagFocus) button {
   font-size: 12px;
@@ -753,15 +766,15 @@ body:global(.tagEditing) :global(#tagView) {
   flex: none;
 }
 :global(#vocabularyCount) {
-  color: #6c746c;
+  color: var(--color-review-muted);
   font-weight: 400;
 }
 :global(#batchPreview) {
   padding: 12px;
   margin-bottom: 14px;
-  border: 1px solid #ccd7cb;
-  border-radius: 5px;
-  background: #f4f7f2;
+  border: 1px solid var(--color-review-line);
+  border-radius: var(--review-radius);
+  background: var(--color-review-canvas);
   overflow-wrap: anywhere;
 }
 :global(#batchPreview) p {
@@ -777,7 +790,7 @@ body:global(.tagEditing) :global(#tagView) {
   height: 220px;
   object-fit: contain;
   margin: 12px 0;
-  background: #f3f4f0;
+  background: var(--color-review-canvas);
 }
 :global(#singleCaption) {
   min-height: 160px;
@@ -792,17 +805,17 @@ body:global(.tagEditing) :global(#tagView) {
 }
 :global(.card) {
   position: relative;
-  border: 1px solid #d3d9cf;
-  border-radius: 5px;
-  background: white;
+  border: 1px solid var(--color-review-line);
+  border-radius: var(--review-radius);
+  background: var(--color-review-surface);
   padding: 3px;
 }
 :global(.card):global(.selected) {
-  border-color: #31704b;
-  box-shadow: inset 0 0 0 1px #31704b;
+  border-color: var(--color-review-accent);
+  box-shadow: inset 0 0 0 1px var(--color-review-accent);
 }
 :global(.card):global(.focused) {
-  outline: 2px solid #31704b;
+  outline: 2px solid var(--color-review-accent);
   outline-offset: 1px;
 }
 :global(.card) > input[type='checkbox'] {
@@ -824,20 +837,20 @@ body:global(.tagEditing) :global(#tagView) {
   aspect-ratio: 1;
   max-height: none;
   object-fit: contain;
-  background: #f3f4f0;
+  background: var(--color-review-canvas);
 }
 :global(.tagTools) {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: #fcfcfa;
-  border-left: 1px solid #dce0d8;
+  background: var(--color-review-canvas);
+  border-left: 1px solid var(--color-review-line);
 }
 :global(.toolHeading) {
-  border-bottom: 1px solid #e3e6df;
+  border-bottom: 1px solid var(--color-review-line);
 }
 :global(#selectedCount) {
-  color: #31704b;
+  color: var(--color-review-accent);
   font-size: 12px;
 }
 :global(.tagTools) > :global(.panelScroll) {
@@ -861,9 +874,9 @@ body:global(.tagEditing) :global(#tagView) {
   min-height: 40px;
 }
 :global(#batchTabs) button[aria-selected='true'] {
-  background: #e1efdf;
-  border-color: #31704b;
-  color: #255439;
+  background: var(--color-review-tint);
+  border-color: var(--color-review-accent);
+  color: var(--color-review-ink);
   font-weight: 600;
 }
 :global(#batchToolPanel) :global(#tagInputGroup),
@@ -889,7 +902,7 @@ body:global(.tagEditing) :global(#tagView) {
   margin: 0;
 }
 :global(.batchTagPicker) {
-  border-top: 1px solid #e3e6df;
+  border-top: 1px solid var(--color-review-line);
   padding-top: 14px;
 }
 :global(.batchTagPicker) h3 {
@@ -992,12 +1005,12 @@ body:global(.tagEditing) :global(#tagView) {
   min-height: 30px;
   max-width: 100%;
   padding: 4px 8px;
-  background: #eef0ec;
-  border: 1px solid #d9ded5;
+  background: var(--color-review-tint);
+  border: 1px solid var(--color-review-line);
   border-radius: 8px;
   font-size: 14px;
   line-height: 1.4;
-  color: #27302a;
+  color: var(--color-review-ink);
   cursor: pointer;
   text-align: left;
   overflow-wrap: anywhere;
@@ -1009,7 +1022,7 @@ body:global(.tagEditing) :global(#tagView) {
   flex: none;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
-  color: #606b62;
+  color: var(--color-review-muted);
 }
 :global(.tagChip)[aria-pressed]::before {
   content: '';
@@ -1017,30 +1030,30 @@ body:global(.tagEditing) :global(#tagView) {
   width: 14px;
   height: 14px;
   border-radius: 3px;
-  border: 1px solid #9aa69c;
-  background: #fff;
+  border: 1px solid var(--color-review-control);
+  background: var(--color-review-surface);
   box-sizing: border-box;
 }
 :global(.tagChoice) :global(.tagChip)[aria-pressed='true'] {
-  background: #e1efdf;
-  border-color: #31704b;
-  color: #255439;
+  background: var(--color-review-tint);
+  border-color: var(--color-review-accent);
+  color: var(--color-review-ink);
 }
 :global(.tagChip)[aria-pressed='true']::before {
   content: '✓';
-  background: #31704b;
-  border-color: #31704b;
-  color: #fff;
+  background: var(--color-review-accent);
+  border-color: var(--color-review-accent);
+  color: var(--color-review-surface);
   text-align: center;
   font-size: 11px;
   line-height: 12px;
 }
-:global(.tagChoice) :global(.tagChip):hover {
-  border-color: #77927e;
-  background: #e5eae2;
+:global(.tagChoice) :global(.tagChip):not([aria-pressed='true']):hover {
+  border-color: var(--color-review-control);
+  background: var(--color-review-tint);
 }
 :global(.tagChoice) button:focus-visible {
-  outline: 3px solid #31704b;
+  outline: 3px solid var(--color-review-accent);
   outline-offset: 2px;
 }
 :global(.tagChoice) :global(.tagChip):first-child {
@@ -1055,7 +1068,7 @@ body:global(.tagEditing) :global(#tagView) {
 :global(.emptyState) {
   grid-column: 1 / -1;
   text-align: center;
-  color: #6c746c;
+  color: var(--color-review-muted);
   padding: 40px 12px;
 }
 :global(.appStatus) {
@@ -1066,12 +1079,12 @@ body:global(.tagEditing) :global(#tagView) {
   max-height: 80px;
   flex: none;
   padding: 4px 14px;
-  border-top: 1px solid #dce0d8;
-  background: white;
+  border-top: 1px solid var(--color-review-line);
+  background: var(--color-review-surface);
   font-size: 11px;
 }
 :global(#summary) {
-  color: #6c746c;
+  color: var(--color-review-muted);
   flex: none;
 }
 :global(#jobStatus) {
@@ -1082,12 +1095,13 @@ body:global(.tagEditing) :global(#tagView) {
   overscroll-behavior: contain;
 }
 :global(#jobStatus):global(.error) {
-  color: #a33730;
+  color: var(--color-review-ink);
+  font-weight: 600;
 }
 :global(#jobProgress) {
   width: 120px;
   flex: none;
-  accent-color: #31704b;
+  accent-color: var(--color-review-accent);
 }
 :global(#notification) {
   position: fixed;
@@ -1098,21 +1112,22 @@ body:global(.tagEditing) :global(#tagView) {
   align-items: flex-start;
   gap: 8px;
   max-width: min(440px, calc(100vw - 32px));
-  background: #edf4ec;
-  border: 1px solid #b9cdbb;
+  background: var(--color-review-tint);
+  border: 1px solid var(--color-review-line);
   border-radius: 6px;
   padding: 10px 12px;
-  box-shadow: 0 3px 14px #26382a16;
+  box-shadow: 0 3px 14px var(--color-review-shadow);
 }
 :global(#message) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 140px;
   overflow-y: auto;
-  color: #245137;
+  color: var(--color-review-ink);
 }
 :global(#message):global(.error) {
-  color: #a33730;
+  color: var(--color-review-ink);
+  font-weight: 600;
 }
 :global(#dismissMessage) {
   flex: none;
@@ -1124,12 +1139,12 @@ body:global(.tagEditing) :global(#tagView) {
 dialog {
   width: min(96vw, 1300px);
   height: 94dvh;
-  border: 1px solid #ccd0ca;
+  border: 1px solid var(--color-review-line);
   border-radius: 6px;
   overscroll-behavior: contain;
 }
 dialog::backdrop {
-  background: #17241a66;
+  background: var(--color-review-overlay);
 }
 dialog img {
   display: block;

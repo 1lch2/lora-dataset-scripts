@@ -3,14 +3,19 @@
 @import 'tailwindcss/utilities.css' layer(utilities);
 
 @theme {
-  --color-review-accent: #31704b;
-  --color-review-muted: #626b62;
-  --color-review-canvas: #f5f6f3;
-  --color-review-ink: #292d2a;
+  --color-review-accent: #262626;
+  --color-review-muted: #666666;
+  --color-review-canvas: #fafafa;
+  --color-review-ink: #262626;
   --color-review-surface: #ffffff;
-  --color-review-line: #dce0d8;
-  --color-review-control: #89958b;
-  --color-review-tint: #edf2ed;
+  --color-review-line: #e5e5e5;
+  --color-review-field-line: #b3b3b3;
+  --color-review-control: #a3a3a3;
+  --color-review-tint: #f0f0f0;
+  --color-review-accent-hover: #404040;
+  --color-review-canvas-stage: #e8e8e8;
+  --color-review-overlay: #00000066;
+  --color-review-shadow: #00000016;
 }
 
 :root {
@@ -20,11 +25,13 @@
   --review-space-4: 16px;
   --review-space-6: 24px;
   --review-space-8: 40px;
-  --review-page-gutter: clamp(12px, 1.5vw, 24px);
+  --review-editor-gutter: clamp(12px, 1.5vw, 24px);
+  --review-page-gutter: clamp(24px, 3vw, 48px);
   --review-text-xs: 12px;
   --review-text-md: 15px;
   --review-text-lg: 24px;
-  --review-radius: 5px;
+  --review-radius: 8px;
+  --review-panel-radius: 12px;
   --review-duration: 240ms;
 }
 

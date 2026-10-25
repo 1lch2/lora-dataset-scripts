@@ -109,7 +109,6 @@ export function DatasetManager() {
       >
         <div className={styles.layout}>
           <section className={styles.welcome} aria-labelledby='welcomeTitle'>
-            <span className={styles.eyebrow}>LoRA / DATASET WORKSPACE</span>
             <h2 id='welcomeTitle'>
               从一个数据集
               <br />
@@ -155,7 +154,6 @@ export function DatasetManager() {
               ) : null}
             </div>
             <div className={styles.workflow}>
-              <span className={styles.eyebrow}>工作流程</span>
               <p>
                 准备图片 <span aria-hidden='true'>/</span> 审核裁切 <span aria-hidden='true'>/</span> 编辑标签{' '}
                 <span aria-hidden='true'>/</span> 导出训练集
@@ -166,7 +164,6 @@ export function DatasetManager() {
           <section className={styles.workspace} aria-labelledby='workspaceTitle'>
             <div className={styles.sectionHeading}>
               <div>
-                <span className={styles.eyebrow}>{importing ? 'IMPORT DATASET' : 'OPEN DATASET'}</span>
                 <h2 id='workspaceTitle'>{importing ? '导入数据集' : '已有数据集'}</h2>
               </div>
               {importing ? (
@@ -360,7 +357,6 @@ export function DatasetManager() {
             ) : null}
           </section>
         </div>
-        <footer className={styles.homeFooter}>本地素材 · 独立工作记录 · 手动启动处理</footer>
       </main>
     </>
   );

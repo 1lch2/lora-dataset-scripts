@@ -21,11 +21,6 @@
 .empty {
   color: var(--color-review-muted);
 }
-.eyebrow {
-  font-size: var(--review-text-xs);
-  color: var(--color-review-accent);
-  letter-spacing: 0.12em;
-}
 .count {
   font-size: var(--review-text-lg);
   color: var(--color-review-accent);
@@ -50,7 +45,7 @@
   overflow: auto;
   padding: var(--review-space-4);
   border: 1px solid var(--color-review-line);
-  border-radius: var(--review-radius);
+  border-radius: var(--review-panel-radius);
   background: var(--color-review-surface);
 }
 .panel h3 {

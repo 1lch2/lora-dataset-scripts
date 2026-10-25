@@ -122,7 +122,6 @@ export function DatasetTools({ active, token, currentDirectory }: DatasetToolsPr
     >
       <header className={styles.heading}>
         <div>
-          <span className={styles.eyebrow}>DATASET / PROCESSING</span>
           <h2>数据集处理工具</h2>
           <p>选择素材与范围，预览后另存。原图保留，同名 TXT 随图片复制。</p>
         </div>

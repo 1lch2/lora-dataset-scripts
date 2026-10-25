@@ -32,7 +32,9 @@ export function CropCanvas({ image, box, disabled, visible, onChange }: CropCanv
     ctx.rect(0, 0, img.width, img.height);
     ctx.rect(x0, y0, x1 - x0, y1 - y0);
     ctx.fill('evenodd');
-    ctx.strokeStyle = '#53c582';
+    ctx.strokeStyle = '#ffffff';
+    ctx.shadowColor = '#000000';
+    ctx.shadowBlur = 2 * scale;
     ctx.lineWidth = 2 * scale;
     ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
     ctx.fillStyle = '#ffffff';
