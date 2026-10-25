@@ -20,6 +20,7 @@
 - “删除裁切”对未保存画框丢弃草稿，对已保存候选调用 `delete_crop`；`Run.delete_crop` 保留删除历史并从活动候选数组移除对应项，完整图禁止删除。`advanceReview` 从删除项原位置继续定位待审候选。`/api/state` 隐藏旧版 `rejected` 记录，前端只展示待审/已接受状态；文件同步保留已删除后的候选清单。
 - [styles.module.css](../../app/src/Pages/review/ReviewPage/styles.module.css)：统一使用桌面审核布局，无移动端或窄屏宽度断点；全局选择器用于保持已有 DOM 样式契约，局部 `.page` 不生成布局盒。主页样式位于 DatasetManager 同目录的 CSS Module，保留桌面窗口高度调整及减少动态效果的可访问性设置。
 - [app/src/theme.css](../../app/src/theme.css)：黑白灰语义色板与共享间距；页头、主页及普通工具页使用 `--review-page-gutter`，裁切和标签主体不增加外层留白，其数据集栏沿用 `--review-editor-gutter`。
+- 裁切和标签 tab 隐藏左侧身份选择及顶部“切换数据集”入口，切换使用主页；目录、全部图片处理范围、超分及主体识别按钮合为一行，说明由各按钮旁的问号提供悬停与键盘聚焦提示。两个 tab 使用相同的精简显示，处理范围和后端调用不变。
 - [app/src/api/client.ts](../../app/src/api/client.ts)：同源请求与会话 token；请求 URL、操作载荷沿用 Python 协议。
 - [core/dataset_pipeline/review.py](../../core/dataset_pipeline/review.py)：API、图片、编辑/后台任务、会话，以及可选的 `app/dist` 静态资源。
 - [core/dataset_pipeline/datasets.py](../../core/dataset_pipeline/datasets.py)：发现运行、验证目录并生成独立路径；`import_config` 使用请求的 `cropMode=prepared/manual`，未传或为 `auto` 的旧请求仍按 TXT 存在与否判断；`import_sources` 只复制原始图片和按模式接入同名标签，保留未变化的审核记录；`upscale_source` 只更新工作图并映射已有裁框，`detect_source` 在当前工作图生成候选并保留已审核/编辑的裁框。

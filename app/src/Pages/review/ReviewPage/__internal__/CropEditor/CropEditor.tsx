@@ -71,9 +71,7 @@ export function CropEditor() {
         </div>
         <div className='images'>
           <figure className='workingFigure'>
-            <figcaption>
-              {subjectCropping ? '裁切主体 · 在完整图上拖出主体范围' : '工作图 · 拖动裁框移动，拖动角点缩放'}
-            </figcaption>
+            {subjectCropping ? <figcaption>裁切主体 · 在完整图上拖出主体范围</figcaption> : null}
             <CropCanvas
               image={
                 v.source?.working
