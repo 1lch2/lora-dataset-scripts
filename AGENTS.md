@@ -9,23 +9,6 @@
 - 模型调用：人物/头部检测与姿势估计由本地模型完成，放大和 WD14 打标通过 Forge API 完成；独立数据集分析无需 Forge。
 - 运行方式：Windows 下使用 `start-webui.bat` 协调 Forge、Python API 与 Vite；脚本和开发命令从仓库根目录执行。
 
-## 目录与入口
-
-| 路径                                      | 用途                                                     |
-| ----------------------------------------- | -------------------------------------------------------- |
-| `app/src/Pages/`                          | 审核、数据集分析与 LoRA 文件工具页面                     |
-| `app/src/api/`                            | 前端请求与接口类型                                       |
-| `app/src/theme.css`                       | 前端主题 token 与全局样式                                |
-| `core/preprocess.py`                      | `prepare`、`review`、`tag`、`export`、`analyze` 命令入口 |
-| `core/launch_webui.py`                    | Forge 与前后端启动协调                                   |
-| `core/dataset_pipeline/`                  | 预处理、审核 API、模型客户端与分析模块                   |
-| `tests/`                                  | 现有 Python unittest 测试                                |
-| `preprocess.example.json`                 | 可提交的配置示例                                         |
-| `preprocess.local.json`                   | 本机配置，不提交                                         |
-| `dataset-raw/`、`runs/`、`dataset-ready/` | 原始素材、运行记录与训练输出                             |
-| `output/`                                 | LoRA 文件工具的默认目录                                  |
-| `docs/feature-map.yaml`、`docs/features/` | 功能索引与实现导航                                       |
-
 ## 功能导航
 
 - 查找、解释或修改项目功能实现前，使用项目级 [feature-map skill](.agents/skills/feature-map/SKILL.md)，先从 [docs/feature-map.yaml](docs/feature-map.yaml) 匹配功能，按需阅读其指向的 `docs/features/` 专题文档，再核对当前源码。

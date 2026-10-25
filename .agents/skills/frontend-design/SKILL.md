@@ -1,9 +1,15 @@
 ---
 name: frontend-design
-description: 当需要生成、重构或评审前端页面（落地页、作品集、产品官网、活动页、应用工作台 / SPA、Dashboard 视觉层）时使用。适用于"做个好看的页面""优化视觉""这个太丑了"等模糊需求。产出自带设计系统、动效、响应式与可访问性的高质量 HTML/CSS/JS。参考 Awwwards / Webby / FWA 获奖品质。
+description: 用于本项目 WebUI 的新页面、视觉调整与设计评审；优先沿用已确认的 ChatGPT / Codex 风格黑白灰主题、桌面布局、紧凑编辑区和克制文案。通用设计参考只在不冲突时使用。
 ---
 
 # 前端设计 Skill — frontend-design
+
+## 本项目优先规范
+
+处理本仓库 UI 任务时，先读取 [WebUI 设计约定](references/project-ui-style.md)，再按需参考下文通用设计方法。该约定记录用户已确认的设计，优先于下文原型选色、装饰排版、动效、移动端适配和单文件 HTML 建议；用户本次明确指令优先。
+
+本项目已经建立设计系统：即使只是严格沿用现有主题的小调整，也应参考上述约定；下文“不适用”只表示无需重新选原型或执行完整创意设计流程。遵守项目 [React + TypeScript 代码规范](../../../docs/frontend-code-standards.md)，不因视觉调整扩大到功能或交互重构。
 
 > 让 Agent 在有限提示词下产出 Awwwards / Webby / FWA 级别的界面。
 > 核心主张：**品味 = 约束 + 对比 + 克制 + 一个记忆点。**
