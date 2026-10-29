@@ -39,11 +39,12 @@
 .controls input[type='radio'] {
   width: auto;
 }
-.controls .slider {
+.page .slider {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
+  margin: 0;
 }
 .slider span {
   display: flex;
@@ -73,6 +74,116 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+.results > :not(.resultBody) {
+  flex-shrink: 0;
+}
+.overview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--review-space-2);
+}
+.overview strong {
+  font-size: var(--review-text-lg);
+  margin-inline: var(--review-space-1);
+}
+.overview button[aria-pressed='true'],
+.groupButton[aria-pressed='true'] {
+  background: var(--color-review-tint);
+  border-color: var(--color-review-ink);
+  font-weight: 600;
+}
+.groups {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: var(--review-space-3);
+  overflow-x: auto;
+  padding-block: var(--review-space-1);
+}
+.group {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--review-space-2);
+  border-top: 1px solid var(--color-review-line);
+  padding-top: var(--review-space-2);
+}
+.groupButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.group p,
+.commonSettings {
+  font-size: var(--review-text-xs);
+}
+.commonSettings summary,
+.reference summary {
+  cursor: pointer;
+  padding-block: var(--review-space-1);
+}
+.commonSettings .slider {
+  margin-top: var(--review-space-2);
+}
+.resultBody {
+  display: flex;
+  flex: 1;
+  gap: var(--review-space-4);
+  min-height: 240px;
+  min-width: 0;
+}
+.resultBody .table {
+  flex: 1;
+  min-width: 0;
+}
+.score {
+  display: flex;
+  align-items: center;
+  gap: var(--review-space-2);
+  font-variant-numeric: tabular-nums;
+}
+.score progress {
+  appearance: none;
+  border: none;
+  width: 48px;
+  height: 5px;
+  background: var(--color-review-line);
+  border-radius: var(--review-radius);
+  overflow: hidden;
+}
+.score progress::-webkit-progress-bar {
+  background: var(--color-review-line);
+}
+.score progress::-webkit-progress-value {
+  background: var(--color-review-ink);
+}
+.score progress::-moz-progress-bar {
+  background: var(--color-review-ink);
+}
+.samplePreview {
+  flex: 0 0 180px;
+  margin: 0;
+  min-width: 0;
+  overflow: auto;
+}
+.samplePreview img {
+  display: block;
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  background: var(--color-review-canvas);
+  border-radius: var(--review-radius);
+}
+.samplePreview figcaption {
+  margin-top: var(--review-space-2);
+  color: var(--color-review-muted);
+  overflow-wrap: anywhere;
+}
+.reference {
+  border-top: 1px solid var(--color-review-line);
+  padding-top: var(--review-space-2);
 }
 .toolbar {
   display: flex;
@@ -168,7 +279,7 @@
   background: var(--color-review-canvas);
 }
 .table td:nth-child(2) {
-  max-width: 250px;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -4,8 +4,8 @@ not_yet_mapped:
   - 检测、几何裁框与模型客户端的内部实现
 features:
   - id: tagging
-    name: 独立打标、WD 与 PixAI 混合合并、重合热力图与置信度过滤
-    keywords: [打标, tagger, WD, PixAI, 混合, meta, highres, masterpiece, 置信度, 热力图, 重合, 恢复TXT]
+    name: 独立打标、WD 与 PixAI 合并分组、置信度过滤与参考热力图
+    keywords: [打标, tagger, WD, PixAI, 混合, meta, highres, masterpiece, 置信度, 共同支持, 补充, 增减预览, 热力图, 重合, 恢复TXT]
     doc: docs/features/tagging.md
     entrypoints:
       - app/src/Pages/review/ReviewPage/__internal__/Tagging/Tagging.tsx
