@@ -21,3 +21,5 @@
 - [review.py](../../core/dataset_pipeline/review.py)：`GET/POST /api/settings`，写入受本地 Host、会话 token 与任务互斥保护；读取运行时覆盖处理参数，保留数据集路径与身份。独立分析和未启用设置的入口不显示设置控件。
 - [core.py](../../core/dataset_pipeline/core.py)：`Run.load(config_overrides=...)` 在创建模型客户端前应用当前配置；词表使用内置资源。
 - [词表来源](../../data/tags/README.md)：固定 revision、文件用途与 SHA-256。
+
+独立[打标页](tagging.md)按任务明确选择 WD、PixAI 或混合模型；设置中的固定 WD 模型及 CSV 仍供历史流程和标签整理使用，不限制新打标页选择。PixAI 的 meta 类别资源与当前插件 HTTP 过滤限制见该专题。

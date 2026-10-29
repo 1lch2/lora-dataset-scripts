@@ -49,12 +49,13 @@ class ForgeClient:
                 raise ValueError(f"Forge 返回尺寸 {result.size}，预期 {expected}")
             return result.copy()
 
-    def tag(self, image):
+    def tag(self, image, *, model=None, threshold=None):
         # Existing files already have a supported image encoding; send them as-is.
         payload = (base64.b64encode(image.read_bytes()).decode("ascii")
                    if isinstance(image, Path) else encode_image(image))
         result = self.request("POST", "/tagger/v1/interrogate", json={
-            "image": payload, "model": self.config["tagger_model"],
-            "threshold": self.config["tag_threshold"], "queue": "", "name_in_queue": "",
+            "image": payload, "model": model or self.config["tagger_model"],
+            "threshold": self.config["tag_threshold"] if threshold is None else threshold,
+            "queue": "", "name_in_queue": "",
         })
         return result["caption"]["tag"]

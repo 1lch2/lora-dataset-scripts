@@ -27,9 +27,12 @@
 - [core/dataset_pipeline/datasets.py](../../core/dataset_pipeline/datasets.py)：发现运行、验证目录并生成独立路径；`import_config` 使用请求的 `cropMode=prepared/manual`，未传或为 `auto` 的旧请求仍按 TXT 存在与否判断；`import_sources` 只复制原始图片和按模式接入同名标签，保留未变化的审核记录；`upscale_source` 只更新工作图并映射已有裁框，`detect_source` 在当前工作图生成候选并保留已审核/编辑的裁框。
 - `datasets.replace_source_image` 负责 `crop_subject` / `restore_original`：新底图保存于工作目录，首轮主体裁切保存可恢复的 `original_backup`；每次替换重置倍率、全部裁框、检测结果和活动标签，完整图重新登记为已接受。输入目录不被覆盖，多次主体裁切仍可恢复首轮裁切前原图。`manual_processing` 阻止同步重新导入旧 TXT，并允许成品数据集中重置后的单图重新识别和超分；源文件内容变化后同步会丢弃旧底图替换状态。
 - [core/dataset_pipeline/core.py](../../core/dataset_pipeline/core.py)：保留原来的运行记录、预处理、标签与导出组织；其相邻模块的相对导入不变。
+- `atomic_json` 先写入并刷盘临时文件，再原子替换记录；Windows 访问/共享冲突（5/32/33）最多重试两秒，兼容页面轮询短暂读取 manifest。不会先删除旧记录；持续占用、权限不足及其他写入错误仍报告失败。
 - [core/dataset_pipeline/geometry.py](../../core/dataset_pipeline/geometry.py)：`default_scale` 决定按尺寸超分倍率；总像素小于 `1024² × 80%` 时为 1.5 倍，其余为 1 倍。网页 `start_upscale` 只处理需要提高倍率的图片；历史自动流程的内部 `Run.prepare_source` 保留运行记录兼容能力，手动或保存的 `scale_override` 优先。
 
 普通审核启动进入 `home`，首次只读取状态和已有运行列表，不加载目录；空白会话返回 `datasetLoaded=false`，裁切/标签 tab 在加载数据集前禁用。独立分析及 `?analysis` 入口仍进入分析页。显式导入、打开已有数据集或顶部刷新通过带会话 token 的 `sync_sources` 调用 `import_sources`，不执行图片处理；切换重置筛选和选择。完整打标数据集在没有待审裁框时进入标签页，待处理数据集进入裁切页；返回主页保留当前工作，继续按钮恢复本次会话的审核阶段。主页不会被后台打标完成自动跳转。
+
+2026-10-29：裁切后新增独立[打标 tab](tagging.md)，同样要求已导入数据集；页头打标按钮已移入此页。支持 WD / PixAI 单模型与混合打标，完成后停留打标页查看热力图和置信度过滤，标签编辑页保持原有职责。完整数据集重新导入源 TXT 的恢复行为见该专题。
 
 主页“管理数据集”显示逐项删除操作，确认框列出工作目录和导出目录。`/api/datasets/delete` 校验会话 token、任务互斥和运行锁，通过 `datasets.delete_dataset` 清理项目 `runs/<名称>` 与同名 `dataset-ready/<名称>`，保留输入素材及共享模型；项目外、非独立目录、链接或与其他运行/输入目录重叠的目标拒绝删除。清理成功后刷新首页列表；删除当前运行时清空后端会话及前端审核选择，停留首页。删除过程中出错会报告错误，不承诺已删除文件可回滚。
 

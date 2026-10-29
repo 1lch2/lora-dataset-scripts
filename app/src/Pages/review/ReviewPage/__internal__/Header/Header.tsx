@@ -36,6 +36,18 @@ export function Header() {
             裁切
           </button>
           <button
+            id='taggingTab'
+            role='tab'
+            aria-selected={v.stage === 'tagging'}
+            aria-controls='taggingView'
+            className={v.stage === 'tagging' ? 'active' : ''}
+            disabled={v.busy || v.session.analysisOnly || !v.state?.datasetLoaded}
+            onClick={() => v.handleStage('tagging')}
+            tabIndex={v.stage === 'tagging' ? 0 : -1}
+          >
+            打标
+          </button>
+          <button
             id='tagTab'
             role='tab'
             aria-selected={v.stage === 'tag'}
@@ -87,15 +99,6 @@ export function Header() {
         {v.session.settingsEnabled ? <Settings /> : null}
         <div className='stageActions' hidden={v.stage === 'home'}>
           <span id='stageStatus'>{v.stageStatus}</span>
-          <button
-            id='startTag'
-            className={v.stage === 'tag' ? '' : 'primary'}
-            disabled={v.processing || !v.ready}
-            onClick={() => v.handleAction('startTag')}
-            hidden={v.stage === 'tag' && !v.untagged && !['running', 'failed'].includes(v.job.status)}
-          >
-            {v.startLabel}
-          </button>
           <button
             id='exportDataset'
             className='primary'

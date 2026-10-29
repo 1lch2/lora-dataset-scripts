@@ -52,7 +52,20 @@ def atomic_json(path, data):
         json.dump(data, stream, ensure_ascii=False, indent=2, allow_nan=False)
         stream.flush()
         os.fsync(stream.fileno())
-    temporary.replace(path)
+    # Windows 的普通读取句柄不共享删除权限，页面轮询可能短暂阻止原子替换。
+    # 只重试访问/共享冲突；不删除旧文件，持续占用或权限问题仍向调用方报错。
+    deadline = time.monotonic() + 2
+    delay = 0.025
+    while True:
+        try:
+            temporary.replace(path)
+            break
+        except OSError as error:
+            remaining = deadline - time.monotonic()
+            if os.name != 'nt' or getattr(error, 'winerror', None) not in (5, 32, 33) or remaining <= 0:
+                raise
+            time.sleep(min(delay, remaining))
+            delay = min(delay * 2, 0.2)
 
 
 def inside(path, root):

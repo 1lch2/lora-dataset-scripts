@@ -3,6 +3,14 @@ scope: 已核对审核前端、数据集分析、LoRA 文件工具、BAT 启动�
 not_yet_mapped:
   - 检测、几何裁框与模型客户端的内部实现
 features:
+  - id: tagging
+    name: 独立打标、WD 与 PixAI 混合合并、重合热力图与置信度过滤
+    keywords: [打标, tagger, WD, PixAI, 混合, meta, highres, masterpiece, 置信度, 热力图, 重合, 恢复TXT]
+    doc: docs/features/tagging.md
+    entrypoints:
+      - app/src/Pages/review/ReviewPage/__internal__/Tagging/Tagging.tsx
+      - core/dataset_pipeline/tagging.py
+      - core/dataset_pipeline/forge.py
   - id: dataset-tools
     name: 数据集处理工具、短边缩放、镜像翻转与去重另存
     keywords: [处理工具, 范围, 子目录, 勾选, resize, reverse, deduplicate, 缩放, 镜像, 去重, 另存]

@@ -204,6 +204,14 @@
   background: var(--color-review-tint);
 }
 
+.currentLabel {
+  padding: var(--review-space-1) var(--review-space-2);
+  border-radius: var(--review-radius);
+  background: var(--color-review-current-bg);
+  color: var(--color-review-current-ink);
+  font-weight: 600;
+}
+
 .datasetPath {
   font-family: ui-monospace, monospace;
   font-size: var(--review-text-xs);

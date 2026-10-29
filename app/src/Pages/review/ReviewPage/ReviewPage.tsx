@@ -5,6 +5,7 @@ import { DatasetManager } from './__internal__/DatasetManager';
 import { Library } from './__internal__/Library';
 import { CropEditor } from './__internal__/CropEditor';
 import { TagEditor } from './__internal__/TagEditor';
+import { Tagging } from './__internal__/Tagging';
 import { StatusBar } from './__internal__/StatusBar';
 import { PreviewDialog } from './__internal__/PreviewDialog';
 import { AnalysisView } from '../../analysis/AnalysisView';
@@ -34,6 +35,9 @@ export function ReviewPage({ session }: ReviewPageProps) {
           />
           <Library />
           <CropEditor />
+          {review.stage === 'tagging' && review.state?.datasetLoaded ? (
+            <Tagging key={review.state.config.run_dir} />
+          ) : null}
           <TagEditor />
         </div>
         {review.stage !== 'home' ? <StatusBar /> : null}

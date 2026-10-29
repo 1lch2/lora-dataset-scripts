@@ -129,7 +129,7 @@ export function useReview(session: SessionInfo) {
           job.status === 'failed'
             ? `处理未完成，已保存成功项，可重试。\n${job.errors.join('\n')}`
             : job.action === 'start_tag'
-              ? `打标完成，共 ${job.total} 份样本。可编辑标签并导出训练集。`
+              ? `打标完成，共 ${job.total} 份样本。可在打标页预览合并结果、调整置信度范围。`
               : job.action === 'sync_sources'
                 ? `数据集已导入，共 ${Object.values(data.sources).filter((s) => s.active).length} 张图片。${data.config.crop_mode === 'prepared' ? '已接入 TXT 标签，可编辑并导出。' : '未执行图片处理，可手动选择超分、识别或打标。'}`
                 : job.action === 'start_upscale'
@@ -140,7 +140,7 @@ export function useReview(session: SessionInfo) {
         );
         if (job.status === 'complete' && job.action === 'start_tag')
           setStage((previous) =>
-            ['home', 'analysis', 'lora', 'tools'].includes(previous) ? previous : 'tag',
+            ['home', 'analysis', 'lora', 'tools'].includes(previous) ? previous : 'tagging',
           );
         if (
           job.status === 'complete' &&
@@ -164,14 +164,16 @@ export function useReview(session: SessionInfo) {
   useEffect(() => {
     document.body.classList.toggle('analyzing', stage === 'analysis');
     document.body.classList.toggle('tagEditing', stage === 'tag');
+    document.body.classList.toggle('tagging', stage === 'tagging');
     document.body.classList.toggle('loraTools', stage === 'lora' || stage === 'tools');
     document.body.classList.toggle('focusCrop', focusCrop && stage === 'crop');
-    return () => document.body.classList.remove('analyzing', 'tagEditing', 'loraTools', 'focusCrop');
+    return () =>
+      document.body.classList.remove('analyzing', 'tagEditing', 'tagging', 'loraTools', 'focusCrop');
   }, [stage, focusCrop]);
   function handleStage(next: string) {
-    if (['crop', 'tag'].includes(next) && !state?.datasetLoaded) return;
-    if (['crop', 'tag'].includes(stage)) lastReviewStage.current = stage;
-    if (['crop', 'tag'].includes(next)) lastReviewStage.current = next;
+    if (['crop', 'tagging', 'tag'].includes(next) && !state?.datasetLoaded) return;
+    if (['crop', 'tagging', 'tag'].includes(stage)) lastReviewStage.current = stage;
+    if (['crop', 'tagging', 'tag'].includes(next)) lastReviewStage.current = next;
     setStage(next);
     if (next !== 'crop') setFocusCrop(false);
     if (next === 'home') {
@@ -616,7 +618,7 @@ export function useReview(session: SessionInfo) {
       ? `${jobQuery.error.message}，正在重连；可用“刷新数据”核对已保存结果。`
       : job.status === 'running'
         ? job.action === 'start_tag'
-          ? `已打标 ${job.done} / ${job.total} 份（含已完成缓存）。`
+          ? `已处理 ${job.done} / ${job.total} 份。`
           : job.action === 'sync_sources'
             ? '正在导入图片和已有 TXT 标签，不执行超分、识别或打标…'
             : job.action === 'start_upscale'

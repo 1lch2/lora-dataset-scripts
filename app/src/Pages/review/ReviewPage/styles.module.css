@@ -1,6 +1,13 @@
 .page {
   display: contents;
 }
+body:global(.tagging) :global(.libraryPanel) {
+  display: none;
+}
+body:global(.tagging) :global(.appShell) {
+  display: block;
+  overflow: hidden;
+}
 :root {
   font:
     13px/1.5 system-ui,

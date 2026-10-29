@@ -1,5 +1,20 @@
 export type Box = [number, number, number, number];
+export type TaggingMode = 'wd' | 'pixai' | 'mixed';
+export interface TaggingFilters {
+  wd: number;
+  pixai: number;
+  commonWd: number;
+  commonPixai: number;
+}
+export interface TaggingEvidence {
+  mode: TaggingMode;
+  models: Partial<Record<'wd' | 'pixai', string>>;
+  floor: number;
+  filters: TaggingFilters;
+  scores: Partial<Record<'wd' | 'pixai', Record<string, number>>>;
+}
 export interface Tag {
+  evidence?: TaggingEvidence;
   tags: string[];
   image: string;
   auto_removed: string[];
@@ -33,6 +48,7 @@ export interface Source {
   candidates: Candidate[];
 }
 export interface RunInfo {
+  tagging_options?: { mode: TaggingMode; filters: TaggingFilters };
   datasetLoaded: boolean;
   sources: Record<string, Source>;
   updated_at: string;

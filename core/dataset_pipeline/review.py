@@ -12,6 +12,7 @@ from .rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
 
 from .core import DEFAULTS, Run, asset, run_lock
 from .geometry import default_scale
+from .tagging import apply_filters, restore_captions, tag_run, validate_options
 from .settings import RUNTIME_KEYS, save_settings, settings_info
 from .analysis_job import AnalysisJob
 from .tools import DatasetToolsJob, scan_files
@@ -37,7 +38,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
         overrides = {key: template[key] for key in RUNTIME_KEYS} if settings_path else None
         return Run.load(folder, config_overrides=overrides)
 
-    def process_job(action, group=None, source_id=None):
+    def process_job(action, group=None, source_id=None, tagging=None):
         try:
             with run_lock(directory):
                 run = load_run(directory)
@@ -67,6 +68,13 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                         run.save()
                         with mutex:
                             job['done'] += 1
+                elif action == 'start_tag' and tagging is not None:
+                    if model_setup:
+                        model_setup(run.config)
+                    def progress(done, total):
+                        with mutex:
+                            job.update(done=done, total=total)
+                    errors = tag_run(run, tagging, progress)
                 else:
                     if action == 'start_tag' and model_setup and any(s.get('active', True) and c['status'] == 'accepted'
                             and (not run.current_tag(s, c) or not asset(directory, c['tag']['image']).is_file())
@@ -80,7 +88,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
             with mutex:
                 job.update(status="failed", errors=[str(error)])
 
-    def start_job(action, group=None, source_id=None):
+    def start_job(action, group=None, source_id=None, tagging=None, replace_confirmed=False):
         with mutex:
             if directory is None:
                 raise ValueError('请先选择并导入数据集')
@@ -103,6 +111,10 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     if not sources:
                         raise ValueError('所选范围没有可用图片')
                 if action in ('start_tag', 'export'):
+                    if action == 'start_tag' and tagging is not None:
+                        tagging = validate_options(tagging)
+                        if any(c.get('tag') for s in sources for c in s['candidates'] if c['status'] == 'accepted') and replace_confirmed is not True:
+                            raise ValueError('请确认替换工作目录中的已有标签；导入来源不会被修改')
                     if not sources or any(s.get("error") for s in sources):
                         raise ValueError("没有可用图片或图片准备失败，请先完成准备")
                     if any(c["status"] == "pending" for s in sources for c in s["candidates"]):
@@ -110,8 +122,9 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     if action == "export" and any(not run.current_tag(s, c)
                                               for s in sources for c in s["candidates"] if c["status"] == "accepted"):
                         raise ValueError("请先完成所有接受样本的打标")
-            job.update(id=secrets.token_hex(8), status="running", action=action, errors=[], count=None, total=0, done=0)
-        threading.Thread(target=process_job, args=(action, group, source_id), daemon=True).start()
+            job.update(id=secrets.token_hex(8), status="running", action=action, errors=[], count=None,
+                       total=0, done=0, explicitTagging=tagging is not None)
+        threading.Thread(target=process_job, args=(action, group, source_id, tagging), daemon=True).start()
 
     class Handler(BaseHTTPRequestHandler):
         def valid_host(self):
@@ -194,7 +207,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     run = load_run(directory)
                     samples = [(s, c) for s in run.data["sources"].values() if s.get("active", True)
                                for c in s["candidates"] if c["status"] == "accepted"]
-                    if data.get('action') not in ('start_upscale', 'start_detect'):
+                    if data.get('action') not in ('start_upscale', 'start_detect') and not data.get('explicitTagging'):
                         data.update(total=len(samples), done=sum(run.current_tag(s, c)
                                     and asset(directory, c["tag"]["image"]).is_file() for s, c in samples))
                     self.reply(200, data)
@@ -319,7 +332,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     self.reply(200, {"ok": True, "result": {}})
                     return
                 if data.get("action") in ("start_tag", "export", "sync_sources", 'start_upscale', 'start_detect'):
-                    start_job(data["action"], data.get('group'), data.get('source'))
+                    start_job(data["action"], data.get('group'), data.get('source'),
+                              data.get('tagging'), data.get('replaceConfirmed', False))
                     self.reply(202, {"ok": True, "result": {}})
                     return
                 with mutex, run_lock(directory):
@@ -327,7 +341,13 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                         raise ValueError("任务正在运行，完成后可继续编辑")
                     run = load_run(directory)
                     action = data["action"]
-                    if action == "crop":
+                    if action == 'filter_tagging':
+                        result = apply_filters(run, data)
+                    elif action == 'restore_captions':
+                        if data.get('replaceConfirmed') is not True:
+                            raise ValueError('请确认重新导入源 TXT 并替换工作标签')
+                        result = restore_captions(run)
+                    elif action == "crop":
                         result = run.change_crop(data["source"], data.get("candidate"), data.get("box"), data.get("status"))
                     elif action == 'delete_crop':
                         run.delete_crop(data['source'], data.get('candidate'))

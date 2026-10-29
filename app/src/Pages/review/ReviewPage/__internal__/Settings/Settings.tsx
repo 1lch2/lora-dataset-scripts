@@ -64,7 +64,7 @@ function SettingsForm({ info, token, busy, onClose }: SettingsFormProps) {
           </a>
           ，保存时检查已安装的插件来源。
         </p>
-        <p>打标模型：{info.taggerModel}。标签 CSV 已内置，无需填写路径。</p>
+        <p>打标模型和置信度范围在“打标”页选择。标签整理 CSV 已内置，无需填写路径。</p>
         <details>
           <summary>处理参数</summary>
           <p>保存后用于当前及之后打开的数据集；不会自动重新处理图片。</p>
@@ -88,7 +88,6 @@ function SettingsForm({ info, token, busy, onClose }: SettingsFormProps) {
           {(
             [
               ['blend', '辅助模型混合比例', 0, 1, 0.01],
-              ['tag_threshold', '打标阈值', 0, 1, 0.01],
               ['target_area', '裁切目标像素数', 1, undefined, 1],
               ['min_area', '裁切最小像素数', 1, undefined, 1],
               ['duplicate_iou', '重复裁框 IoU 阈值', 0.01, 1, 0.01],

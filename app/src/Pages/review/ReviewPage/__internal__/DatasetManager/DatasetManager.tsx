@@ -63,7 +63,7 @@ export function DatasetManager() {
   if (v.session.analysisOnly) return null;
   return (
     <>
-      {['crop', 'tag'].includes(v.stage) ? (
+      {['crop', 'tagging', 'tag'].includes(v.stage) ? (
         <section className={`${styles.manager} ${styles.compactManager}`} aria-label='当前数据集与处理'>
           <div className={styles.current}>
             <span className={styles.badge}>
@@ -73,7 +73,7 @@ export function DatasetManager() {
               {v.state?.config.input_dir}
             </span>
           </div>
-          {v.state?.datasetLoaded && v.state.config.crop_mode !== 'prepared' ? (
+          {v.stage !== 'tagging' && v.state?.datasetLoaded && v.state.config.crop_mode !== 'prepared' ? (
             <div className={styles.processing}>
               <span className='hint'>范围：数据集全部图片</span>
               <div className={styles.processingAction}>

@@ -12,6 +12,8 @@
   --color-review-field-line: #b3b3b3;
   --color-review-control: #a3a3a3;
   --color-review-tint: #f0f0f0;
+  --color-review-current-bg: #dcfce7;
+  --color-review-current-ink: #166534;
   --color-review-accent-hover: #404040;
   --color-review-canvas-stage: #e8e8e8;
   --color-review-overlay: #00000066;
