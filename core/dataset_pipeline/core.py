@@ -20,11 +20,11 @@ from .geometry import MIN_AREA, TARGET_AREA, area, default_scale, full_body_conf
 
 
 DEFAULTS = {
-    "input_dir": "dataset-raw", "run_dir": "runs/default", "output_dir": "dataset-ready",
     "forge_url": "http://127.0.0.1:7860", "upscaler_1": "4x-UltraSharpV2", "upscaler_2": "ScuNET",
     "blend": 0.3, "tagger_model": "wd-eva02-large-tagger-v3", "tag_threshold": 0.3,
     "target_area": TARGET_AREA, "min_area": MIN_AREA, "duplicate_iou": 0.95,
-    "copyright": "arknights", "drop_tags": [], "tags_csv": "",
+    "copyright": "arknights", "drop_tags": [],
+    "tags_csv": str(Path(__file__).resolve().parents[2] / 'data/tags/wd-eva02-large-tagger-v3/selected_tags.csv'),
     "identity": "",
     "crop_mode": "auto",
     "import_captions": False,
@@ -70,22 +70,8 @@ def asset(run_dir, relative):
     return path
 
 
-def read_config(path):
-    path = Path(path).resolve()
-    values = json.loads(path.read_text(encoding="utf-8-sig"))
-    unknown = set(values) - set(DEFAULTS)
-    if unknown:
-        raise ValueError(f"未知配置项: {sorted(unknown)}")
-    config = {**DEFAULTS, **values}
-    for key in ("input_dir", "run_dir", "output_dir", "tags_csv"):
-        if config[key]:
-            config[key] = str((path.parent / config[key]).resolve())
-    validate_config(config)
-    return config
-
-
-def validate_config(config):
-    roots = [Path(config[key]).resolve() for key in ("input_dir", "run_dir", "output_dir")]
+def validate_config(config, *, dataset=True):
+    roots = [Path(config[key]).resolve() for key in ("input_dir", "run_dir", "output_dir")] if dataset else []
     for i, root in enumerate(roots):
         for other in roots[i + 1:]:
             if inside(root, other) or inside(other, root):
@@ -112,7 +98,7 @@ def validate_config(config):
 
 @contextmanager
 def run_lock(directory):
-    """OS lock, released even on process termination; review and CLI cannot race."""
+    """运行锁在进程退出后释放，避免多个审核进程同时写入。"""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     with (directory / ".lock").open("a+b") as stream:
@@ -152,10 +138,12 @@ class Run:
         self.analyzer = analyzer
 
     @classmethod
-    def load(cls, directory, **kwargs):
+    def load(cls, directory, config_overrides=None, **kwargs):
         data = json.loads((Path(directory) / "manifest.json").read_text(encoding="utf-8"))
         if data.get("version") != 1:
             raise ValueError("不支持的运行记录版本")
+        if config_overrides:
+            data['config'].update(config_overrides)
         run = cls(directory, data, **kwargs)
         run.read_tag_files()
         return run
@@ -416,7 +404,7 @@ class Run:
             output = oriented.copy() if candidate["box"] is None else oriented.crop(candidate["box"])
         if candidate["box"] and output.width * output.height < self.config["min_area"]:
             raise ValueError("裁片低于像素下限")
-        # Match resize.py without encoding and reopening the full-resolution PNG.
+        # 保持历史裁片的短边缩放与取整规则，避免额外的 PNG 编解码。
         shortest = min(output.size)
         if shortest >= 1280 and self.config.get("crop_mode", "auto") == "auto":
             ratio = 1280 / shortest
@@ -443,10 +431,10 @@ class Run:
             if not source.get("active", True):
                 continue
             if source.get("error"):
-                failures.append(f"{source['relative']}: prepare 失败")
+                failures.append(f"{source['relative']}: 图片准备失败")
                 continue
             if not Path(source["source_path"]).is_file() or file_digest(source["source_path"]) != source["fingerprint"]:
-                failures.append(f"{source['relative']}: 源文件已变化，请重新 prepare")
+                failures.append(f"{source['relative']}: 源文件已变化，请在网页刷新数据集后重新处理")
                 continue
             for candidate in source["candidates"]:
                 if candidate["status"] != "accepted":
@@ -572,7 +560,7 @@ class Run:
         for source in sources:
             if (source.get("error") or not Path(source["source_path"]).is_file()
                     or file_digest(source["source_path"]) != source["fingerprint"]):
-                raise ValueError("输入已变化或 prepare 失败，请先重新处理")
+                raise ValueError("输入已变化或 图片准备失败，请先重新处理")
             if any(c["status"] == "pending" for c in source["candidates"]):
                 raise ValueError("仍有待审核裁框，请接受或删除后再导出")
             for candidate in source["candidates"]:
@@ -584,7 +572,7 @@ class Run:
             raise ValueError("没有可导出的图片")
         csv_path = Path(self.config["tags_csv"])
         if not self.config["tags_csv"] or not csv_path.is_file():
-            raise ValueError("请配置 EVA02-Large 模型配套的 selected_tags.csv 路径")
+            raise ValueError(f"未找到 EVA02-Large 标签词表：{csv_path}，请检查项目 data/tags 资源是否完整")
         with csv_path.open(encoding="utf-8-sig", newline="") as stream:
             character_tags = {normalize(row["name"]) for row in csv.DictReader(stream) if row["category"] == "4"}
         output = Path(self.config["output_dir"])

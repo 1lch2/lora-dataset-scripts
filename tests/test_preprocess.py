@@ -13,7 +13,7 @@ from unittest.mock import patch
 import requests
 from PIL import Image
 
-from dataset_pipeline.core import DEFAULTS, Run, asset, digest, file_digest, prepare, read_config, run_lock
+from dataset_pipeline.core import DEFAULTS, Run, asset, digest, file_digest, prepare, validate_config, run_lock
 from dataset_pipeline.forge import ForgeClient, encode_image
 from dataset_pipeline.geometry import MIN_AREA, TARGET_AREA, area, default_scale, expand_box, full_body_conflict, iou, propose, to_original
 from dataset_pipeline.review import make_server
@@ -401,10 +401,8 @@ class PipelineTests(unittest.TestCase):
             open_directory.assert_called_once_with(run.directory)
 
     def test_bad_paths_and_lock(self):
-        config = self.root / "config.json"
-        config.write_text(json.dumps({"input_dir": "input", "run_dir": "input/work"}))
         with self.assertRaises(ValueError):
-            read_config(config)
+            validate_config({**DEFAULTS, "input_dir": str(self.root / "input"), "run_dir": str(self.root / "input/work"), "output_dir": str(self.root / "output")})
         with run_lock(self.root / "lock"):
             with self.assertRaises(ValueError):
                 with run_lock(self.root / "lock"):

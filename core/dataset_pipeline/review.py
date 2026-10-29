@@ -12,12 +12,13 @@ from .rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
 
 from .core import DEFAULTS, Run, asset, run_lock
 from .geometry import default_scale
+from .settings import RUNTIME_KEYS, save_settings, settings_info
 from .analysis_job import AnalysisJob
 from .tools import DatasetToolsJob, scan_files
 from .datasets import delete_dataset, detect_source, import_config, import_sources, list_datasets, replace_source_image, upscale_source
 
 
-def make_server(directory=None, port=8765, config=None, model_setup=None):
+def make_server(directory=None, port=8765, config=None, model_setup=None, settings_path=None):
     directory = Path(directory).resolve() if directory is not None else None
     if directory is not None:
         with run_lock(directory):
@@ -32,10 +33,14 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
     template = dict(config if config is not None else Run.load(directory).config if directory else {})
     analysis_only = directory is None and config is None
 
+    def load_run(folder):
+        overrides = {key: template[key] for key in RUNTIME_KEYS} if settings_path else None
+        return Run.load(folder, config_overrides=overrides)
+
     def process_job(action, group=None, source_id=None):
         try:
             with run_lock(directory):
-                run = Run.load(directory)
+                run = load_run(directory)
                 if action == "sync_sources":
                     run, errors = import_sources(run.config)
                 elif action in ('start_upscale', 'start_detect'):
@@ -88,7 +93,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                     return
                 raise ValueError("已有任务正在运行")
             with run_lock(directory):
-                run = Run.load(directory)
+                run = load_run(directory)
                 sources = ([run.locate(source_id)] if source_id is not None else
                            [s for s in run.data["sources"].values() if s.get("active", True)
                             and (action not in ('start_upscale', 'start_detect') or not group or s['group'] == group)])
@@ -129,10 +134,16 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                 return
             route = urlparse(self.path)
             try:
-                if route.path == '/api/session':
+                if route.path == '/api/settings':
+                    if settings_path is None:
+                        raise ValueError('当前入口不支持网页设置，请使用 start-webui.bat')
+                    with mutex:
+                        self.reply(200, settings_info(template))
+                elif route.path == '/api/session':
                     self.reply(200, {'token': token, 'analysisOnly': analysis_only,
                                      'application': 'dataset-review', 'runDir': str(directory) if directory else None,
-                                     'manualWorkflow': True, 'startupConfig': template,
+                                     'manualWorkflow': True, 'startupConfig': template, 'settingsEnabled': settings_path is not None,
+                                     'settingsPath': str(Path(settings_path).resolve()) if settings_path else None,
                                      'loraOutputDir': str(LORA_OUTPUT_DIR)})
                 elif route.path == '/' or route.path.startswith('/assets/'):
                     path = (static / ('index.html' if route.path == '/' else route.path.lstrip('/'))).resolve()
@@ -169,7 +180,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                     self.reply(404, {'error':'独立分析模式没有审核数据'})
                 elif route.path == "/api/state":
                     with mutex:
-                        run = Run.load(directory)
+                        run = load_run(directory)
                         data = run.data
                         data['datasetLoaded'] = True
                         for source in data["sources"].values():
@@ -180,7 +191,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                 elif route.path == "/api/job":
                     with mutex:
                         data = dict(job)
-                    run = Run.load(directory)
+                    run = load_run(directory)
                     samples = [(s, c) for s in run.data["sources"].values() if s.get("active", True)
                                for c in s["candidates"] if c["status"] == "accepted"]
                     if data.get('action') not in ('start_upscale', 'start_detect'):
@@ -189,7 +200,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                     self.reply(200, data)
                 elif route.path == "/image":
                     query = parse_qs(route.query)
-                    run = Run.load(directory)
+                    run = load_run(directory)
                     source = run.locate(query["source"][0])
                     kind = query.get("kind", ["working"])[0]
                     if kind in ("original", "working"):
@@ -210,7 +221,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
             if not self.valid_host() or self.headers.get("X-Review-Token") != token:
                 self.reply(403, {"error": "审核会话无效，请刷新页面"})
                 return
-            if self.path not in ("/api/edit", '/api/analysis/start', '/api/analysis/cancel', '/api/lora/rename',
+            if self.path not in ("/api/settings", "/api/edit", '/api/analysis/start', '/api/analysis/cancel', '/api/lora/rename',
                                  '/api/datasets/import', '/api/datasets/open', '/api/datasets/delete',
                                  '/api/tools/scan', '/api/tools/preview', '/api/tools/execute', '/api/tools/cancel'):
                 self.reply(404, {"error": "接口不存在"})
@@ -222,7 +233,18 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                 data = json.loads(self.rfile.read(length))
                 if not isinstance(data,dict):
                     raise ValueError('请求必须为对象')
+                if self.path == '/api/settings':
+                    if settings_path is None:
+                        raise ValueError('当前入口不支持网页设置')
+                    with mutex:
+                        if job['status'] == 'running':
+                            raise ValueError('任务正在运行，完成后可保存设置')
+                        updated = save_settings(data, template, settings_path)
+                        template.update(updated)
+                        self.reply(200, settings_info(template))
+                    return
                 if self.path.startswith('/api/tools/'):
+
                     actions = {'scan': scan_files, 'preview': dataset_tools.preview,
                                'execute': dataset_tools.execute, 'cancel': lambda _: dataset_tools.cancel()}
                     with mutex:
@@ -273,7 +295,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                             with run_lock(selected):
                                 if not (selected / 'manifest.json').is_file():
                                     Run(selected, {'version': 1, 'config': config, 'sources': {}}).save()
-                                imported = Run.load(selected)
+                                imported = load_run(selected)
                                 imported.config.update(crop_mode=config['crop_mode'], import_captions=config['import_captions'])
                                 imported.ensure_tag_files()
                                 imported.save()
@@ -284,7 +306,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                                 raise ValueError('数据集不存在，请刷新列表')
                             selected = Path(requested)
                             with run_lock(selected):
-                                Run.load(selected).ensure_tag_files()
+                                load_run(selected).ensure_tag_files()
                         directory = selected
                         job.update(id=None, status='idle', action=None, errors=[], count=None)
                         start_job('sync_sources')
@@ -303,7 +325,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
                 with mutex, run_lock(directory):
                     if job["status"] == "running":
                         raise ValueError("任务正在运行，完成后可继续编辑")
-                    run = Run.load(directory)
+                    run = load_run(directory)
                     action = data["action"]
                     if action == "crop":
                         result = run.change_crop(data["source"], data.get("candidate"), data.get("box"), data.get("status"))
@@ -354,9 +376,9 @@ def make_server(directory=None, port=8765, config=None, model_setup=None):
     return ReviewServer(("127.0.0.1", port), Handler)
 
 
-def serve(directory, port=8765, open_browser=True, frontend_port=5173, config=None, model_setup=None):
+def serve(directory, port=8765, open_browser=True, frontend_port=5173, config=None, model_setup=None, settings_path=None):
     from .frontend import start_frontend, stop_frontend
-    server = make_server(directory, port, config, model_setup)
+    server = make_server(directory, port, config, model_setup, settings_path)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     frontend = None

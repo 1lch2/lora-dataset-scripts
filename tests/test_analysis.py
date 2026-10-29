@@ -126,13 +126,21 @@ class AnalysisTests(unittest.TestCase):
         for kwargs in ({'pair_limit':1},{'pose_threshold':float('nan')},{'hash_threshold':99}):
             with self.assertRaises(ValueError):analyze_directory(self.root,**kwargs)
 
-    def test_offline_worker_and_cli_do_not_overwrite(self):
+    def run_worker(self, output, **options):
+        request = dict(directory=str(self.root), output=str(output),
+                       progress=str(self.root/'progress.json'), error_file=str(self.root/'error.json'),
+                       recursive=True, pose=False, captions=False, pair_limit=1500,
+                       pose_threshold=.18, hash_threshold=6, model_cache=None, **options)
+        return subprocess.run([sys.executable,'-m','dataset_pipeline.analysis_worker'],
+                              input=json.dumps(request).encode('utf-8'), capture_output=True)
+
+    def test_offline_worker_does_not_overwrite(self):
         self.solid('a.png','gray')
         output=self.root/'report.json'
-        result=subprocess.run([sys.executable,'-m','dataset_pipeline.analysis',str(self.root),'--output',str(output)],capture_output=True)
+        result=self.run_worker(output)
         self.assertEqual(result.returncode,0,result.stderr)
         content=output.read_bytes()
-        result=subprocess.run([sys.executable,'-m','dataset_pipeline.analysis',str(self.root),'--output',str(output)],capture_output=True)
+        result=self.run_worker(output)
         self.assertNotEqual(result.returncode,0)
         self.assertEqual(output.read_bytes(),content)
         code='from dataset_pipeline.analysis import offline_mode; offline_mode(); import socket; socket.create_connection(("127.0.0.1",80))'
@@ -147,8 +155,7 @@ class AnalysisTests(unittest.TestCase):
         progress.write_text('{}',encoding='utf-8')
         report = self.root/'report.json'
         with progress.open('rb'):
-            result = subprocess.run([sys.executable,'-m','dataset_pipeline.analysis',str(self.root),
-                                     '--output',str(report),'--progress',str(progress)],capture_output=True)
+            result = self.run_worker(report)
         self.assertEqual(result.returncode,0,result.stdout.decode(errors='replace')+result.stderr.decode(errors='replace'))
         self.assertEqual(json.loads(report.read_text(encoding='utf-8'))['successful'],1)
 
@@ -165,8 +172,7 @@ class AnalysisTests(unittest.TestCase):
     def test_real_report_errors_are_not_suppressed(self):
         self.solid('synthetic.png','gray')
         error_file = self.root/'error.json'
-        result = subprocess.run([sys.executable,'-m','dataset_pipeline.analysis',str(self.root),
-            '--output',str(self.root/'missing'/'report.json'),'--error-file',str(error_file)],capture_output=True)
+        result = self.run_worker(self.root/'missing'/'report.json')
         self.assertEqual(result.returncode,1)
         detail = json.loads(error_file.read_text())
         self.assertEqual(detail['type'],'FileNotFoundError')

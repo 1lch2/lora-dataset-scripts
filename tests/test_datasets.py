@@ -197,14 +197,15 @@ class DatasetTests(unittest.TestCase):
     def test_restarting_launcher_opens_empty_ui_without_loading_default_dataset(self):
         (self.folder / 'new-role').mkdir()
         Image.new('RGB', (50, 60)).save(self.folder / 'new-role' / 'new.png')
-        path = self.root / 'config.json'
-        path.write_text(json.dumps(self.config), encoding='utf-8')
         with patch.object(launch_webui, 'listening', return_value=False), \
                 patch.object(launch_webui, 'ensure_forge') as forge, patch.object(launch_webui, 'serve') as serve:
-            launch_webui.launch(path, self.root, 8765, 10, False)
+            launch_webui.launch(self.root, 8765, 10, False, settings_path=self.root / 'webui.json')
         forge.assert_not_called()
         self.assertIsNone(serve.call_args.args[0])
-        self.assertEqual(serve.call_args.kwargs['config'], self.config)
+        from dataset_pipeline.settings import load_settings
+        expected = {**load_settings(self.root / 'webui.json'), 'forge_dir': str(self.root.resolve())}
+        self.assertEqual(serve.call_args.kwargs['config'], expected)
+        self.assertEqual(serve.call_args.kwargs['settings_path'], self.root / 'webui.json')
         self.assertEqual({s['group'] for s in Run.load(self.run.directory).data['sources'].values()}, {'first'})
 
     def test_import_modes_are_isolated_and_empty_or_overlapping_directories_rejected(self):

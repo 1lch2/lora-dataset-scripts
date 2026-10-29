@@ -1,26 +1,21 @@
-# lora-dataset-utils
+# LoRA 数据工作台
 
-用于 Stable Diffusion LoRA 训练素材的本地处理工具，包含自动化预处理与人工审核 WebUI，以及独立的图片、标签和 LoRA 文件脚本。
+用于 Stable Diffusion LoRA 训练素材的本地 WebUI。数据集导入、图片处理、裁切审核、标签编辑、分析和导出统一在网页中完成。
 
-## 主要功能
+## 功能
 
-- **预处理与裁切审核**：生成工作图和候选裁框，人工调整、接受或删除裁片，通过 Forge 放大与 WD14 打标，再导出训练图片及同名 TXT 标签。
-- **标签编辑**：标签筛选、图片过滤、单图编辑与批量修改，支持 AND / OR 条件、匹配替换、重排和修改预览。
-- **数据集分析**：本地统计亮度、色彩、尺寸、重复候选、可选人物姿势与标签分布，导出 JSON / CSV 报告；可独立启动，无需 Forge 或预处理记录。
-- **LoRA 文件工具**：在 WebUI 中预览并执行 `.safetensors` 文件重命名，生成 XYZ 对比提示词。
-- **独立脚本**：图片缩放、水平翻转、角色标签前缀处理、LoRA 重命名与提示词生成。
-
-前端使用 React + TypeScript + Vite，服务端数据由 TanStack Query 管理，样式使用 Tailwind CSS 与 CSS Modules；Python API 和处理逻辑位于 `core/`。
+- **数据集管理**：显式选择任意本地目录或子目录，导入完整打标素材或待处理素材，打开已有工作记录。
+- **裁切与打标**：通过 Forge 超分与 WD14 打标，本地人物/头部/姿势检测，手动裁切、主体替换和恢复原图。
+- **标签编辑与导出**：筛选、单图和批量编辑、修改预览，导出训练图片及同名 TXT；原始素材保留。
+- **数据集处理工具**：扫描和勾选处理范围，预览短边缩放、水平镜像或去重结果，再另存到新目录。
+- **数据集分析**：统计亮度、色彩、尺寸、重复候选、标签分布和可选人物姿势，下载 JSON / CSV 报告，无需先导入审核数据集或启动 Forge。
+- **LoRA 文件工具**：预览并执行 safetensors 重命名，生成和复制对比提示词。
 
 ## 环境准备
 
-以下命令均从仓库根目录执行。
+需要 Python 3.10、Node.js 22.12+、npm，以及本项目独立的 `.venv-preprocess` Python 环境。不要将本项目依赖装进 Forge 环境。
 
-### 审核 WebUI 与预处理
-
-需要 Python 3.10、Node.js 22.12.0+、npm、uv，以及独立的 `.venv-preprocess` 环境。使用预处理与打标时，还需配置 Forge API 和所需模型；具体要求见 [PREPROCESS.md](PREPROCESS.md)。
-
-预处理文档引用的 `requirements-preprocess.in` 和 `requirements-preprocess.lock` 当前未包含在仓库中；首次安装前需先取得依赖文件。已有配置完成的 `.venv-preprocess` 环境可继续使用。取得锁文件后执行：
+**目前全新安装仍有已知阻塞：** `requirements-preprocess.in` 和 `requirements-preprocess.lock` 尚未包含在仓库中，不能直接按锁文件重建完整环境。已有配置完成的 `.venv-preprocess` 可以继续使用；补齐依赖文件后才能执行以下安装步骤：
 
 ```powershell
 uv venv --python 3.10 .venv-preprocess
@@ -28,131 +23,61 @@ uv pip sync requirements-preprocess.lock --python .venv-preprocess/Scripts/pytho
 npm install --prefix app
 ```
 
-预处理依赖使用独立环境，不与 Forge 环境或下面的基础脚本依赖混装。
+首次人物检测还需要对应的本地模型缓存或下载条件；离线姿势分析要求预先缓存模型。详细要求见 [处理与审核说明](PREPROCESS.md) 和 [数据集分析说明](ANALYSIS.md)。
 
-### 基础脚本
+## 启动和配置
 
-仅使用独立脚本时，安装 Python 3.10 与基础依赖：
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-`requirements.txt` 包含 Pillow、pyperclip 和 OpenCV，不包含完整预处理或分析依赖。
-
-## 启动审核 WebUI
-
-首次配置时，将 [preprocess.example.json](preprocess.example.json) 复制为 `preprocess.local.json`，修改输入目录、运行目录、训练输出目录、Forge 地址与 `tags_csv`。相对路径以配置文件所在目录为基准，输入、工作和输出目录必须互不包含。
-
-配置完成后，双击根目录 `start-webui.bat`，或执行：
+双击根目录 `start-webui.bat`，或从仓库根目录执行：
 
 ```powershell
-.\start-webui.bat --config preprocess.local.json --forge-dir 'E:\stable-diffusion-webui-forge-classic'
+.\start-webui.bat
 ```
 
-启动器直接启动 Python API 与 Vite 并打开主页，不扫描或加载配置中的默认数据集。主页可搜索并打开已有数据集，或点击“导入数据集”，选择“完整打标数据集”或“待处理数据集”后填写目录或子目录。Forge 在手动执行需要它的超分或打标时才启动或复用。默认 API 端口为 8765，页面地址为 `http://127.0.0.1:5173`；可通过 `--port` 和 `--frontend-port` 修改端口。
+首次在网页“设置”中填写已配置好的 SD WebUI Forge Neo 根目录。固定使用 [1lch2 WD14 Tagger](https://github.com/1lch2/stable-diffusion-webui-wd14-tagger) 和 EVA02-Large v3；标签词表已内置于 `data/tags/`，不读取插件缓存中的 CSV。当前插件来源校验要求 Git 可用且插件 origin 指向该仓库。
 
-完整打标数据集保留尺寸并读取同名 TXT，导入后进入标签页，可编辑并导出；待处理数据集只导入图片，进入裁切页，手动选择 **按尺寸超分 → 识别主体并生成裁切候选 → 裁切审核 → 打标 → 标签编辑 → 导出**，超分和识别可按需跳过。顶部超分和识别处理当前数据集全部图片，不受筛选影响；“倍率与主体”中的倍率调整及“识别此图主体”只处理当前图。顶部“主页”或“切换数据集”可返回启动入口，“继续当前数据集”恢复工作。刷新只同步目录文件，不执行模型处理。关闭审核入口会停止本次创建的前端与 API，独立 Forge 进程继续运行。
+设置由网页保存到 `.local/webui.json`。顶部“设置”可修改 Forge API 地址、放大模型、混合比例、打标阈值、裁框参数及标签清理默认值。无需根目录配置 JSON，也不支持旧配置导入参数。
 
-也可手动准备素材并打开已有运行：
+默认页面为 `http://127.0.0.1:5173`，API 端口为 8765。启动仅打开空白主页，不自动选择数据集，也不启动模型。需要时可调整启动选项：
 
 ```powershell
-.\.venv-preprocess\Scripts\python.exe core/preprocess.py prepare --config preprocess.local.json
-.\.venv-preprocess\Scripts\python.exe core/preprocess.py review --run runs/default
+.\start-webui.bat --port 8870 --frontend-port 5178 --no-browser
 ```
 
-配置、模型、审核交互和导出规则详见 [预处理使用说明](PREPROCESS.md)。
+## 使用流程
 
-## 独立数据集分析
+1. 在主页导入素材，填写实际目录和可选角色名称；或打开已有工作记录。**没有固定输入目录要求，不依赖 `dataset-raw`。** 原来放在该目录中的素材可作为普通目录手动导入。
+2. 完整打标素材保留原始尺寸并读取同名 TXT；待处理素材按需执行超分、识别与裁切审核。
+3. 在标签页执行打标、编辑和导出。Forge 在需要超分或打标时才启动或复用。
+4. 缩放、镜像、去重在“数据集处理工具”页选择范围并预览后另存；统计分析在“数据集分析”页运行。
 
-在已准备好 Python 环境和前端依赖后执行：
+导入会生成独立的 `runs/<数据集标识>/` 工作记录和 `dataset-ready/<数据集标识>/` 导出目录。重启后从主页选择数据集，原始素材不会因删除旧入口而改变。
 
-```powershell
-.\.venv-preprocess\Scripts\python.exe core/preprocess.py analyze
-```
-
-默认打开 `http://127.0.0.1:5174`，API 端口为 8766。输入待分析的本地目录后，点击「开始分析」运行统计；无需启动 Forge。
-
-基础分析使用 Pillow 与 NumPy，可选人物/姿势统计需要额外依赖和已有模型缓存。分析不修改源图片与标签，报告不包含图片；完整指标、离线要求和命令行报告导出见 [ANALYSIS.md](ANALYSIS.md)。
-
-## 独立脚本
-
-脚本位于 `core/`，从仓库根目录执行。图片工具默认使用一级角色目录：
-
-```text
-dataset-raw/
-  character_name/
-    image.png
-    image.txt
-output/
-  myLora-0.safetensors
-```
-
-按所用脚本创建所需目录，不需要为所有工具预先创建全部目录。
-
-WebUI 的“数据集处理工具”页现已提供短边缩放、水平镜像和图片去重。可选择已导入数据集或自定义目录，按子目录、文件名和逐张勾选确定范围，先预览再另存到新目录，原图保留、同名 TXT 同步复制。去重支持分离保存重复项或只导出保留项。详细规则见[数据集处理工具](docs/features/dataset-tools.md)。
-
-| 命令                               | 当前行为                                                                                                           |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `python core/resize.py`            | 处理各角色目录顶层的图片，将短边大于等于 1280 的图片缩至 1280，保持比例并写回原文件；较小图片尺寸不变              |
-| `python core/reverse.py`           | 将各角色目录顶层的图片水平翻转，保存到 `reverse/<角色>/`                                                           |
-
-角色标签整理已并入 `core/dataset_pipeline/edit_caption.py`，由训练集导出流程调用，不自动补充 `1girl` 或独立的作品标签。`resize.py` 当前命令入口覆盖源文件，其 `rename` 参数尚不能可靠地另存副本。LoRA 重命名及提示词生成已并入 `core/dataset_pipeline/`，使用 WebUI 的「LoRA 文件工具」页预览、执行及复制提示词；原独立命令入口已移除。
-
-生成的提示词示例：
-
-```text
-<lora:myLora-0:1>
-<lora:myLora-1:1>
-<lora:myLora-2:1>
-```
-
-可用于 Stable Diffusion WebUI 的 XYZ 脚本，比较不同 LoRA 检查点。
+旧命令行预处理、打标、导出、批量分析，以及独立缩放、翻转、去重、加标签脚本已移除。用户处理入口统一为 WebUI；Python 启动器和分析工作进程是网页运行所需的内部实现。
 
 ## 项目结构
 
 ```text
-app/
-  src/                   React 页面、组件、请求与主题
-  package.json           前端依赖与开发命令
-core/
-  dataset_pipeline/      预处理、审核 API、模型调用与分析
-  preprocess.py          预处理与独立分析 CLI
-  launch_webui.py         Forge 与前后端启动协调
-  *.py                   独立工具脚本
-docs/
-  feature-map.yaml       功能总索引
-  features/              功能实现导航
-  frontend-code-standards.md  React + TypeScript 代码规范
-tests/                   现有 Python 测试
-AGENTS.md                项目基本信息与协作入口
-preprocess.example.json  配置示例
-start-webui.bat          Windows WebUI 启动入口
+start-webui.bat             WebUI 启动入口
+core/launch_webui.py        启动 API、Vite，按需协调 Forge
+core/dataset_pipeline/     后端处理、审核、设置及分析工作进程
+app/src/                   React + TypeScript 前端
+data/tags/                 固定版本标签词表及来源说明
+.local/webui.json          网页生成的本机设置，不提交 Git
+runs/                      数据集工作记录与共享模型缓存
+dataset-ready/             导出结果
+tests/                     现有 Python 测试
 ```
 
-本机配置、虚拟环境、运行记录和数据目录不提交到仓库。
+前端使用 React、Vite、TanStack Query、Tailwind CSS 与 CSS Modules，仅面向桌面。
 
-## 开发与文档
-
-前端常用命令：
+## 开发与验证
 
 ```powershell
-npm run dev --prefix app
 npm run build --prefix app
-npm run format --prefix app
-```
-
-单独运行 Vite 时需先启动 Python API。Vite 默认将 `/api` 与 `/image` 代理到 `http://127.0.0.1:8765`；使用其他 API 端口时设置 `REVIEW_API_URL`，启动器会自动传入该地址。构建产物输出到 `app/dist/`。
-
-需要运行现有 Python 测试时：
-
-```powershell
 $env:PYTHONPATH = (Join-Path (Get-Location) 'core')
 .\.venv-preprocess\Scripts\python.exe -m unittest discover -s tests
 ```
 
-- [项目协作说明](AGENTS.md)：项目入口、功能定位与验证方式。
-- [React + TypeScript 代码规范](docs/frontend-code-standards.md)：前端开发约束。
-- [功能导航](docs/feature-map.yaml)：从功能查找当前实现。
-- [预处理使用说明](PREPROCESS.md)：环境、配置、裁切审核、打标与导出。
-- [数据集分析说明](ANALYSIS.md)：统计指标、报告与离线要求。
+单独运行 `npm run dev --prefix app` 时，需先启动 Python API；Vite 默认代理 `127.0.0.1:8765`，可通过 `REVIEW_API_URL` 修改。构建产物位于 `app/dist/`。
+
+构建、合成数据测试与真实模型推理分别验证；现有测试通过不代表真实模型运行通过。实现导航见 [功能索引](docs/feature-map.yaml)。

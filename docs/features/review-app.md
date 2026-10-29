@@ -9,6 +9,7 @@
 - [app/src/main.tsx](../../app/src/main.tsx)：React StrictMode 与 TanStack Query Provider。
 - [app/src/App/App.tsx](../../app/src/App/App.tsx)：从 `/api/session` 获取审核会话，再挂载页面。
 - [ReviewPage](../../app/src/Pages/review/ReviewPage/ReviewPage.tsx)：组合页头、启动主页、图片库、裁切编辑、标签工具、分析页、LoRA 文件工具、底部状态与大图弹窗；主页隐藏审核工作区与底部状态，专属一级组件位于同目录 `__internal__/`。
+- 页头“设置”由 [Settings](../../app/src/Pages/review/ReviewPage/__internal__/Settings/Settings.tsx) 管理 Forge 目录和处理参数，首次未配置时自动打开；持久化、固定插件来源和内置 CSV 见[启动链的网页配置](launcher.md#网页配置)。
 - [useReview](../../app/src/Pages/review/useReview.ts)：审核状态、裁框草稿、阶段切换、编辑 mutation、任务轮询与提示；服务端数据由 TanStack Query 管理，客户端状态使用 Hooks。
 - [DatasetManager](../../app/src/Pages/review/ReviewPage/__internal__/DatasetManager/DatasetManager.tsx)：IDE 风格主页，提供已有数据集的名称/路径搜索、打开、刷新，以及显式选择完整打标/待处理类型后填写目录的导入表单；工作区显示当前目录与切换入口，待处理模式顶部明确标注超分和主体识别作用于数据集全部图片，不受筛选影响。
 - [useTags](../../app/src/Pages/review/useTags.ts)：筛选、选择、图片过滤篮、标签统计与操作范围。
@@ -26,7 +27,7 @@
 - [core/dataset_pipeline/datasets.py](../../core/dataset_pipeline/datasets.py)：发现运行、验证目录并生成独立路径；`import_config` 使用请求的 `cropMode=prepared/manual`，未传或为 `auto` 的旧请求仍按 TXT 存在与否判断；`import_sources` 只复制原始图片和按模式接入同名标签，保留未变化的审核记录；`upscale_source` 只更新工作图并映射已有裁框，`detect_source` 在当前工作图生成候选并保留已审核/编辑的裁框。
 - `datasets.replace_source_image` 负责 `crop_subject` / `restore_original`：新底图保存于工作目录，首轮主体裁切保存可恢复的 `original_backup`；每次替换重置倍率、全部裁框、检测结果和活动标签，完整图重新登记为已接受。输入目录不被覆盖，多次主体裁切仍可恢复首轮裁切前原图。`manual_processing` 阻止同步重新导入旧 TXT，并允许成品数据集中重置后的单图重新识别和超分；源文件内容变化后同步会丢弃旧底图替换状态。
 - [core/dataset_pipeline/core.py](../../core/dataset_pipeline/core.py)：保留原来的运行记录、预处理、标签与导出组织；其相邻模块的相对导入不变。
-- [core/dataset_pipeline/geometry.py](../../core/dataset_pipeline/geometry.py)：`default_scale` 决定按尺寸超分倍率；总像素小于 `1024² × 80%` 时为 1.5 倍，其余为 1 倍。网页 `start_upscale` 只处理需要提高倍率的图片；CLI `Run.prepare_source` 仍支持完整自动预处理，手动或保存的 `scale_override` 优先。
+- [core/dataset_pipeline/geometry.py](../../core/dataset_pipeline/geometry.py)：`default_scale` 决定按尺寸超分倍率；总像素小于 `1024² × 80%` 时为 1.5 倍，其余为 1 倍。网页 `start_upscale` 只处理需要提高倍率的图片；历史自动流程的内部 `Run.prepare_source` 保留运行记录兼容能力，手动或保存的 `scale_override` 优先。
 
 普通审核启动进入 `home`，首次只读取状态和已有运行列表，不加载目录；空白会话返回 `datasetLoaded=false`，裁切/标签 tab 在加载数据集前禁用。独立分析及 `?analysis` 入口仍进入分析页。显式导入、打开已有数据集或顶部刷新通过带会话 token 的 `sync_sources` 调用 `import_sources`，不执行图片处理；切换重置筛选和选择。完整打标数据集在没有待审裁框时进入标签页，待处理数据集进入裁切页；返回主页保留当前工作，继续按钮恢复本次会话的审核阶段。主页不会被后台打标完成自动跳转。
 

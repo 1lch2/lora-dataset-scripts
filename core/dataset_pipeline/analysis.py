@@ -1,12 +1,10 @@
 """Read-only, local dataset measurements. Never exports pixels or image metadata."""
-import argparse
 import csv
 import hashlib
 import io
 import json
 import os
 import stat
-import sys
 from pathlib import Path
 from collections import Counter
 
@@ -49,7 +47,7 @@ def offline_mode():
 
 def local_pose(image):
     if os.environ.get('HF_HUB_OFFLINE') != '1':
-        raise RuntimeError('Use the offline analysis CLI/process for model inference')
+        raise RuntimeError('Use the offline analysis worker for model inference')
     from imgutils.detect import detect_person
     from imgutils.pose import dwpose_estimate
     people = detect_person(image, level='m', version='v1.1', conf_threshold=.3)
@@ -299,58 +297,3 @@ def csv_report(report):
                 safe[key] = "'"+value
         writer.writerow(safe)
     return stream.getvalue()
-
-
-def main():
-    parser = argparse.ArgumentParser(description='本地数据集统计：不上传图片、不修改源文件')
-    parser.add_argument('directory')
-    parser.add_argument('--output', required=True, help='新的报告 JSON 文件，拒绝覆盖已有文件')
-    parser.add_argument('--csv', help='新的逐图 CSV 文件')
-    parser.add_argument('--pose', action='store_true', help='启用已缓存的本地人物/DWPose 模型')
-    parser.add_argument('--captions', action='store_true')
-    parser.add_argument('--no-recursive', action='store_true')
-    parser.add_argument('--pair-limit', type=int, default=1500)
-    parser.add_argument('--pose-threshold', type=float, default=.18)
-    parser.add_argument('--hash-threshold', type=int, default=6)
-    parser.add_argument('--model-cache', help='已有 Hugging Face 缓存根目录 HF_HOME')
-    parser.add_argument('--progress', help=argparse.SUPPRESS)
-    parser.add_argument('--error-file', help=argparse.SUPPRESS)
-    args = parser.parse_args()
-    offline_mode()
-    if args.model_cache:
-        os.environ['HF_HOME'] = str(Path(args.model_cache).resolve())
-    output = Path(args.output)
-    if output.exists() or (args.csv and Path(args.csv).exists()):
-        parser.error('报告文件已存在，请使用新的文件名')
-    if args.csv and Path(args.csv).resolve() == output.resolve():
-        parser.error('JSON 和 CSV 必须使用不同文件名')
-    def progress(data):
-        if args.progress:
-            write_progress(args.progress, data)
-    stage = 'analysis'
-    try:
-        report = analyze_directory(args.directory, recursive=not args.no_recursive,pose=args.pose,
-                                   captions=args.captions,pair_limit=args.pair_limit,
-                                   pose_threshold=args.pose_threshold,hash_threshold=args.hash_threshold,progress=progress)
-        stage = 'report'
-        with output.open('x',encoding='utf-8') as stream:
-            json.dump(report,stream,ensure_ascii=False,allow_nan=False)
-        if args.csv:
-            stage = 'csv'
-            with Path(args.csv).open('x',encoding='utf-8-sig',newline='') as stream:
-                stream.write(csv_report(report))
-        return 0
-    except Exception as error:
-        # Diagnostic fields deliberately omit dataset paths, captions and pixels.
-        if args.error_file:
-            try:
-                Path(args.error_file).write_text(json.dumps(dict(type=type(error).__name__,stage=stage,
-                    errno=getattr(error,'errno',None),winerror=getattr(error,'winerror',None))),encoding='utf-8')
-            except OSError:
-                pass
-        print(type(error).__name__+': '+str(error), file=sys.stderr)
-        return 1
-
-
-if __name__ == '__main__':
-    raise SystemExit(main())

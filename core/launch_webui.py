@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 import requests
 
-from dataset_pipeline.core import read_config
+from dataset_pipeline.settings import SETTINGS_PATH, load_settings, validate_forge
 from dataset_pipeline.review import serve
 from dataset_pipeline.frontend import start_frontend, stop_frontend
 
@@ -104,8 +104,10 @@ def ensure_forge(url, directory, timeout):
     raise ValueError(f'等待 Forge API 超时：{url}。请检查 Forge 终端日志及 --api 参数；确认端口没有被其他服务占用')
 
 
-def launch(config_path, forge_dir, port, timeout, open_browser=True, frontend_port=5173):
-    config = read_config(config_path)
+def launch(forge_dir, port, timeout, open_browser=True, frontend_port=5173, settings_path=SETTINGS_PATH):
+    config = load_settings(path=settings_path)
+    if forge_dir is not None:
+        config['forge_dir'] = str(forge_dir.resolve())
     review_url = f'http://127.0.0.1:{port}'
     # Inspect the existing review process before starting any new services.
     existing = False
@@ -114,10 +116,9 @@ def launch(config_path, forge_dir, port, timeout, open_browser=True, frontend_po
             response = requests.get(review_url + '/api/session', timeout=5)
             response.raise_for_status()
             data = response.json()
-            existing = data.get('manualWorkflow') is True and not data.get('analysisOnly')
-            existing = existing and all(Path(data['startupConfig'][key]).resolve() == Path(config[key]).resolve()
-                           for key in ('run_dir', 'input_dir', 'output_dir'))
-            existing = existing and data['startupConfig'].get('identity', '') == config['identity']
+            existing = (data.get('manualWorkflow') is True and data.get('settingsEnabled') is True
+                        and not data.get('analysisOnly')
+                        and data.get('settingsPath') == str(Path(settings_path).resolve()))
         except (requests.RequestException, ValueError, KeyError, TypeError):
             pass
         if not existing:
@@ -132,14 +133,17 @@ def launch(config_path, forge_dir, port, timeout, open_browser=True, frontend_po
                 stop_frontend(frontend)
         return
     print('正在启动 UI；请在网页中选择数据集，导入后手动执行所需处理。', flush=True)
+    def setup(selected):
+        directory = Path(validate_forge(selected.get('forge_dir', '')))
+        ensure_forge(selected['forge_url'], directory, timeout)
+
     serve(None, port, open_browser, frontend_port, config=config,
-          model_setup=lambda selected: ensure_forge(selected['forge_url'], forge_dir, timeout))
+          model_setup=setup, settings_path=settings_path)
 
 
 def main():
     parser = argparse.ArgumentParser(description='启动 LoRA 审核页和 Forge API')
-    parser.add_argument('--config', type=Path, default=ROOT / 'preprocess.local.json')
-    parser.add_argument('--forge-dir', type=Path, default=Path('E:/stable-diffusion-webui-forge-classic'))
+    parser.add_argument('--forge-dir', type=Path, help='可选：覆盖本次启动的 Forge 目录')
     parser.add_argument('--port', type=int, default=8765)
     parser.add_argument('--frontend-port', type=int, default=5173)
     parser.add_argument('--timeout', type=int, default=600, help='等待 Forge API 的秒数')
@@ -151,7 +155,7 @@ def main():
             raise ValueError('端口须为 1–65535，等待时间须大于零')
         if args.forge_console:
             return forge_console(args.forge_dir, args.port)
-        launch(args.config, args.forge_dir, args.port, args.timeout, not args.no_browser, args.frontend_port)
+        launch(args.forge_dir, args.port, args.timeout, not args.no_browser, args.frontend_port)
         return 0
     except (OSError, ValueError) as error:
         print(f'启动失败：{error}', file=sys.stderr)

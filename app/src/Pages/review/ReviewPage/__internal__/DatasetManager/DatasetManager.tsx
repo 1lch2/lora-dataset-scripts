@@ -256,7 +256,7 @@ export function DatasetManager() {
                         id='datasetDirectory'
                         required
                         value={directory}
-                        placeholder={list.data?.defaultInputDir || '粘贴本地目录的完整路径'}
+                        placeholder='粘贴本地目录的完整路径'
                         onChange={(event) => setDirectory(event.target.value)}
                         disabled={disabled}
                         autoComplete='off'

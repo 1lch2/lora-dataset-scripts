@@ -58,7 +58,6 @@ export interface DatasetInfo {
 export interface DatasetListInfo {
   datasets: DatasetInfo[];
   currentRunDir: string | null;
-  defaultInputDir: string;
 }
 export interface DatasetImportRequest {
   directory: string;
@@ -70,6 +69,7 @@ export interface DatasetOpenResult {
   runDir: string;
 }
 export interface SessionInfo {
+  settingsEnabled?: boolean;
   token: string;
   analysisOnly: boolean;
   loraOutputDir: string;

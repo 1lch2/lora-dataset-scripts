@@ -90,25 +90,22 @@ class AnalysisJob:
                 raise ValueError('比较上限或相似阈值超出范围')
             self.close()
             self.temp = tempfile.TemporaryDirectory(prefix='dataset-analysis-')
-            args = [sys.executable,'-m','dataset_pipeline.analysis',str(path),
-                    '--output',str(Path(self.temp.name)/'report.json'),
-                    '--progress',str(Path(self.temp.name)/'progress.json'),
-                    '--error-file',str(Path(self.temp.name)/'error.json'),
-                    '--pair-limit',str(limit),'--pose-threshold',str(threshold),'--hash-threshold',str(hash_threshold)]
-            for name in ('pose','captions'):
-                if data.get(name):
-                    args.append('--'+name)
-            if not data.get('recursive',True):
-                args.append('--no-recursive')
             model_cache = data.get('model_cache') or os.environ.get('HF_HOME') or self.default_model_cache
-            if model_cache:
-                args.extend(['--model-cache',str(model_cache)])
+            request = dict(directory=str(path), output=str(Path(self.temp.name)/'report.json'),
+                           progress=str(Path(self.temp.name)/'progress.json'),
+                           error_file=str(Path(self.temp.name)/'error.json'),
+                           pair_limit=limit, pose_threshold=threshold, hash_threshold=hash_threshold,
+                           pose=data.get('pose',False), captions=data.get('captions',False),
+                           recursive=data.get('recursive',True), model_cache=str(model_cache) if model_cache else None)
+            request_file = Path(self.temp.name)/'request.json'
+            request_file.write_text(json.dumps(request),encoding='utf-8')
+            args = [sys.executable,'-m','dataset_pipeline.analysis_worker']
             env = dict(os.environ,HF_HUB_OFFLINE='1',HF_HUB_DISABLE_TELEMETRY='1',TRANSFORMERS_OFFLINE='1',PYTHONUTF8='1')
             self.state = {'status':'running','phase':'scan','done':0,'total':0}
             try:
-                with (Path(self.temp.name)/'worker.log').open('wb') as log:
+                with (Path(self.temp.name)/'worker.log').open('wb') as log, request_file.open('rb') as payload:
                     self.process = subprocess.Popen(args,cwd=Path(__file__).resolve().parent.parent,
-                        env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,
+                        env=env,stdin=payload,stdout=log,stderr=subprocess.STDOUT,
                         creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
             except Exception:
                 self.state = {'status':'failed','error':'无法启动分析进程'}

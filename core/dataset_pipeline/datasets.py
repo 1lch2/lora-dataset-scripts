@@ -32,8 +32,7 @@ def list_datasets(current=None):
                          'cropMode': run.config.get('crop_mode', 'auto'),
                          'outputDir': run.config['output_dir'],
                          'deletable': deletion_paths(run) is not None})
-    return {'datasets': datasets, 'currentRunDir': str(current) if current else None,
-            'defaultInputDir': str(ROOT / 'dataset-raw')}
+    return {'datasets': datasets, 'currentRunDir': str(current) if current else None}
 
 
 def deletion_paths(run):

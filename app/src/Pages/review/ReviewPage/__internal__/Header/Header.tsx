@@ -1,5 +1,6 @@
 import { useReviewContext } from '../../../context';
 import { handleTabKeys } from '../../../utils';
+import { Settings } from '../Settings';
 
 export function Header() {
   const v = useReviewContext();
@@ -83,6 +84,7 @@ export function Header() {
             LoRA 文件
           </button>
         </nav>
+        {v.session.settingsEnabled ? <Settings /> : null}
         <div className='stageActions' hidden={v.stage === 'home'}>
           <span id='stageStatus'>{v.stageStatus}</span>
           <button

@@ -1,17 +1,17 @@
 # 自动化数据预处理
 
-未合并的图片与标签工具保持独立可用；角色标签整理和 LoRA 文件工具已并入 dataset_pipeline。新流程适用于一张或多张图片，没有最少图片数量限制。
+数据集处理统一从 WebUI 操作；角色标签整理和 LoRA 文件工具由后端模块提供。新流程适用于一张或多张图片，没有最少图片数量限制。
 
 ## 安装独立环境
 
-不要将下面的依赖装进 Forge 环境，也不要与原来的 `requirements.txt` 混装。检测使用独立的 CPU ONNX Runtime，放大与 WD14 通过 Forge 使用 GPU；这样不会争用同一套 NumPy、OpenCV 和 CUDA 依赖。
+不要将下面的依赖装进 Forge 环境，使用项目独立环境。检测使用独立的 CPU ONNX Runtime，放大与 WD14 通过 Forge 使用 GPU；这样不会争用同一套 NumPy、OpenCV 和 CUDA 依赖。
 
 ```powershell
 uv venv --python 3.10 .venv-preprocess
 uv pip sync requirements-preprocess.lock --python .venv-preprocess/Scripts/python.exe
 ```
 
-`requirements-preprocess.lock` 锁定完整依赖；waifuc 固定在 `efe5c49171a94a6441a79b7d7b595d4b3a4eb51f`，imgutils 固定为 0.19.0。需要重新解析依赖时：
+当前仓库尚缺 `requirements-preprocess.in` 和 `requirements-preprocess.lock`，全新安装需先补齐这两个文件，以上命令目前不能直接完成安装。原环境约定：waifuc 固定在 `efe5c49171a94a6441a79b7d7b595d4b3a4eb51f`，imgutils 固定为 0.19.0。需要重新解析依赖时：
 
 ```powershell
 uv pip compile requirements-preprocess.in --python .venv-preprocess/Scripts/python.exe --output-file requirements-preprocess.lock
@@ -23,7 +23,7 @@ uv pip compile requirements-preprocess.in --python .venv-preprocess/Scripts/pyth
 
 ### 双击启动 WebUI
 
-先安装 Node.js 22.12+，在 `app` 目录执行一次 `npm install`。配置好 `preprocess.local.json` 后，双击根目录的 `start-webui.bat`。入口直接启动 Python API（默认 8765）和 `npm run dev`（默认 5173），浏览器打开尚未加载数据集的审核页。同一启动配置的 API 和对应 Vite 服务若已运行则复用。首次手动执行需要 Forge 的超分或打标时才检查 Forge API；已运行则复用，未运行则打开独立可见终端，调用 `E:\stable-diffusion-webui-forge-classic\webui.bat` 并等待 API 就绪。
+先安装 Node.js 22.12+，在 `app` 目录执行一次 `npm install`。双击根目录的 `start-webui.bat`，在首次设置中输入 SD WebUI Forge Neo 根目录并保存，无需创建根目录配置 JSON。入口直接启动 Python API（默认 8765）和 `npm run dev`（默认 5173），浏览器打开尚未加载数据集的审核页。同一启动配置的 API 和对应 Vite 服务若已运行则复用。首次手动执行需要 Forge 的超分或打标时才检查 Forge API；已运行则复用，未运行则打开独立可见终端，调用所选 Forge 目录的 `webui.bat` 并等待 API 就绪。
 
 升级前已运行的旧版审核进程需要关闭后重启；Forge 可继续复用。也可通过 `--port` 和 `--frontend-port` 使用其他空闲端口。关闭审核入口会清理本次创建的前端进程，不停止复用的服务或独立 Forge。
 
@@ -34,17 +34,21 @@ uv pip compile requirements-preprocess.in --python .venv-preprocess/Scripts/pyth
 也可指定其他路径或端口：
 
 ```powershell
-.\start-webui.bat --config preprocess.local.json --forge-dir "E:\stable-diffusion-webui-forge-classic" --port 8765 --frontend-port 5173
+.\start-webui.bat --port 8765 --frontend-port 5173
 ```
 
-启动不扫描配置的输入目录、不恢复默认运行，也不调用任何图片处理模型。是否加载以及加载哪个目录或子目录，都在网页中选择；配置中的模型参数与标签词表作为后续操作的默认设置。
+启动没有默认输入目录、不恢复默认运行，也不调用任何图片处理模型。是否加载以及加载哪个目录或子目录，都在网页中选择；配置中的模型参数与标签词表作为后续操作的默认设置。
 
-复制 `preprocess.example.json` 为 `preprocess.local.json`，修改路径。相对路径以配置文件所在目录为基准。输入、工作、训练输出三者必须互不包含。
+WebUI 顶部“设置”管理 Forge 目录、API 地址、放大模型、混合比例、打标阈值、裁切像素与去重阈值、作品及默认移除标签。设置保存在 `.local/webui.json`（不提交 Git），任务期间不能保存；新设置作用于当前和之后打开的数据集，不自动重新处理已有图片。数据集输入、工作和输出目录仍由主页导入流程管理。
+
+固定使用 [1lch2 WD14 Tagger](https://github.com/1lch2/stable-diffusion-webui-wd14-tagger) 与 `wd-eva02-large-tagger-v3`。需先在 Forge 中安装并启用该插件；保存时根据插件 Git origin 检查来源，ZIP 安装缺少 Git 来源信息时不能通过检查。标签词表已内置，版本和校验值见 [数据来源](data/tags/README.md)。
+
+输入目录在网页导入表单中显式填写，不要求预建固定名称的素材目录。
 
 默认按一级目录识别身份，支持内部递归读取：
 
 ```text
-dataset-raw/
+素材目录/
   entelechia (dazzling blue)/
     image.jpg
     nested/image.jpg
@@ -54,13 +58,13 @@ dataset-raw/
 
 ### 从网页接入其他数据集
 
-网页启动后进入主页，可在“已有数据集”中按名称或路径搜索并打开工作记录，也可点击“导入数据集”，选择类型后填写本机目录，点击“导入并打开”。可以接入整个 `dataset-raw`、其中某个角色子目录或外部目录；每个目录、角色名称及所选素材类型组合使用独立的 `runs/` 工作目录与 `dataset-ready/` 输出目录，不更改原始素材或原有运行记录。重启后需要再次选择数据集。工作区可通过顶部“主页”或“切换数据集”返回主页，再点击“继续当前数据集”恢复本次会话的审核阶段。
+网页启动后进入主页，可在“已有数据集”中按名称或路径搜索并打开工作记录，也可点击“导入数据集”，选择类型后填写本机目录，点击“导入并打开”。可以接入任意素材目录、其中某个角色子目录或外部目录；每个目录、角色名称及所选素材类型组合使用独立的 `runs/` 工作目录与 `dataset-ready/` 输出目录，不更改原始素材或原有运行记录。重启后需要再次选择数据集。工作区可通过顶部“主页”或“切换数据集”返回主页，再点击“继续当前数据集”恢复本次会话的审核阶段。
 
 - **完整打标数据集**：按已完成超分、裁切和打标的成品导入，复制原始图片并接入同名 UTF-8 标签，不调用模型或改变尺寸；没有待审裁框时直接进入标签页，可编辑标签并导出。缺少同名 TXT 的图片保留空标签并显示提示，可手动补充。
 - **待处理数据集**：只导入完整图片，不读取源 TXT 标签，不自动超分、识别或打标，导入后进入裁切页。顶部标注“当前数据集全部图片”，点击“按尺寸超分”对全部图片执行尺寸判定并放大需要处理的项，点击“识别主体并生成裁切候选”识别全部图片，不受左侧筛选影响。“倍率与主体”中可调整当前图倍率，或点击“识别此图主体”只识别当前图片；识别到人物后才显示主体下拉框和“生成主体裁框”按钮。“开始打标”仍需单独点击。
 - 混合素材由用户选择导入类型，也可以按子目录分别导入；同一目录以两种类型导入时保留独立的工作记录。旧接口请求未指定类型或使用 `cropMode=auto` 时，仍按目录内是否包含 TXT 自动判断。
 
-角色名称留空时，若目录根部直接包含图片，则使用目录名作为角色名称；否则按一级子目录识别角色。接入 `dataset-raw` 这样的多角色目录时，保持角色名称为空。
+角色名称留空时，若目录根部直接包含图片，则使用目录名作为角色名称；否则按一级子目录识别角色。接入 多角色素材目录时，保持角色名称为空。
 
 同名 TXT 在首次导入时复制到工作目录，与原图片保存在一起；重复导入或同步不会用源 TXT 覆盖已编辑的标签。纯图片模式处理后生成的标签保存方式见下文。
 
@@ -72,30 +76,13 @@ dataset-raw/
 
 主体裁切后显示“恢复原始图”，点击可恢复首次主体裁切前的完整图，并再次清空本图裁框、检测结果和标签。连续主体裁切仍可恢复最初原图；取消主体裁切只丢弃尚未应用的画框。输入目录中的源文件始终保留，替换图片保存在运行目录，原文件名、扩展名和子目录结构沿用。刷新或重开数据集保留当前底图状态；已重置图片不再自动导入旧 TXT。成品数据集中经过此操作的单图也可重新执行识别和超分。
 
-若整批图片只有一个身份，可直接指定目录和身份，无需重新整理：
-
-```json
-{
-  "input_dir": "E:/LoraTrainingMaterial/隐德来希",
-  "identity": "entelechia (dazzling blue)",
-  "run_dir": "runs/entelechia",
-  "output_dir": "dataset-ready/entelechia",
-  "tags_csv": "E:/模型目录/selected_tags.csv"
-}
-```
-
-其他项使用示例配置的默认值。`tags_csv` 必须指向正在使用的 EVA02-Large v3 模型配套词表，不能混用其他模型词表。默认标签阈值 0.3，作品名 `arknights`。身份目录名作为完整描述，不拆分角色和服装。
+若整批图片只有一个身份，在网页导入表单填写目录和角色名称即可。默认标签阈值 0.3、作品名 `arknights` 可在设置中修改；词表使用项目内置版本。
 
 ## 运行顺序
 
 WebUI 推荐按上面的手动流程操作；仅导入成品无需 Forge。需要超分或打标时，Forge 必须可通过 API 列出 `4x-UltraSharpV2`、`ScuNET` 和 `wd-eva02-large-tagger-v3`，不存在时会报错，不静默替换模型。
 
-以下命令行 `prepare` 仍是显式执行自动放大和检测的入口，使用前需自行启动带 `--api` 的 Forge，默认地址 `http://127.0.0.1:7860`：
-
-```powershell
-.venv-preprocess/Scripts/python.exe core/preprocess.py prepare --config preprocess.local.json
-.venv-preprocess/Scripts/python.exe core/preprocess.py review --run runs/entelechia
-```
+导入待处理数据集后，在网页手动执行所需超分或主体识别。
 
 准备完成后在浏览器裁切页：
 
@@ -111,7 +98,7 @@ WebUI 推荐按上面的手动流程操作；仅导入成品无需 Forge。需�
 
 裁切目标为 1,048,576 像素，下限 943,719 像素；先沿垂直方向扩展到邻近身体范围，再向两侧扩展，始终限制在图像内。不要求正方形，不二次放大裁片，不填充背景。扩展到整幅图或与其他候选 IoU ≥ 0.95 时合并；面积仍不足的范围跳过，并说明原因。
 
-裁框全部审核完后，点击网页上方“开始打标”。后台先对已接受的原图或原尺寸裁片打标：完整原图直接发送源文件字节，不转换格式；裁片从工作图按裁框截取，仅编码传输，不预先缩小。网页导入的完整图打标后仍使用原文件，新生成的裁片保存为 PNG；命令行 `auto` 模式仍按 `core/resize.py` 的规则在内存中缩放（短边大于等于 1280 时缩到 1280，否则保持尺寸）。页面显示已完成样本数，完成后自动进入标签审核；刷新页面仍可查看任务进度。失败后显示具体原因，点击“重试打标”继续，已完成结果会跳过。任务运行期间禁止同时修改数据。
+裁框全部审核完后，点击网页上方“开始打标”。后台先对已接受的原图或原尺寸裁片打标：完整原图直接发送源文件字节，不转换格式；裁片从工作图按裁框截取，仅编码传输，不预先缩小。网页导入的完整图打标后仍使用原文件，新生成的裁片保存为 PNG；旧运行记录的 `auto` 模式仍按既有规则在内存中缩放（短边大于等于 1280 时缩到 1280，否则保持尺寸）。页面显示已完成样本数，完成后自动进入标签审核；刷新页面仍可查看任务进度。失败后显示具体原因，点击“重试打标”继续，已完成结果会跳过。任务运行期间禁止同时修改数据。
 
 旧版“先缩小再打标”的标签缓存会标为过期，下次打标按新顺序重新生成，保留旧标签历史并重放人工编辑。
 
@@ -134,23 +121,16 @@ WebUI 推荐按上面的手动流程操作；仅导入成品无需 Forge。需�
 
 所有候选必须已接受或删除，所有接受样本必须完成打标，之后可随时点击网页上方“导出训练集”。每次导出均读取当前标签结果并更新导出文件，无需逐图确认。导出前按词表清理角色标签和显式配置的变体标签，再调用 `core/dataset_pipeline/edit_caption.py` 中的共享实现 前置 `目录名 (作品)`；人工补充的触发词受到保留。导出目录仅含身份目录、PNG 和同名 UTF-8 `.txt`，完成后页面显示输出路径。
 
-CLI 入口仍保留，必要时可独立运行：
-
-```powershell
-.venv-preprocess/Scripts/python.exe core/preprocess.py tag --run runs/entelechia
-.venv-preprocess/Scripts/python.exe core/preprocess.py export --run runs/entelechia
-```
-
 ## 续跑与数据保留
 
-- `prepare` 和 `tag` 可重复运行，完成项会跳过。单张失败会记录错误，继续其他图片，命令最终返回非零退出码。
+- 网页打标可重试，完成项会跳过；单张失败会记录错误，任务状态显示失败详情。
 - 修改倍率、主体或裁框后，相关裁片的标签需重新生成并复核；已有人工作业保留在操作记录中，并在重新打标后重放。完整原图不因倍率变化重新打标。
 - 原来的候选、标签和工作图会保留在运行历史中。选主体或重新准备后被替换的手动画框可从历史坐标恢复，新提案不会自动沿用旧的接受状态。
-- 源文件内容变化需重新 `prepare`。源图删除后重新扫描会将其标记为不活跃，不再导出。
-- 输入和输出目录在已有运行中不可更换；需更换时创建新的 `run_dir`。
+- 源文件内容变化需在网页刷新同步。源图删除后重新扫描会将其标记为不活跃，不再导出。
+- 输入和输出目录在已有运行中不可更换；需更换时从主页导入为新的数据集。
 - 若最终输出被外部编辑，再次导出会停止以免覆盖。建议在审核页修改标签，或选择新的工作和输出目录保留旧结果。
-- 同一运行禁止同时执行 CLI 写入和审核写入。审核服务器只监听本机回环地址，使用会话令牌校验写入操作。
-- `review --port 8766 --no-browser` 可更换端口或禁止自动打开浏览器。
+- 同一运行通过运行锁保护写入。审核服务器只监听本机回环地址，使用会话令牌校验写入操作。
+- `start-webui.bat --port 8766 --no-browser` 可更换端口或禁止自动打开浏览器。
 
 运行记录位于 `run_dir/manifest.json`，包含原始文件指纹、实际工作尺寸、工作图坐标、检测证据、处理耗时和标签历史。坐标映射使用真实尺寸，处理 Forge 对 8 像素的取整。
 
@@ -162,7 +142,7 @@ CLI 入口仍保留，必要时可独立运行：
 
 自动化测试使用合成图片和模拟 Forge；真实模型的视觉质量需要另外验收。真实样本验收不限制张数，优先覆盖现有图片中的小图、完整图、复杂服装、局部图和异常姿态。最终裁框、特殊花纹保留及触发词分配仍以人工审核为准。
 
-本机真实模型、24 张素材及 15 份样本导出的验证结果见 [VALIDATION.md](VALIDATION.md)。
+验证需区分构建、合成数据测试与真实模型运行；已有测试通过不代表实际模型推理通过。
 
 实现参考：[waifuc 裁切](https://github.com/deepghs/waifuc/blob/efe5c49171a94a6441a79b7d7b595d4b3a4eb51f/waifuc/action/split.py)、[Action 接口](https://github.com/deepghs/waifuc/blob/efe5c49171a94a6441a79b7d7b595d4b3a4eb51f/waifuc/action/base.py)、[DWPose](https://dghs-imgutils.deepghs.org/main/api_doc/pose/dwpose.html)。
 

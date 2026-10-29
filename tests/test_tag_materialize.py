@@ -9,7 +9,6 @@ from PIL import Image
 
 from dataset_pipeline.core import DEFAULTS, Run
 from dataset_pipeline.forge import ForgeClient, encode_image
-from resize import resize_images_in_folder
 
 
 class MaterializeTests(unittest.TestCase):
@@ -29,7 +28,10 @@ class MaterializeTests(unittest.TestCase):
                     folder.mkdir(parents=True, exist_ok=True)
                     expected = image.copy() if box is None else image.crop(box)
                     expected.save(folder / "image.png")
-                    resize_images_in_folder(str(legacy), 1280, False)
+                    if min(expected.size) >= 1280:
+                        ratio = 1280 / min(expected.size)
+                        expected = expected.resize(tuple(int(v * ratio) for v in expected.size), Image.Resampling.LANCZOS)
+                    expected.save(folder / "image.png")
                     candidate = {"id": str(index), "kind": "full" if box is None else "head", "box": box}
                     relative = run._materialize(source, candidate, "test")
                     self.assertEqual(Path(relative).parent, Path("images"))

@@ -1,17 +1,9 @@
 # 数据集特性分析
 
-现有审核页新增「数据集分析」tab，可输入任意本地目录，与当前审核 run 无关。
-重启现有 WebUI 服务后可使用。也可以单独启动，不读取审核 run、不准备图片、不启动 Forge：
-
-```powershell
-.\.venv-preprocess\Scripts\python.exe core/preprocess.py analyze
-```
-
-前端依赖需先在 `app/` 执行 `npm install`。独立分析默认使用 API 8766 / Vite 5174，可用 `--port` / `--frontend-port` 调整；无需启动 Forge。
-
-默认打开 `http://127.0.0.1:5174`（API 端口为 8766）。需要时使用 `--port 8870 --frontend-port 5178 --no-browser`。
-点击「开始分析」才读取输入目录，支持取消、刷新后恢复任务进度、查看本次结果。
-在正常审核服务的 URL 后加 `?analysis` 可直接进入分析页，避免加载审核图片。
+通过 `start-webui.bat` 启动 WebUI，切换到「数据集分析」tab，输入任意本地目录即可；无需先导入审核数据集或启动 Forge。
+默认页面为 `http://127.0.0.1:5173`，API 端口为 8765。可在启动器使用 `--port` / `--frontend-port` 调整。
+点击「开始分析」才读取输入目录，支持取消、刷新后恢复任务进度和下载本次 JSON / CSV 报告。
+在 WebUI URL 后加 `?analysis` 可直接进入分析页。
 
 基础依赖使用现有环境中的 Pillow 和 NumPy；可选姿势功能使用已安装的 dghs-imgutils、ONNX Runtime 和已有模型缓存。
 
@@ -71,26 +63,13 @@
 ### 本地模型缓存
 
 优先使用页面填写的 HF_HOME，其次现有环境变量，正常审核页再复用当前 run 父目录的 `.models`；
-独立分析服务尝试项目 `runs/.models`。命令行可显式使用 `--model-cache`。
+未加载数据集时尝试项目 `runs/.models`；也可在页面指定模型缓存。
 不要填写单个 ONNX 文件，而应填写包含 `hub` 子目录的 Hugging Face 缓存根目录。
 
 所需缓存包括 `deepghs/anime_person_detection` 的 `person_detect_v1.1_m/model.onnx` 及 imgutils 所需仓库元数据，
 还有 `yzd-v/DWPose` 的 `dw-ll_ucoco_384.onnx`。使用你已有预处理环境的完整缓存即可。
 缺少缓存/依赖或推理报错时，仅中止剩余人物/姿势统计，并在报告中显示错误类别，基础统计继续。
 此入口不会为了补齐模型恢复联网。姿势不可用时不要将零相似对理解为“姿势充分多样”。
-
-## 命令行批量分析
-
-```powershell
-.\.venv-preprocess\Scripts\python.exe core/dataset_pipeline/analysis.py 'D:\YourDataset' --output '.\analysis-report.json' --csv '.\analysis-images.csv'
-
-# 可选：递归（默认）、姿势、同名 TXT 标签、缓存、相似比较规模
-.\.venv-preprocess\Scripts\python.exe core/dataset_pipeline/analysis.py 'D:\YourDataset' --output '.\analysis-with-pose.json' --pose --captions --model-cache 'D:\YourModelCache' --pair-limit 1500
-```
-
-`--no-recursive` 禁用递归，`--pose-threshold` / `--hash-threshold` 调整候选阈值。
-JSON/CSV 必须是不同的新文件；拒绝覆盖现有报告或源文件。CSV 会转义以公式字符开头的文件名。
-报告 `schema_version=1`，包含设置、各指标统计、逐图记录、错误、重复候选、姿势覆盖和标签频率。
 
 ## 验证范围
 

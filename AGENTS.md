@@ -2,10 +2,10 @@
 
 ## 项目基本信息
 
-本项目是用于 Stable Diffusion LoRA 训练素材的本地处理工具，包含自动化预处理、人工裁切审核、标签编辑与导出、数据集分析，以及独立图片和 LoRA 文件脚本。
+本项目是用于 Stable Diffusion LoRA 训练素材的本地 WebUI，包含图片处理、人工裁切审核、标签编辑与导出、数据集分析，以及 LoRA 文件工具；不提供旧版数据集处理 CLI。
 
 - 前端：React 19、TypeScript、Vite 7、TanStack Query、Tailwind CSS 4 与 CSS Modules，源码位于 `app/src/`。
-- 后端：Python 3.10，业务模块位于 `core/dataset_pipeline/`，命令行脚本位于 `core/`。
+- 后端：Python 3.10，业务模块和内部分析工作进程位于 `core/dataset_pipeline/`，WebUI 启动器位于 `core/`。
 - 模型调用：人物/头部检测与姿势估计由本地模型完成，放大和 WD14 打标通过 Forge API 完成；独立数据集分析无需 Forge。
 - 运行方式：Windows 下使用 `start-webui.bat` 协调 Forge、Python API 与 Vite；脚本和开发命令从仓库根目录执行。
 
@@ -37,7 +37,7 @@ npm run format --prefix app
 
 Node.js 要求 22.12.0 或更新版本。单独运行 Vite 时，需要已启动 Python API；默认代理 `http://127.0.0.1:8765`，可通过 `REVIEW_API_URL` 调整。构建产物位于 `app/dist/`。
 
-普通审核默认使用 API 8765 / Vite 5173；独立分析默认使用 API 8766 / Vite 5174。启动入口接受 `--port` 与 `--frontend-port`。
+WebUI 默认使用 API 8765 / Vite 5173，分析从同一页面的 tab 进入。启动入口接受 `--port` 与 `--frontend-port`。
 
 Python 预处理使用独立的 `.venv-preprocess` 环境，不与 Forge 环境或基础脚本依赖混装。环境准备详见 [PREPROCESS.md](PREPROCESS.md)；其中引用的 `requirements-preprocess.in` / `requirements-preprocess.lock` 当前未包含在仓库中，首次安装需先取得这些依赖文件。
 
@@ -52,6 +52,6 @@ $env:PYTHONPATH = (Join-Path (Get-Location) 'core')
 
 ## 使用文档
 
-- [README.md](README.md)：项目概览、启动与独立脚本。
+- [README.md](README.md)：项目概览、启动与 WebUI 使用流程。
 - [PREPROCESS.md](PREPROCESS.md)：预处理环境、配置、裁切审核、打标与导出。
 - [ANALYSIS.md](ANALYSIS.md)：本地数据集分析、报告与离线模型要求。

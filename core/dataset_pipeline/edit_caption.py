@@ -1,12 +1,5 @@
 import os
 
-# --- Configuration ---
-# The root directory containing character folders.
-DATASET_PATH = "./dataset-raw"
-# The copyright tag to be used.
-COPYRIGHT = "arknights"
-
-
 def process_text_files_in_dataset(dataset_path, copyright_name):
     """
     Main function to find and process all character folders in the dataset path.
@@ -49,7 +42,7 @@ def process_text_files_in_dataset(dataset_path, copyright_name):
                     file_path = os.path.join(subdir, file)
                     # Process each found text file.
                     _process_single_caption_file(
-                        file_path, character_name, copyright_name
+                        file_path, character_name, copyright_name, dataset_path
                     )
                     files_processed_count += 1
 
@@ -61,7 +54,7 @@ def process_text_files_in_dataset(dataset_path, copyright_name):
     print("--- All folders processed successfully! ---")
 
 
-def _process_single_caption_file(file_path, character_name, copyright_name):
+def _process_single_caption_file(file_path, character_name, copyright_name, dataset_path):
     """
     Processes a single .txt caption file. It ensures the character tag
     in the format "{character_name} ({copyright_name})" is at the beginning,
@@ -106,7 +99,7 @@ def _process_single_caption_file(file_path, character_name, copyright_name):
         if new_content != original_content:
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(new_content)
-            print(f"  - Updated: {os.path.relpath(file_path, DATASET_PATH)}")
+            print(f"  - Updated: {os.path.relpath(file_path, dataset_path)}")
 
     except Exception as e:
         print(f"  - ERROR processing file {file_path}: {e}")
