@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 set PYTHONUTF8=1
 if not exist ".venv-preprocess\Scripts\python.exe" (
-    echo Missing .venv-preprocess. Follow PREPROCESS.md to install it first.
+    echo Missing .venv-preprocess. Run install-deps.bat first. See PREPROCESS.md.
     pause
     exit /b 1
 )

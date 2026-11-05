@@ -7,15 +7,22 @@
 不要将下面的依赖装进 Forge 环境，使用项目独立环境。检测使用独立的 CPU ONNX Runtime，放大与 WD14 通过 Forge 使用 GPU；这样不会争用同一套 NumPy、OpenCV 和 CUDA 依赖。
 
 ```powershell
-uv venv --python 3.10 .venv-preprocess
-uv pip sync requirements-preprocess.lock --python .venv-preprocess/Scripts/python.exe
+.\install-deps.bat
 ```
 
-当前仓库尚缺 `requirements-preprocess.in` 和 `requirements-preprocess.lock`，全新安装需先补齐这两个文件，以上命令目前不能直接完成安装。原环境约定：waifuc 固定在 `efe5c49171a94a6441a79b7d7b595d4b3a4eb51f`，imgutils 固定为 0.19.0。需要重新解析依赖时：
+也可直接双击根目录 [install-deps.bat](install-deps.bat)。先安装 uv 和 Node.js 22.12+（包含 npm 并加入 PATH）；缺少工具或 Node.js 版本不符时，脚本会提示安装后重试。无需手动安装系统 Python 3.10，其他项目可继续使用 Python 3.13。
+
+缺少 uv 时，脚本提示在 PowerShell 执行以下命令；完成后重新打开终端或安装脚本。没有 WinGet 时，参考 [uv 官方安装说明](https://docs.astral.sh/uv/getting-started/installation/)。
 
 ```powershell
-uv pip compile requirements-preprocess.in --python .venv-preprocess/Scripts/python.exe --output-file requirements-preprocess.lock
+winget install --id=astral-sh.uv -e
 ```
+
+脚本使用 `uv venv --python 3.10 --managed-python .venv-preprocess` 创建环境，缺少解释器时由 uv 自动下载；已有可用的 Python 3.10 虚拟环境直接复用。然后通过 `uv pip install --python .venv-preprocess/Scripts/python.exe --default-index https://pypi.tuna.tsinghua.edu.cn/simple -r requirements-preprocess.txt` 安装 [Python 依赖](requirements-preprocess.txt)，再执行 `npm ci --prefix app`。失败即停止，修复后可重跑；损坏或版本不符的已有虚拟环境需先自行重命名保留，再重跑创建。不需要 Git，也不安装 Forge Neo、插件或模型权重。
+
+使用 uv 的常规 Python 安装目录，避免通过 `UV_PYTHON_INSTALL_DIR` 将解释器放在项目 `temp` 等临时目录；虚拟环境依赖该解释器，清理它会导致环境无法启动。日常仍直接运行 `start-webui.bat`，不需要激活虚拟环境或改用 `uv run`。
+
+清单沿用 waifuc 的固定提交 `efe5c49171a94a6441a79b7d7b595d4b3a4eb51f`、imgutils 0.19.0 和现有环境的 NumPy、Pillow、CPU ONNX Runtime、OpenCV 版本；它是运行依赖清单，不是完整的传递依赖锁文件。Python 包索引使用清华 PyPI 镜像；waifuc 的固定提交压缩包仍从 GitHub 下载。
 
 首次准备会从 Hugging Face 下载动漫人物、头部检测和 DWPose 模型，默认缓存在工作目录的父目录下 `.models`，遵循已有 `HF_HOME` 设置。模型缓存可跨运行复用。
 
@@ -23,7 +30,7 @@ uv pip compile requirements-preprocess.in --python .venv-preprocess/Scripts/pyth
 
 ### 双击启动 WebUI
 
-先安装 Node.js 22.12+，在 `app` 目录执行一次 `npm install`。双击根目录的 `start-webui.bat`，在首次设置中输入 SD WebUI Forge Neo 根目录并保存，无需创建根目录配置 JSON。入口直接启动 Python API（默认 8765）和 `npm run dev`（默认 5173），浏览器打开尚未加载数据集的审核页。同一启动配置的 API 和对应 Vite 服务若已运行则复用。首次手动执行需要 Forge 的超分或打标时才检查 Forge API；已运行则复用，未运行则打开独立可见终端，调用所选 Forge 目录的 `webui.bat` 并等待 API 就绪。
+完成 `install-deps.bat` 安装后，双击根目录的 `start-webui.bat`，在首次设置中输入 SD WebUI Forge Neo 根目录并保存，无需创建根目录配置 JSON。入口直接启动 Python API（默认 8765）和 `npm run dev`（默认 5173），浏览器打开尚未加载数据集的审核页。同一启动配置的 API 和对应 Vite 服务若已运行则复用。首次手动执行需要 Forge 的超分或打标时才检查 Forge API；已运行则复用，未运行则打开独立可见终端，调用所选 Forge 目录的 `webui.bat` 并等待 API 就绪。
 
 升级前已运行的旧版审核进程需要关闭后重启；Forge 可继续复用。也可通过 `--port` 和 `--frontend-port` 使用其他空闲端口。关闭审核入口会清理本次创建的前端进程，不停止复用的服务或独立 Forge。
 

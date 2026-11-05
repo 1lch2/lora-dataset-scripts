@@ -13,17 +13,19 @@
 
 ## 环境准备
 
-需要 Python 3.10、Node.js 22.12+、npm，以及本项目独立的 `.venv-preprocess` Python 环境。不要将本项目依赖装进 Forge 环境。
+需要 uv、Node.js 22.12+ 和 npm。Python 3.10 由 uv 自动下载管理，项目依赖安装到独立的 `.venv-preprocess`，无需另装系统 Python 3.10，可与其他项目的 Python 3.13 共存。不要将本项目依赖装进 Forge 环境。
 
-**目前全新安装仍有已知阻塞：** `requirements-preprocess.in` 和 `requirements-preprocess.lock` 尚未包含在仓库中，不能直接按锁文件重建完整环境。已有配置完成的 `.venv-preprocess` 可以继续使用；补齐依赖文件后才能执行以下安装步骤：
+首次使用，双击根目录 [install-deps.bat](install-deps.bat)，或执行：
 
 ```powershell
-uv venv --python 3.10 .venv-preprocess
-uv pip sync requirements-preprocess.lock --python .venv-preprocess/Scripts/python.exe
-npm install --prefix app
+.\install-deps.bat
 ```
 
-首次人物检测还需要对应的本地模型缓存或下载条件；离线姿势分析要求预先缓存模型。详细要求见 [处理与审核说明](PREPROCESS.md) 和 [数据集分析说明](ANALYSIS.md)。
+脚本检查 uv、Node.js 22.12+ 和 npm；缺失时提示安装。缺少 uv 时可在 PowerShell 执行 `winget install --id=astral-sh.uv -e`，安装后重新打开终端或安装脚本；其他安装方式见 [uv 官方说明](https://docs.astral.sh/uv/getting-started/installation/)。
+
+随后通过 `uv venv --python 3.10 --managed-python` 创建或复用 `.venv-preprocess`，用 `uv pip install` 从清华 PyPI 镜像按 [Python 依赖清单](requirements-preprocess.txt) 安装依赖，并通过 `npm ci` 按前端锁文件安装依赖。安装需要联网，不需要 Git；任何步骤失败都会停止，可修复后重跑。已有虚拟环境无法运行或版本不符时，提示先重命名旧环境再重试，不自动删除。uv 管理的 Python 使用其常规安装目录，不要将解释器安装到可能被清理的临时目录；日常仍通过 `start-webui.bat` 启动。
+
+脚本不安装 Forge Neo、插件或模型权重。首次人物检测还需要对应的本地模型缓存或下载条件；离线姿势分析要求预先缓存模型。详细要求见 [处理与审核说明](PREPROCESS.md) 和 [数据集分析说明](ANALYSIS.md)。
 
 ## 启动和配置
 
@@ -57,6 +59,8 @@ npm install --prefix app
 ## 项目结构
 
 ```text
+install-deps.bat            项目 Python 与前端依赖安装入口
+requirements-preprocess.txt Python 运行依赖清单
 start-webui.bat             WebUI 启动入口
 core/launch_webui.py        启动 API、Vite，按需协调 Forge
 core/dataset_pipeline/     后端处理、审核、设置及分析工作进程

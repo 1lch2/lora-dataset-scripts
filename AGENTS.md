@@ -39,7 +39,7 @@ Node.js 要求 22.12.0 或更新版本。单独运行 Vite 时，需要已启动
 
 WebUI 默认使用 API 8765 / Vite 5173，分析从同一页面的 tab 进入。启动入口接受 `--port` 与 `--frontend-port`。
 
-Python 预处理使用独立的 `.venv-preprocess` 环境，不与 Forge 环境或基础脚本依赖混装。环境准备详见 [PREPROCESS.md](PREPROCESS.md)；其中引用的 `requirements-preprocess.in` / `requirements-preprocess.lock` 当前未包含在仓库中，首次安装需先取得这些依赖文件。
+Python 预处理使用独立的 `.venv-preprocess` 环境，不与 Forge 环境或基础脚本依赖混装。首次安装运行 [install-deps.bat](install-deps.bat)，由 uv 管理 Python 3.10，通过 uv pip 按 [requirements-preprocess.txt](requirements-preprocess.txt) 安装 Python 依赖，并通过 npm ci 安装前端依赖；缺少 uv 或 Node.js 22.12+ 时提示安装，无需预装系统 Python 3.10。环境准备详见 [PREPROCESS.md](PREPROCESS.md)。
 
 需要运行现有 Python 测试时，从仓库根目录执行：
 

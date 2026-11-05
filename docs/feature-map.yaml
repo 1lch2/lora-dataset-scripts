@@ -49,10 +49,11 @@ features:
       - core/dataset_pipeline/rename.py
       - core/dataset_pipeline/generate_lora_tag.py
   - id: launcher
-    name: BAT、Forge 与前后端启动
-    keywords: [start-webui.bat, npm run dev, Forge, 启动, 等待, 端口, 独立终端, 设置, CSV, tagger, 1lch2]
+    name: 项目依赖安装、BAT、Forge 与前后端启动
+    keywords: [install-deps.bat, 安装, 依赖, uv, venv, Python, Node.js, start-webui.bat, npm run dev, Forge, 启动, 等待, 端口, 独立终端, 设置, CSV, tagger, 1lch2]
     doc: docs/features/launcher.md
     entrypoints:
+      - install-deps.bat
       - start-webui.bat
       - core/launch_webui.py
       - core/dataset_pipeline/settings.py

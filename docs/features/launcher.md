@@ -4,6 +4,8 @@
 
 核对日期：2026-10-29。已核对空白 UI 启动、网页设置、端口复用、按需 Forge 启动及前端进程管理主链路。
 
+依赖安装入口核对日期：2026-11-05。[install-deps.bat](../../install-deps.bat) 检查 Node.js 22.12+、npm 和 uv；缺少 uv 时提示 WinGet 安装命令及官方安装文档。已有可用的 Python 3.10 虚拟环境直接复用，否则通过 `uv venv --python 3.10 --managed-python .venv-preprocess` 创建，缺少解释器时自动下载 uv 管理的版本。通过 `uv pip install --python` 指定该环境，通过清华 PyPI 镜像安装 [requirements-preprocess.txt](../../requirements-preprocess.txt)，再通过 `npm ci --prefix app` 安装前端依赖。无需系统 Python 3.10；失败即停止，不自动删除旧虚拟环境，不安装 Forge、插件或模型权重。运行依赖清单不锁定全部传递依赖。
+
 1. [start-webui.bat](../../start-webui.bat) 切换到仓库根目录，以原 `.venv-preprocess` 调用 `core/launch_webui.py` 并透传参数。
 2. [launch_webui.py](../../core/launch_webui.py) 从内置默认值与 `.local/webui.json` 加载设置，不再要求根目录 JSON 或硬编码 Forge 目录。以 `serve(None, config=...)` 启动空白审核会话，不扫描默认目录或加载默认 manifest；通过 `/api/session` 的 `manualWorkflow`、`settingsEnabled` 与本项目 `settingsPath` 核对服务复用。Forge API 复用、占用端口等待、独立终端与原参数读取保留，但延迟到模型操作需要时执行。
 3. [review.py](../../core/dataset_pipeline/review.py) 启动 Python API 线程；`make_server` 以 `config` 区分空白审核与独立分析。`model_setup` 由后台超分/打标任务按需调用，导入与识别不启动 Forge。
