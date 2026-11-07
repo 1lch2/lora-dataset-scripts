@@ -48,6 +48,7 @@ export interface Source {
   candidates: Candidate[];
 }
 export interface RunInfo {
+  tag_audit?: TagAuditInfo;
   tagging_options?: { mode: TaggingMode; filters: TaggingFilters };
   datasetLoaded: boolean;
   sources: Record<string, Source>;
@@ -127,3 +128,34 @@ export interface EditRequest {
   [key: string]: unknown;
 }
 export type TagImage = [Source, Candidate & { tag: Tag }];
+
+export interface TagAuditOptions {
+  visual: boolean;
+  endpoint: string;
+  model: string;
+  forbidden: string[];
+}
+export interface TagAuditFinding {
+  id: string;
+  source: string;
+  candidate: string;
+  name: string;
+  category: 'framing' | 'count' | 'rule';
+  tag: string;
+  reason: string;
+  status: 'pending' | 'ignored' | 'applied' | 'stale';
+  model: string | null;
+}
+export interface TagAuditInfo {
+  options?: TagAuditOptions;
+  findings: TagAuditFinding[];
+  samples?: {
+    source: string;
+    candidate: string;
+    name: string;
+    status: 'complete' | 'uncertain' | 'failed';
+    error?: string;
+    observation?: { count_reason: string; framing_reason: string };
+  }[];
+  batches: { id: string; findings: string[]; undone: boolean }[];
+}

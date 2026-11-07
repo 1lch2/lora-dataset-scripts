@@ -128,15 +128,17 @@ export function useReview(session: SessionInfo) {
         setJobStatus(
           job.status === 'failed'
             ? `处理未完成，已保存成功项，可重试。\n${job.errors.join('\n')}`
-            : job.action === 'start_tag'
-              ? `打标完成，共 ${job.total} 份样本。可在打标页预览合并结果、调整置信度范围。`
-              : job.action === 'sync_sources'
-                ? `数据集已导入，共 ${Object.values(data.sources).filter((s) => s.active).length} 张图片。${data.config.crop_mode === 'prepared' ? '已接入 TXT 标签，可编辑并导出。' : '未执行图片处理，可手动选择超分、识别或打标。'}`
-                : job.action === 'start_upscale'
-                  ? `按尺寸超分完成，共 ${job.total} 张图片。可继续识别并生成裁切候选。`
-                  : job.action === 'start_detect'
-                    ? `识别完成，共 ${job.total} 张图片。请审核生成的裁切候选。`
-                    : `已导出 ${job.count} 组图片和标签至 ${data.config.output_dir}`,
+            : job.action === 'start_audit'
+              ? `标签检查完成，共 ${job.total} 份样本。请在标签检查中审核建议；工作 TXT 未修改。`
+              : job.action === 'start_tag'
+                ? `打标完成，共 ${job.total} 份样本。可在打标页预览合并结果、调整置信度范围。`
+                : job.action === 'sync_sources'
+                  ? `数据集已导入，共 ${Object.values(data.sources).filter((s) => s.active).length} 张图片。${data.config.crop_mode === 'prepared' ? '已接入 TXT 标签，可编辑并导出。' : '未执行图片处理，可手动选择超分、识别或打标。'}`
+                  : job.action === 'start_upscale'
+                    ? `按尺寸超分完成，共 ${job.total} 张图片。可继续识别并生成裁切候选。`
+                    : job.action === 'start_detect'
+                      ? `识别完成，共 ${job.total} 张图片。请审核生成的裁切候选。`
+                      : `已导出 ${job.count} 组图片和标签至 ${data.config.output_dir}`,
         );
         if (job.status === 'complete' && job.action === 'start_tag')
           setStage((previous) =>
@@ -625,7 +627,9 @@ export function useReview(session: SessionInfo) {
               ? `正在按尺寸超分 ${job.done} / ${job.total} 张图片…`
               : job.action === 'start_detect'
                 ? `正在识别并生成裁切候选 ${job.done} / ${job.total} 张图片…`
-                : '正在导出训练集…'
+                : job.action === 'start_audit'
+                  ? `正在检查标签 ${job.done} / ${job.total} 份样本…`
+                  : '正在导出训练集…'
         : jobStatus,
   };
 }

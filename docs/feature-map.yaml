@@ -3,9 +3,17 @@ scope: 已核对审核前端、数据集分析、LoRA 文件工具、BAT 启动�
 not_yet_mapped:
   - 检测、几何裁框与模型客户端的内部实现
 features:
+  - id: tag-audit
+    name: 打标后标签异常检查与人工应用撤销
+    keywords: [标签检查, 视觉模型, 人物数量, solo, full body, 构图范围, 禁用标签, virtual youtuber, 异常, 撤销, lfm3]
+    doc: docs/features/tag-audit.md
+    entrypoints:
+      - app/src/Pages/review/ReviewPage/__internal__/TagAudit/TagAudit.tsx
+      - core/dataset_pipeline/tag_audit.py
+      - core/dataset_pipeline/review.py
   - id: tagging
     name: 独立打标、WD 与 PixAI 合并分组、置信度过滤与参考热力图
-    keywords: [打标, tagger, WD, PixAI, 混合, meta, highres, masterpiece, 置信度, 共同支持, 补充, 增减预览, 热力图, 重合, 恢复TXT]
+    keywords: [打标, tagger, WD, PixAI, 混合, meta, highres, masterpiece, 置信度, 共同支持, 补充, 增减预览, 热力图, 重合, 恢复TXT, 首次打标, 缩略图, 过滤标签, 对应图片]
     doc: docs/features/tagging.md
     entrypoints:
       - app/src/Pages/review/ReviewPage/__internal__/Tagging/Tagging.tsx

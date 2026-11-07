@@ -311,6 +311,7 @@
 
 .manager {
   flex: none;
+  min-height: 52px;
   padding: var(--review-space-2) var(--review-editor-gutter);
   border-bottom: 1px solid var(--color-review-line);
 }

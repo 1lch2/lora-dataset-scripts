@@ -6,9 +6,11 @@ import { BatchEditor } from '../BatchEditor';
 import { SingleEditor } from '../SingleEditor';
 import { ImageFilter } from '../ImageFilter';
 import { TagCards } from '../TagCards';
+import { TagAudit } from '../TagAudit';
 
 export function TagEditor() {
   const v = useReviewContext();
+  if (v.tool === 'audit' && v.state?.datasetLoaded) return <TagAudit key={v.state.config.run_dir} />;
   return (
     <main id='tagView' role='tabpanel' aria-labelledby='tagTab' hidden={v.stage !== 'tag'}>
       <section className='tagGallery' aria-label='标签样本'>
@@ -30,6 +32,16 @@ export function TagEditor() {
       </section>
       <aside className='tagTools' aria-label='批量标签编辑'>
         <div className='tagToolTabs' role='tablist' aria-label='标签工具' onKeyDown={handleTabKeys}>
+          <button
+            id='auditToolTab'
+            role='tab'
+            aria-controls='tagView'
+            aria-selected={false}
+            disabled={v.busy}
+            onClick={() => v.setTool('audit')}
+          >
+            标签检查
+          </button>
           <button
             id='filterToolTab'
             role='tab'

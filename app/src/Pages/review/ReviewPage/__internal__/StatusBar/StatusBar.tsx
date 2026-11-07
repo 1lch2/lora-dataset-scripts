@@ -11,7 +11,7 @@ export function StatusBar() {
         id='jobProgress'
         hidden={
           v.job.status !== 'running' ||
-          !['start_tag', 'start_upscale', 'start_detect'].includes(v.job.action || '')
+          !['start_tag', 'start_upscale', 'start_detect', 'start_audit'].includes(v.job.action || '')
         }
         aria-label='处理进度'
         max={Math.max(v.job.total, 1)}

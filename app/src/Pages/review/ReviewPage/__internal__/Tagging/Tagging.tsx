@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { updateReview } from '../../../../../api/client';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useIsFetching, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getRunInfo, updateReview } from '../../../../../api/client';
 import type { EditRequest, TaggingFilters, TaggingMode } from '../../../../../api/types';
 import { useReviewContext } from '../../../context';
 import { binLabel, DEFAULT_FILTERS, scoreBin, tagGroup } from './taggingUtils';
@@ -63,6 +63,23 @@ function ScoreValue({ value, model }: ScoreValueProps) {
 export function Tagging() {
   const v = useReviewContext();
   const client = useQueryClient();
+  const refreshing = useIsFetching({ queryKey: ['run'], exact: true }) > 0;
+  const [loadedJobId, setLoadedJobId] = useState(v.job.status === 'running' ? undefined : v.job.id);
+  const [resultLoadError, setResultLoadError] = useState('');
+  const tagging = v.job.status === 'running' && v.job.action === 'start_tag';
+  const awaitingResults = v.job.action === 'start_tag' && v.job.id !== loadedJobId;
+  const handleLoadResults = useCallback(async () => {
+    setResultLoadError('');
+    try {
+      await client.fetchQuery({ queryKey: ['run'], queryFn: getRunInfo });
+      setLoadedJobId(v.job.id);
+    } catch (error) {
+      setResultLoadError((error as Error).message);
+    }
+  }, [client, v.job.id]);
+  useEffect(() => {
+    if (awaitingResults && !tagging) void handleLoadResults();
+  }, [awaitingResults, tagging, handleLoadResults]);
   const [mode, setMode] = useState<TaggingMode>(v.state?.tagging_options?.mode || 'wd');
   const [filters, setFilters] = useState<TaggingFilters>(
     v.state?.tagging_options?.filters || DEFAULT_FILTERS,
@@ -108,6 +125,7 @@ export function Tagging() {
           key: `${sample.key}/${name}`,
           name,
           sample: sample.name,
+          image: sample.image,
           wd: wd[name],
           pixai: pixai[name],
           removed: sample.removed.includes(name),
@@ -193,8 +211,15 @@ export function Tagging() {
     onError: (error: Error) => v.message(error.message, true),
     onSettled: () => v.setDatasetSwitching(false),
   });
-  const disabled = v.processing || mutation.isPending;
+  const disabled = v.processing || mutation.isPending || awaitingResults;
   const prepared = v.state?.config.crop_mode === 'prepared';
+  const hasResults = scored.length > 0 && !tagging && !awaitingResults;
+  const hasTags = v.samples.some((candidate) => candidate.tag?.tags.length);
+  function handleScope(next: string) {
+    setScope(next);
+    setCell(undefined);
+    setPage(0);
+  }
   function handleStart() {
     if (disabled || !v.ready) return;
     if (v.box && (!v.candidate?.box || v.box.some((value, index) => value !== v.candidate?.box?.[index]))) {
@@ -202,7 +227,7 @@ export function Tagging() {
       return;
     }
     if (
-      v.samples.some((candidate) => candidate.tag) &&
+      hasTags &&
       !window.confirm(
         `将重新打标全部 ${v.samples.length} 份已接受样本，替换工作目录内的原有标签及其编辑结果。\n\n${v.state?.config.run_dir}\n\n导入来源不变。${prepared ? '可通过“重新导入源 TXT”安全恢复完整图的原始标签。' : '原始素材不会被修改。'}`,
       )
@@ -233,80 +258,160 @@ export function Tagging() {
       return;
     mutation.mutate({ action: 'restore_captions', replaceConfirmed: true });
   }
+  const settings = (
+    <section className={styles.controls} aria-label='打标配置'>
+      <h2>打标</h2>
+      <p>范围：当前数据集全部 {v.samples.length} 份已接受样本。先完成裁切审核，再运行打标。</p>
+      {prepared && hasTags ? (
+        <p className={styles.warning}>
+          这是完整打标数据集。运行打标会替换工作目录中的原有 TXT 结果，导入来源保持不变，可重新导入源 TXT
+          安全恢复。
+        </p>
+      ) : null}
+      <fieldset disabled={disabled}>
+        <legend>模型选择</legend>
+        <label>
+          <input type='radio' name='taggingMode' checked={mode === 'wd'} onChange={() => setMode('wd')} />{' '}
+          单模型 · WD EVA02 Large v3
+        </label>
+        <label>
+          <input
+            type='radio'
+            name='taggingMode'
+            checked={mode === 'pixai'}
+            onChange={() => setMode('pixai')}
+          />{' '}
+          单模型 · PixAI v1.0
+        </label>
+        <label>
+          <input
+            type='radio'
+            name='taggingMode'
+            checked={mode === 'mixed'}
+            onChange={() => setMode('mixed')}
+          />{' '}
+          混合 · WD + PixAI
+        </label>
+      </fieldset>
+      <details>
+        <summary>PixAI 专用配置 · meta 类别强制排除</summary>
+        <p>
+          使用此模型完整 meta 类别表（含 highres），并排除 masterpiece。当前插件 HTTP API
+          不支持分类过滤，在收到结果后、合并与写入前排除；不是仅隐藏显示。rating 不进入训练标签。
+        </p>
+      </details>
+      {!hasResults ? (
+        <fieldset disabled={disabled}>
+          <legend>标签保留下限</legend>
+          {mode !== 'pixai' ? (
+            <ThresholdControl
+              label='WD 独立接受下限'
+              value={filters.wd}
+              disabled={disabled}
+              onChange={(value) => handleFilter('wd', value)}
+            />
+          ) : null}
+          {mode !== 'wd' ? (
+            <ThresholdControl
+              label='PixAI 独立接受下限'
+              value={filters.pixai}
+              disabled={disabled}
+              onChange={(value) => handleFilter('pixai', value)}
+            />
+          ) : null}
+          {mode === 'mixed' ? (
+            <>
+              <ThresholdControl
+                label='共同支持 · WD 下限'
+                value={filters.commonWd}
+                disabled={disabled}
+                onChange={(value) => handleFilter('commonWd', value)}
+              />
+              <ThresholdControl
+                label='共同支持 · PixAI 下限'
+                value={filters.commonPixai}
+                disabled={disabled}
+                onChange={(value) => handleFilter('commonPixai', value)}
+              />
+            </>
+          ) : null}
+          <p>
+            {mode === 'mixed'
+              ? '任一独立下限达标，或两项共同下限同时达标，即保留标签。'
+              : '达到所选模型的独立下限，即保留标签。'}
+            完成后可用原始分数重新调整。
+          </p>
+        </fieldset>
+      ) : null}
+      <button className='primary' disabled={disabled || !v.ready || !v.samples.length} onClick={handleStart}>
+        {tagging ? '正在打标…' : hasTags ? '重新打标并替换工作标签' : '开始打标'}
+      </button>
+      {tagging ? (
+        <p role='status'>
+          已处理 {v.job.done} / {v.job.total} 份，完成后显示分数与合并结果。
+        </p>
+      ) : null}
+      {refreshing && !tagging ? <p role='status'>正在读取完整打标结果…</p> : null}
+      {resultLoadError ? (
+        <p role='alert'>
+          {resultLoadError}
+          <button disabled={refreshing} onClick={handleLoadResults}>
+            重新读取结果
+          </button>
+        </p>
+      ) : null}
+      {!v.ready ? <p role='status'>{v.stageStatus}</p> : null}
+      {prepared ? (
+        <button disabled={disabled} onClick={handleRestore}>
+          重新导入源 TXT
+        </button>
+      ) : null}
+    </section>
+  );
+  if (!hasResults) {
+    return (
+      <main id='taggingView' role='tabpanel' aria-labelledby='taggingTab' className={styles.setup}>
+        {settings}
+      </main>
+    );
+  }
   return (
     <main id='taggingView' role='tabpanel' aria-labelledby='taggingTab' className={styles.page}>
-      <section className={styles.controls} aria-label='打标配置'>
-        <h2>打标</h2>
-        <p>范围：当前数据集全部 {v.samples.length} 份已接受样本。先完成裁切审核，再运行打标。</p>
-        {prepared ? (
-          <p className={styles.warning}>
-            这是完整打标数据集。运行打标会替换工作目录中的原有 TXT 结果，导入来源保持不变，可重新导入源 TXT
-            安全恢复。
-          </p>
-        ) : null}
-        <fieldset disabled={disabled}>
-          <legend>模型选择</legend>
-          <label>
-            <input type='radio' name='taggingMode' checked={mode === 'wd'} onChange={() => setMode('wd')} />{' '}
-            单模型 · WD EVA02 Large v3
-          </label>
-          <label>
-            <input
-              type='radio'
-              name='taggingMode'
-              checked={mode === 'pixai'}
-              onChange={() => setMode('pixai')}
-            />{' '}
-            单模型 · PixAI v1.0
-          </label>
-          <label>
-            <input
-              type='radio'
-              name='taggingMode'
-              checked={mode === 'mixed'}
-              onChange={() => setMode('mixed')}
-            />{' '}
-            混合 · WD + PixAI
-          </label>
-        </fieldset>
-        <details>
-          <summary>PixAI 专用配置 · meta 类别强制排除</summary>
-          <p>
-            使用此模型完整 meta 类别表（含 highres），并排除 masterpiece。当前插件 HTTP API
-            不支持分类过滤，在收到结果后、合并与写入前排除；不是仅隐藏显示。rating 不进入训练标签。
-          </p>
-        </details>
-        <p>在右侧调整各组阈值。滑块只更新预览，点击“应用结果”才替换工作标签。</p>
-        <button
-          className='primary'
-          disabled={disabled || !v.ready || !v.samples.length}
-          onClick={handleStart}
-        >
-          {v.job.status === 'running' && v.job.action === 'start_tag'
-            ? '正在打标…'
-            : '运行打标并替换工作标签'}
-        </button>
-        {!v.ready ? <p role='status'>{v.stageStatus}</p> : null}
-        {prepared ? (
-          <button disabled={disabled} onClick={handleRestore}>
-            重新导入源 TXT
+      <section className={styles.gallery} aria-label='打标样本'>
+        <div className={styles.galleryHeading}>
+          <strong>{scored.length} 份打标样本</strong>
+          <button aria-pressed={scope === 'all'} disabled={disabled} onClick={() => handleScope('all')}>
+            全部结果
           </button>
-        ) : null}
+          <p>点击缩略图查看该图的分数与保留、过滤结果。</p>
+        </div>
+        <div className={styles.thumbnails}>
+          {scored.map((sample) => (
+            <button
+              key={sample.key}
+              className={styles.thumbnail}
+              title={sample.name}
+              aria-label={`审核 ${sample.name}`}
+              aria-pressed={scope === sample.key}
+              disabled={disabled}
+              onClick={() => handleScope(sample.key)}
+            >
+              <img src={sample.image} alt={sample.name} loading='lazy' width={140} height={140} />
+              <span>{sample.name}</span>
+            </button>
+          ))}
+        </div>
       </section>
       <section className={styles.results} aria-label='合并结果'>
+        <details className={styles.settings}>
+          <summary>打标配置与重新打标</summary>
+          {settings}
+        </details>
         <div className={styles.toolbar}>
           <h2>合并结果</h2>
           <label>
             预览与应用范围
-            <select
-              value={scope}
-              disabled={disabled}
-              onChange={(event) => {
-                setScope(event.target.value);
-                setCell(undefined);
-                setPage(0);
-              }}
-            >
+            <select value={scope} disabled={disabled} onChange={(event) => handleScope(event.target.value)}>
               <option value='all'>全部有效打标结果（{scored.length} 份）</option>
               {scored.map((sample) => (
                 <option key={sample.key} value={sample.key}>
@@ -338,6 +443,7 @@ export function Tagging() {
         </div>
         <p>
           按图片—标签计数。分组、搜索和热力图仅筛选明细；应用会更新上述范围内的全部 {selected.length} 份样本。
+          滑块只更新预览，点击“应用结果”才替换工作标签。点击标签查看对应图片。
         </p>
         <div className={styles.groups} aria-label='结果分组与阈值'>
           {GROUPS.map((group) => (
@@ -399,169 +505,179 @@ export function Tagging() {
             </section>
           ))}
         </div>
-        {!scored.length ? (
-          <p className={styles.empty}>
-            运行打标后，在这里查看合并结果。导入 TXT 和旧记录没有可用于分组的模型分数。
-          </p>
-        ) : (
-          <>
-            {selected.some((sample) => sample.evidence.mode !== 'mixed') ? (
-              <p>当前范围包含单模型结果，另一模型未返回不代表否定；单模型只使用对应独立下限。</p>
+        {selected.some((sample) => sample.evidence.mode !== 'mixed') ? (
+          <p>当前范围包含单模型结果，另一模型未返回不代表否定；单模型只使用对应独立下限。</p>
+        ) : null}
+        <div className={styles.toolbar}>
+          <strong>
+            {cell !== undefined
+              ? '热力图格子明细'
+              : view === 'kept'
+                ? '全部保留项'
+                : view === 'changes'
+                  ? '即将增减的标签'
+                  : GROUP_LABELS[view]}
+          </strong>
+          <input
+            aria-label='搜索结果标签'
+            placeholder='搜索标签'
+            value={search}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setPage(0);
+            }}
+          />
+          {cell !== undefined ? <button onClick={() => handleView('kept')}>清除热力图筛选</button> : null}
+          <span>
+            {visible.length} 项 · {currentPage + 1} / {pageCount} 页
+          </span>
+          <button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>
+            上一页
+          </button>
+          <button disabled={currentPage + 1 >= pageCount} onClick={() => setPage(currentPage + 1)}>
+            下一页
+          </button>
+        </div>
+        <div className={styles.resultBody}>
+          <div className={styles.table}>
+            <table>
+              <thead>
+                <tr>
+                  <th>标签</th>
+                  <th>样本</th>
+                  <th>WD 分数</th>
+                  <th>PixAI 分数</th>
+                  <th>保留依据 / 过滤原因</th>
+                  <th>应用后</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.slice(currentPage * 100, (currentPage + 1) * 100).map((row) => (
+                  <tr key={row.key}>
+                    <td>
+                      <button
+                        className={styles.previewLink}
+                        aria-label={`查看标签 ${row.name} 对应图片：${row.sample}`}
+                        onClick={() => v.setPreviewImage(row.image)}
+                      >
+                        {row.name}
+                      </button>
+                    </td>
+                    <td title={row.sample}>
+                      <button className={styles.previewLink} onClick={() => v.setPreviewImage(row.image)}>
+                        {row.sample}
+                      </button>
+                    </td>
+                    <td>
+                      <ScoreValue model='WD' value={row.wd} />
+                    </td>
+                    <td>
+                      <ScoreValue model='PixAI' value={row.pixai} />
+                    </td>
+                    <td>
+                      {row.group !== 'filtered'
+                        ? GROUP_LABELS[row.group]
+                        : row.removed
+                          ? '裁框冲突排除'
+                          : row.wd === undefined && row.pixai === undefined
+                            ? '工作标签，无模型分数'
+                            : '未达到保留下限'}
+                    </td>
+                    <td>
+                      {row.group === 'filtered'
+                        ? row.saved
+                          ? '将移除'
+                          : '不写入'
+                        : row.saved
+                          ? '保持'
+                          : '将新增'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!visible.length ? (
+              <p className={styles.empty}>
+                {view === 'changes' && cell === undefined && !search
+                  ? '当前预览与工作标签一致。'
+                  : '当前分组与筛选条件下没有标签。'}
+              </p>
             ) : null}
-            <div className={styles.toolbar}>
-              <strong>
-                {cell !== undefined
-                  ? '热力图格子明细'
-                  : view === 'kept'
-                    ? '全部保留项'
-                    : view === 'changes'
-                      ? '即将增减的标签'
-                      : GROUP_LABELS[view]}
-              </strong>
-              <input
-                aria-label='搜索结果标签'
-                placeholder='搜索标签'
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setPage(0);
-                }}
-              />
-              {cell !== undefined ? <button onClick={() => handleView('kept')}>清除热力图筛选</button> : null}
-              <span>
-                {visible.length} 项 · {currentPage + 1} / {pageCount} 页
-              </span>
-              <button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>
-                上一页
+          </div>
+          {scope !== 'all' && selected.length === 1 ? (
+            <figure className={styles.samplePreview}>
+              <button
+                className={styles.previewButton}
+                aria-label={`查看大图 ${selected[0].name}`}
+                onClick={() => v.setPreviewImage(selected[0].image)}
+              >
+                <img src={selected[0].image} alt={selected[0].name} />
               </button>
-              <button disabled={currentPage + 1 >= pageCount} onClick={() => setPage(currentPage + 1)}>
-                下一页
-              </button>
-            </div>
-            <div className={styles.resultBody}>
-              <div className={styles.table}>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>标签</th>
-                      <th>样本</th>
-                      <th>WD 分数</th>
-                      <th>PixAI 分数</th>
-                      <th>保留依据 / 过滤原因</th>
-                      <th>应用后</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visible.slice(currentPage * 100, (currentPage + 1) * 100).map((row) => (
-                      <tr key={row.key}>
-                        <td>{row.name}</td>
-                        <td title={row.sample}>{row.sample}</td>
-                        <td>
-                          <ScoreValue model='WD' value={row.wd} />
-                        </td>
-                        <td>
-                          <ScoreValue model='PixAI' value={row.pixai} />
-                        </td>
-                        <td>
-                          {row.group !== 'filtered'
-                            ? GROUP_LABELS[row.group]
-                            : row.removed
-                              ? '裁框冲突排除'
-                              : row.wd === undefined && row.pixai === undefined
-                                ? '工作标签，无模型分数'
-                                : '未达到保留下限'}
-                        </td>
-                        <td>
-                          {row.group === 'filtered'
-                            ? row.saved
-                              ? '将移除'
-                              : '不写入'
-                            : row.saved
-                              ? '保持'
-                              : '将新增'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {!visible.length ? (
-                  <p className={styles.empty}>
-                    {view === 'changes' && cell === undefined && !search
-                      ? '当前预览与工作标签一致。'
-                      : '当前分组与筛选条件下没有标签。'}
-                  </p>
-                ) : null}
-              </div>
-              {scope !== 'all' && selected.length === 1 ? (
-                <figure className={styles.samplePreview}>
-                  <img src={selected[0].image} alt={selected[0].name} />
-                  <figcaption>{selected[0].name}</figcaption>
-                </figure>
-              ) : null}
-            </div>
-            <details
-              className={styles.reference}
-              open={heatmapOpen}
-              onToggle={(event) => {
-                const open = event.currentTarget.open;
-                setHeatmapOpen(open);
-                if (!open) setCell(undefined);
-              }}
-            >
-              <summary>额外参考 · 双模型分数热力图</summary>
-              {heatmapOpen ? (
-                <>
-                  <p>
-                    共同返回 {common} / 候选并集 {evidenceCount} · 原始返回重合率{' '}
-                    {evidenceCount ? ((common / evidenceCount) * 100).toFixed(1) : '0.0'}
-                    %。包含低分候选，不代表共同支持率或准确率。
-                  </p>
-                  <div className={styles.chart}>
-                    <p>纵轴 PixAI 置信度 ↑ · 横轴 WD 置信度 → · 深色表示数量更多</p>
-                    <div className={styles.matrix} role='group' aria-label='双模型置信度分布'>
-                      {REVERSED_BINS.map((y) => (
-                        <div className={styles.matrixRow} key={y}>
-                          <span>{binLabel(y)}</span>
-                          {BINS.map((x) => {
-                            const index = y * 11 + x;
-                            const count = matrix[index];
-                            const level = count ? Math.max(1, Math.ceil((count / maxCount) * 4)) : 0;
-                            return (
-                              <button
-                                key={x}
-                                data-level={level}
-                                aria-pressed={cell === index}
-                                aria-label={`WD ${binLabel(x)}，PixAI ${binLabel(y)}：${count} 个标签`}
-                                title={`WD ${binLabel(x)} / PixAI ${binLabel(y)}：${count}`}
-                                onClick={() => {
-                                  setCell(cell === index ? undefined : index);
-                                  setSearch('');
-                                  setPage(0);
-                                }}
-                              >
-                                {count || '·'}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ))}
-                      <div className={styles.matrixRow}>
-                        <span />
-                        {BINS.map((x) => (
-                          <span key={x}>{binLabel(x)}</span>
-                        ))}
-                      </div>
+              <figcaption>{selected[0].name}</figcaption>
+            </figure>
+          ) : null}
+        </div>
+        <details
+          className={styles.reference}
+          open={heatmapOpen}
+          onToggle={(event) => {
+            const open = event.currentTarget.open;
+            setHeatmapOpen(open);
+            if (!open) setCell(undefined);
+          }}
+        >
+          <summary>额外参考 · 双模型分数热力图</summary>
+          {heatmapOpen ? (
+            <>
+              <p>
+                共同返回 {common} / 候选并集 {evidenceCount} · 原始返回重合率{' '}
+                {evidenceCount ? ((common / evidenceCount) * 100).toFixed(1) : '0.0'}
+                %。包含低分候选，不代表共同支持率或准确率。
+              </p>
+              <div className={styles.chart}>
+                <p>纵轴 PixAI 置信度 ↑ · 横轴 WD 置信度 → · 深色表示数量更多</p>
+                <div className={styles.matrix} role='group' aria-label='双模型置信度分布'>
+                  {REVERSED_BINS.map((y) => (
+                    <div className={styles.matrixRow} key={y}>
+                      <span>{binLabel(y)}</span>
+                      {BINS.map((x) => {
+                        const index = y * 11 + x;
+                        const count = matrix[index];
+                        const level = count ? Math.max(1, Math.ceil((count / maxCount) * 4)) : 0;
+                        return (
+                          <button
+                            key={x}
+                            data-level={level}
+                            aria-pressed={cell === index}
+                            aria-label={`WD ${binLabel(x)}，PixAI ${binLabel(y)}：${count} 个标签`}
+                            title={`WD ${binLabel(x)} / PixAI ${binLabel(y)}：${count}`}
+                            onClick={() => {
+                              setCell(cell === index ? undefined : index);
+                              setSearch('');
+                              setPage(0);
+                            }}
+                          >
+                            {count || '·'}
+                          </button>
+                        );
+                      })}
                     </div>
-                    <p>
-                      未返回＝未运行该模型或分数不高于采集下限 0.01；不等于 0
-                      分。点击格子查看对应标签，不改变应用范围。meta 已排除。
-                    </p>
+                  ))}
+                  <div className={styles.matrixRow}>
+                    <span />
+                    {BINS.map((x) => (
+                      <span key={x}>{binLabel(x)}</span>
+                    ))}
                   </div>
-                </>
-              ) : null}
-            </details>
-          </>
-        )}
+                </div>
+                <p>
+                  未返回＝未运行该模型或分数不高于采集下限 0.01；不等于 0
+                  分。点击格子查看对应标签，不改变应用范围。meta 已排除。
+                </p>
+              </div>
+            </>
+          ) : null}
+        </details>
       </section>
     </main>
   );

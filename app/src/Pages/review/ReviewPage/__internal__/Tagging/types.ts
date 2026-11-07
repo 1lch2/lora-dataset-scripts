@@ -7,6 +7,7 @@ export interface ScoreRow {
   key: string;
   name: string;
   sample: string;
+  image: string;
   wd?: number;
   pixai?: number;
   removed: boolean;
