@@ -3,6 +3,7 @@ import copy
 import json
 import re
 import secrets
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 
 import requests
@@ -34,8 +35,11 @@ def validate_options(value):
     visual = value.get('visual', False)
     endpoint, model = value.get('endpoint', ''), value.get('model', '')
     forbidden = value.get('forbidden', [])
+    concurrency = value.get('concurrency', 1)
     if not isinstance(visual, bool) or not isinstance(endpoint, str) or not isinstance(model, str):
         raise ValueError('检查配置格式无效')
+    if type(concurrency) is not int or not 1 <= concurrency <= 16:
+        raise ValueError('并发请求数必须是 1–16 的整数')
     if not isinstance(forbidden, list) or len(forbidden) > 500 or any(not isinstance(t, str) or len(t) > 200 for t in forbidden):
         raise ValueError('禁用标签必须是文本列表，最多 500 项')
     forbidden = list(dict.fromkeys(normalize(t) for t in forbidden if normalize(t)))
@@ -48,7 +52,8 @@ def validate_options(value):
             raise ValueError('请填写本地视觉模型 ID')
     if not visual and not forbidden:
         raise ValueError('请启用视觉检查或填写当前数据集禁用标签')
-    return {'visual': visual, 'endpoint': endpoint.strip().rstrip('/'), 'model': model.strip(), 'forbidden': forbidden}
+    return {'visual': visual, 'endpoint': endpoint.strip().rstrip('/'), 'model': model.strip(),
+            'forbidden': forbidden, 'concurrency': concurrency}
 
 
 def image_version(run, source, candidate):
@@ -180,6 +185,34 @@ def audit_view(run):
     return audit
 
 
+def inspect_sample(run, source, candidate, options):
+    sample = {'source': source['id'], 'candidate': candidate['id'], 'name': source['relative'], 'status': 'complete'}
+    findings = []
+    try:
+        version = image_version(run, source, candidate)
+        tags = candidate['tag']['tags']
+        proposed = [('rule', tag, '命中当前数据集明确禁用的标签') for tag in tags if tag in options['forbidden']]
+        if options['visual']:
+            try:
+                observation = observe(asset(run.directory, candidate['tag']['image']), options)
+                sample['observation'] = observation
+                proposed.extend(suggestions(tags, observation))
+                if not observation['count_certain'] or not observation['framing_certain'] or observation['framing'] == 'uncertain':
+                    sample['status'] = 'uncertain'
+            except Exception as error:
+                sample.update(status='failed', error=str(error))
+        for category, name, reason in proposed:
+            context = context_tags(tags, category, name)
+            fid = digest([source['id'], candidate['id'], version, category, name])
+            findings.append({'id': fid, 'source': source['id'], 'candidate': candidate['id'],
+                             'name': f"{source['relative']} · {candidate['id']}", 'category': category,
+                             'tag': name, 'reason': reason, 'status': 'pending', 'imageVersion': version,
+                             'context': context, 'model': options['model'] if category != 'rule' else None})
+    except Exception as error:
+        sample.update(status='failed', error=str(error))
+    return sample, findings
+
+
 def audit_run(run, options, progress):
     audit = run.data.setdefault('tag_audit', {'findings': [], 'batches': []})
     audit['options'] = options
@@ -191,42 +224,26 @@ def audit_run(run, options, progress):
     progress(0, len(samples))
     errors = []
     existing = {f['id']: f for f in audit['findings']}
-    for index, (source, candidate) in enumerate(samples):
-        sample = {'source': source['id'], 'candidate': candidate['id'], 'name': source['relative'], 'status': 'complete'}
-        try:
-            version = image_version(run, source, candidate)
-            tags = candidate['tag']['tags']
-            proposed = [('rule', tag, '命中当前数据集明确禁用的标签') for tag in tags if tag in options['forbidden']]
-            if options['visual']:
-                try:
-                    observation = observe(asset(run.directory, candidate['tag']['image']), options)
-                    sample['observation'] = observation
-                    proposed.extend(suggestions(tags, observation))
-                    if not observation['count_certain'] or not observation['framing_certain'] or observation['framing'] == 'uncertain':
-                        sample['status'] = 'uncertain'
-                except Exception as error:
-                    sample.update(status='failed', error=str(error))
-                    errors.append(f"{source['relative']}/{candidate['id']}: {error}")
-            for category, name, reason in proposed:
-                context = context_tags(tags, category, name)
-                fid = digest([source['id'], candidate['id'], version, category, name])
+    workers = min(options.get('concurrency', 1), len(samples)) if options['visual'] else 1
+    # 工作线程只观察样本；结果合并、进度和记录写入集中在当前线程，避免并发修改运行记录。
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(inspect_sample, run, source, candidate, options) for source, candidate in samples]
+        for index, future in enumerate(as_completed(futures), 1):
+            sample, findings = future.result()
+            if sample['status'] == 'failed':
+                errors.append(f"{sample['name']}/{sample['candidate']}: {sample['error']}")
+            for finding in findings:
+                fid = finding['id']
                 if (fid in existing and existing[fid]['status'] in ('pending', 'ignored')
-                        and existing[fid]['context'] == context):
+                        and existing[fid]['context'] == finding['context']):
                     continue
-                finding = {'id': fid, 'source': source['id'], 'candidate': candidate['id'],
-                           'name': f"{source['relative']} · {candidate['id']}", 'category': category,
-                           'tag': name, 'reason': reason, 'status': 'pending', 'imageVersion': version,
-                           'context': context, 'model': options['model'] if category != 'rule' else None}
                 if fid in existing:
                     audit['findings'].remove(existing[fid])
                 audit['findings'].append(finding)
                 existing[fid] = finding
-        except Exception as error:
-            sample.update(status='failed', error=str(error))
-            errors.append(f"{source['relative']}/{candidate['id']}: {error}")
-        audit['samples'].append(sample)
-        run.save()
-        progress(index + 1, len(samples))
+            audit['samples'].append(sample)
+            run.save()
+            progress(index, len(samples))
     return errors
 
 

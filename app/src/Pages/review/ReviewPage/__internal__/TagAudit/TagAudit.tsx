@@ -13,6 +13,7 @@ const DEFAULT_OPTIONS: TagAuditOptions = {
   visual: true,
   endpoint: 'http://localhost:23333/v1',
   model: 'lfm3-vl-2b',
+  concurrency: 1,
   forbidden: [],
 };
 
@@ -20,7 +21,7 @@ export function TagAudit() {
   const v = useReviewContext();
   const client = useQueryClient();
   const audit = v.state?.tag_audit;
-  const [options, setOptions] = useState(audit?.options || DEFAULT_OPTIONS);
+  const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, ...audit?.options });
   const [forbidden, setForbidden] = useState(options.forbidden.join(', '));
   const [category, setCategory] = useState<AuditCategory>('all');
   const [status, setStatus] = useState<AuditStatus>('pending');
@@ -275,6 +276,21 @@ export function TagAudit() {
                 disabled={!options.visual}
                 onChange={(e) => setOptions({ ...options, model: e.target.value })}
               />
+            </label>
+            <label>
+              并发请求数
+              <select
+                id='auditConcurrency'
+                value={options.concurrency}
+                disabled={!options.visual}
+                onChange={(e) => setOptions({ ...options, concurrency: Number(e.target.value) })}
+              >
+                {Array.from({ length: 16 }, (_, index) => index + 1).map((count) => (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                ))}
+              </select>
             </label>
             <p>发送实际训练样本到本机接口。先独立观察图片，再对照数量与构图标签。</p>
           </fieldset>

@@ -134,6 +134,7 @@ export interface TagAuditOptions {
   visual: boolean;
   endpoint: string;
   model: string;
+  concurrency: number;
   forbidden: string[];
 }
 export interface TagAuditFinding {

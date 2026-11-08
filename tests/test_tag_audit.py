@@ -82,6 +82,49 @@ class TagAuditTests(unittest.TestCase):
         self.assertEqual(self.run.data['tag_audit']['samples'][0]['status'], 'failed')
         self.assertEqual([f['tag'] for f in self.run.data['tag_audit']['findings']], ['virtual youtuber'])
 
+    def test_concurrent_checks_preserve_captions_and_keep_other_results_after_failure(self):
+        folder = self.caption.parent
+        for index in range(3):
+            Image.new('RGB', (100, 100), 'white').save(folder / f'extra{index}.png')
+            (folder / f'extra{index}.txt').write_bytes(self.caption.read_bytes())
+        self.run, errors = import_sources(self.run.config)
+        self.assertEqual(errors, [])
+        captions = {self.run.tag_file(c['tag']): self.run.tag_file(c['tag']).read_bytes()
+                    for s in self.run.data['sources'].values() for c in s['candidates']}
+        lock = threading.Lock()
+        barrier = threading.Barrier(2)
+        active = peak = calls = 0
+
+        def observe_concurrently(path, options):
+            nonlocal active, peak, calls
+            with lock:
+                active += 1
+                peak = max(peak, active)
+                calls += 1
+                number = calls
+            try:
+                barrier.wait(timeout=5)
+                if number == 1:
+                    raise ValueError('simulated visual failure')
+                return OBSERVATION
+            finally:
+                with lock:
+                    active -= 1
+
+        progress = []
+        with patch('core.dataset_pipeline.tag_audit.observe', side_effect=observe_concurrently):
+            errors = audit_run(self.run, {**self.options, 'concurrency': 2},
+                               lambda done, total: progress.append((done, total)))
+        audit = Run.load(self.run.directory).data['tag_audit']
+        self.assertEqual(peak, 2)
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(progress[-1], (4, 4))
+        self.assertEqual({s['source'] for s in audit['samples']}, set(self.run.data['sources']))
+        self.assertEqual(sum(s['status'] == 'failed' for s in audit['samples']), 1)
+        self.assertEqual(sum(f['category'] == 'rule' for f in audit['findings']), 4)
+        self.assertEqual(sum(f['category'] == 'framing' for f in audit['findings']), 3)
+        self.assertEqual({path: path.read_bytes() for path in captions}, captions)
+
     def test_uncertain_observation_never_deletes_and_unknown_gender_is_not_guessed(self):
         observation = {**OBSERVATION, 'count_certain': False, 'framing_certain': False}
         self.assertEqual(suggestions(['solo', '1girl', 'full body'], observation), [])
@@ -117,8 +160,12 @@ class TagAuditTests(unittest.TestCase):
         session.headers['X-Review-Token'] = token
         caption = self.run.tag_file(self.candidate['tag'])
         original = self.caption.read_bytes()
+        response = session.post(url + '/api/edit', json={'action': 'start_audit',
+                                'audit': {**self.options, 'concurrency': 0}}, timeout=5)
+        self.assertEqual(response.status_code, 400, response.text)
         with patch('core.dataset_pipeline.tag_audit.observe', return_value=OBSERVATION):
-            response = session.post(url + '/api/edit', json={'action': 'start_audit', 'audit': self.options}, timeout=5)
+            response = session.post(url + '/api/edit', json={'action': 'start_audit',
+                                    'audit': {**self.options, 'concurrency': 2}}, timeout=5)
             self.assertEqual(response.status_code, 202, response.text)
             for _ in range(100):
                 job = session.get(url + '/api/job', timeout=5).json()
@@ -128,6 +175,7 @@ class TagAuditTests(unittest.TestCase):
             self.assertEqual(job['status'], 'complete', job)
         self.assertEqual(caption.read_bytes(), original)
         audit = session.get(url + '/api/state', timeout=5).json()['tag_audit']
+        self.assertEqual(audit['options']['concurrency'], 2)
         self.assertEqual({f['tag'] for f in audit['findings']}, {'1girl', 'solo', 'full body', 'virtual youtuber'})
         ids = [f['id'] for f in audit['findings']]
         response = session.post(url + '/api/edit', json={'action': 'apply_audit', 'ids': ids}, timeout=5)
