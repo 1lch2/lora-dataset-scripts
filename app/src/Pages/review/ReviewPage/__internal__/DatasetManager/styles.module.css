@@ -251,6 +251,13 @@
   margin: 0;
 }
 
+.recursiveOption {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--review-space-2);
+  cursor: pointer;
+}
+
 .typePicker {
   display: grid;
   gap: var(--review-space-2);

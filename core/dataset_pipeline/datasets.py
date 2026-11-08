@@ -100,21 +100,26 @@ def import_config(values, template):
     mode = values.get('cropMode', 'auto')
     if mode not in ('prepared', 'manual', 'auto'):
         raise ValueError('请选择完整打标数据集或待处理数据集')
+    recursive = values.get('recursive', mode != 'manual')
+    if not isinstance(recursive, bool):
+        raise ValueError('递归遍历子目录选项必须是布尔值')
     folder = Path(requested).expanduser().resolve()
     if not folder.is_dir():
         raise ValueError(f'数据集目录不存在：{folder}')
-    files = [p for p in folder.rglob('*') if p.is_file() and p.suffix.lower() in EXTENSIONS]
-    if not files:
+    entries = folder.rglob('*') if recursive else folder.iterdir()
+    files = [p for p in entries if p.is_file()]
+    images = [p for p in files if p.suffix.lower() in EXTENSIONS]
+    if not images:
         raise ValueError('目录内没有支持的图片')
     if mode == 'auto':
-        mode = 'prepared' if any(p.is_file() and p.suffix.lower() == '.txt' for p in folder.rglob('*')) else 'manual'
+        mode = 'prepared' if any(p.suffix.lower() == '.txt' for p in files) else 'manual'
     identity = identity.strip()
-    if not identity and any(p.parent == folder for p in files):
+    if not identity and any(p.parent == folder for p in images):
         identity = folder.name
     name = re.sub(r'[^\w-]+', '-', folder.name).strip('-')[:40] or 'dataset'
     key = digest([str(folder), identity, mode])[:12]
     config = {**DEFAULTS, **template, 'input_dir': str(folder), 'identity': identity,
-              'crop_mode': mode, 'import_captions': mode == 'prepared',
+              'crop_mode': mode, 'import_captions': mode == 'prepared', 'recursive': recursive,
               'run_dir': str(ROOT / 'runs' / f'{name}-{key}'),
               'output_dir': str(ROOT / 'dataset-ready' / f'{name}-{key}')}
     validate_config(config)
@@ -138,7 +143,8 @@ def import_sources(config):
         source['active'] = False
     failures = []
     captions_by_directory = {}
-    files = sorted(p for p in folder.rglob('*') if p.is_file() and p.suffix.lower() in EXTENSIONS)
+    entries = folder.rglob('*') if config.get('recursive', True) else folder.iterdir()
+    files = sorted(p for p in entries if p.is_file() and p.suffix.lower() in EXTENSIONS)
     for path in files:
         relative = path.relative_to(folder)
         source_id = digest(relative.as_posix())[:20]

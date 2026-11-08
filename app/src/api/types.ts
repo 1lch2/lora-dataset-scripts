@@ -80,6 +80,7 @@ export interface DatasetImportRequest {
   directory: string;
   identity: string;
   cropMode: 'prepared' | 'manual';
+  recursive: boolean;
 }
 export interface DatasetOpenResult {
   ok: boolean;

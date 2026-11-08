@@ -10,6 +10,7 @@ export function DatasetManager() {
   const [importing, setImporting] = useState(false);
   const [managing, setManaging] = useState(false);
   const [cropMode, setCropMode] = useState<DatasetImportRequest['cropMode']>();
+  const [recursive, setRecursive] = useState(true);
   const [directory, setDirectory] = useState('');
   const [identity, setIdentity] = useState('');
   const [search, setSearch] = useState('');
@@ -214,7 +215,12 @@ export function DatasetManager() {
                 onSubmit={(event) => {
                   event.preventDefault();
                   if (disabled || !cropMode || !directory.trim()) return;
-                  mutation.mutate({ directory: directory.trim(), identity: identity.trim(), cropMode });
+                  mutation.mutate({
+                    directory: directory.trim(),
+                    identity: identity.trim(),
+                    cropMode,
+                    recursive,
+                  });
                 }}
               >
                 <fieldset className={styles.typePicker} disabled={disabled}>
@@ -225,7 +231,10 @@ export function DatasetManager() {
                       name='datasetType'
                       value='prepared'
                       checked={cropMode === 'prepared'}
-                      onChange={() => setCropMode('prepared')}
+                      onChange={() => {
+                        setCropMode('prepared');
+                        setRecursive(true);
+                      }}
                       required
                     />
                     <span>
@@ -239,7 +248,10 @@ export function DatasetManager() {
                       name='datasetType'
                       value='manual'
                       checked={cropMode === 'manual'}
-                      onChange={() => setCropMode('manual')}
+                      onChange={() => {
+                        setCropMode('manual');
+                        setRecursive(false);
+                      }}
                       required
                     />
                     <span>
@@ -272,11 +284,20 @@ export function DatasetManager() {
                         disabled={disabled}
                       />
                     </label>
+                    <label className={styles.recursiveOption}>
+                      <input
+                        type='checkbox'
+                        checked={recursive}
+                        onChange={(event) => setRecursive(event.target.checked)}
+                        disabled={disabled}
+                      />
+                      递归遍历子目录
+                    </label>
                     <p className={styles.formHint}>
                       {cropMode === 'prepared'
                         ? '保留图片原尺寸与文件名，读取同名 UTF-8 TXT；缺少标签的图片可在导入后补充。'
                         : '仅导入图片，不读取源 TXT 标签。超分、识别和打标由你在工作区手动启动。'}
-                      支持整个目录或子目录。
+                      {recursive ? '包含所有子目录中的图片。' : '仅导入所选目录直接包含的图片。'}
                     </p>
                     <button type='submit' className='primary' disabled={disabled || !directory.trim()}>
                       {mutation.isPending ? '正在加载…' : '导入并打开'}

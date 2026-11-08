@@ -407,7 +407,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                                 if not (selected / 'manifest.json').is_file():
                                     Run(selected, {'version': 1, 'config': config, 'sources': {}}).save()
                                 imported = load_run(selected)
-                                imported.config.update(crop_mode=config['crop_mode'], import_captions=config['import_captions'])
+                                imported.config.update(crop_mode=config['crop_mode'], import_captions=config['import_captions'],
+                                                       recursive=config['recursive'])
                                 imported.ensure_tag_files()
                                 imported.save()
                         else:

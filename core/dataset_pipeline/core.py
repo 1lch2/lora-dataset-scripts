@@ -105,6 +105,8 @@ def validate_config(config, *, dataset=True):
         raise ValueError("crop_mode 必须是 auto、prepared 或 manual")
     if not isinstance(config.get("import_captions", False), bool):
         raise ValueError("import_captions 必须是布尔值")
+    if not isinstance(config.get('recursive', True), bool):
+        raise ValueError('recursive 必须是布尔值')
     if identity and (identity in (".", "..") or any(c in identity for c in '/\\:*?"<>|') or identity.endswith((".", " "))):
         raise ValueError("identity 必须是可用的单层目录名")
 

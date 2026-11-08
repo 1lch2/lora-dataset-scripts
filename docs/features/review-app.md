@@ -12,6 +12,7 @@
 - 页头“设置”由 [Settings](../../app/src/Pages/review/ReviewPage/__internal__/Settings/Settings.tsx) 管理 Forge 目录和处理参数，首次未配置时自动打开；持久化、固定插件来源和内置 CSV 见[启动链的网页配置](launcher.md#网页配置)。
 - [useReview](../../app/src/Pages/review/useReview.ts)：审核状态、裁框草稿、阶段切换、编辑 mutation、任务轮询与提示；服务端数据由 TanStack Query 管理，客户端状态使用 Hooks。
 - [DatasetManager](../../app/src/Pages/review/ReviewPage/__internal__/DatasetManager/DatasetManager.tsx)：IDE 风格主页，提供已有数据集的名称/路径搜索、打开、刷新，以及显式选择完整打标/待处理类型后填写目录的导入表单；工作区显示当前目录与切换入口，待处理模式顶部明确标注超分和主体识别作用于数据集全部图片，不受筛选影响。
+- 导入表单提供“递归遍历子目录”：选择完整打标类型时默认开启，选择待处理类型时默认关闭，可手动调整；`DatasetImportRequest.recursive` 经 `/api/datasets/import` 保存到运行配置。`import_config` 的图片校验、旧请求的自动类型判断与 `import_sources` 的实际同步使用相同扫描范围，关闭时仅扫描所选目录的直接文件。重新导入会更新该范围，打开与刷新沿用已保存的值；历史记录缺少此字段时继续递归扫描。
 - [useTags](../../app/src/Pages/review/useTags.ts)：筛选、选择、图片过滤篮、标签统计与操作范围。
 - [Library](../../app/src/Pages/review/ReviewPage/__internal__/Library/Library.tsx)：左侧图片列表与当前图选择；按筛选后的显示顺序从 1 编号，序号以独立背景色块显示在文件名前。
 - [CropCanvas](../../app/src/Pages/review/CropCanvas/CropCanvas.tsx)：图片四周增加长边 4% 的背景留白，让贴边手柄完整显示并可从留白区域起拖；绘制与鼠标坐标扣除留白偏移，选框新建、移动和缩放均限制在图片内，保存坐标仍相对图片。普通裁切与主体裁切共用该逻辑；通过 ref 管理 Canvas 与图片加载，卸载时释放 ResizeObserver。
