@@ -11,6 +11,7 @@ import { PreviewDialog } from './__internal__/PreviewDialog';
 import { AnalysisView } from '../../analysis/AnalysisView';
 import { LoraTools } from '../../lora/LoraTools';
 import { DatasetTools } from '../../tools/DatasetTools';
+import { DenoisePage } from '../../denoise/DenoisePage';
 import type { ReviewPageProps } from './types';
 import styles from './styles.module.css';
 
@@ -22,6 +23,11 @@ export function ReviewPage({ session }: ReviewPageProps) {
         <Header />
         <DatasetManager />
         <div className='appShell' hidden={review.stage === 'home'}>
+          <DenoisePage
+            token={session.token}
+            active={review.stage === 'denoise'}
+            processing={review.processing}
+          />
           <AnalysisView token={session.token} active={review.stage === 'analysis'} />
           <DatasetTools
             token={session.token}

@@ -1,0 +1,1 @@
+export { DenoisePage } from './DenoisePage';

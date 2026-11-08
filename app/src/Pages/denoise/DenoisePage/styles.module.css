@@ -1,0 +1,119 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: var(--review-space-4) var(--review-page-gutter);
+  gap: var(--review-space-4);
+}
+.description {
+  margin: 0;
+  font-size: var(--review-text-xs);
+}
+.description,
+.fields p,
+.fields small,
+.empty {
+  color: var(--color-review-muted);
+}
+.layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: var(--review-space-4);
+  flex: 1;
+  min-height: 0;
+}
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  gap: var(--review-space-3);
+  overflow: auto;
+  border: 1px solid var(--color-review-line);
+  border-radius: var(--review-panel-radius);
+  padding: var(--review-space-4);
+  background: var(--color-review-surface);
+}
+.fields {
+  display: grid;
+  gap: var(--review-space-3);
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.fields label {
+  margin: 0;
+}
+.fields input:not([type='checkbox']),
+.fields select {
+  width: 100%;
+  min-width: 0;
+}
+.fields .check {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--review-space-2);
+}
+.dropzone {
+  padding: var(--review-space-4);
+  border: 1px dashed var(--color-review-control);
+  border-radius: var(--review-radius);
+  text-align: center;
+}
+.fileInput {
+  display: none;
+}
+.presets,
+.resultHeading {
+  display: flex;
+  align-items: center;
+  gap: var(--review-space-2);
+}
+.presets button {
+  flex: 1;
+}
+.presets button[aria-pressed='true'] {
+  background: var(--color-review-tint);
+  border-color: var(--color-review-ink);
+  font-weight: 600;
+}
+.filename {
+  overflow-wrap: anywhere;
+}
+.resultHeading {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.download {
+  color: var(--color-review-ink);
+  text-decoration: underline;
+}
+.original {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+  background: var(--color-review-canvas-stage);
+}
+.original img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.empty {
+  margin: auto;
+  padding: var(--review-space-6);
+  text-align: center;
+}
+.preview {
+  overflow: hidden;
+}
+.panel progress {
+  accent-color: var(--color-review-ink);
+}

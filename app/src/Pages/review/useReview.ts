@@ -119,6 +119,7 @@ export function useReview(session: SessionInfo) {
     tags.handleFocus();
   }, [tags.singleKey, !!tags.focused]);
   useEffect(() => {
+    if (job.action === 'denoise' || job.action === 'denoise_models') return;
     if (!job.id || job.id === handledJob.current || !['complete', 'failed'].includes(job.status) || busy)
       return;
     handledJob.current = job.id;
@@ -142,7 +143,7 @@ export function useReview(session: SessionInfo) {
         );
         if (job.status === 'complete' && job.action === 'start_tag')
           setStage((previous) =>
-            ['home', 'analysis', 'lora', 'tools'].includes(previous) ? previous : 'tagging',
+            ['home', 'analysis', 'lora', 'tools', 'denoise'].includes(previous) ? previous : 'tagging',
           );
         if (
           job.status === 'complete' &&
@@ -167,7 +168,7 @@ export function useReview(session: SessionInfo) {
     document.body.classList.toggle('analyzing', stage === 'analysis');
     document.body.classList.toggle('tagEditing', stage === 'tag');
     document.body.classList.toggle('tagging', stage === 'tagging');
-    document.body.classList.toggle('loraTools', stage === 'lora' || stage === 'tools');
+    document.body.classList.toggle('loraTools', ['lora', 'tools', 'denoise'].includes(stage));
     document.body.classList.toggle('focusCrop', focusCrop && stage === 'crop');
     return () =>
       document.body.classList.remove('analyzing', 'tagEditing', 'tagging', 'loraTools', 'focusCrop');
@@ -182,7 +183,7 @@ export function useReview(session: SessionInfo) {
       setReviewStarted(true);
       return;
     }
-    if (next === 'analysis' || next === 'lora' || next === 'tools') return;
+    if (['analysis', 'lora', 'tools', 'denoise'].includes(next)) return;
     setReviewStarted(true);
     if (stage !== 'home') restoreDraft(source, candidate?.id);
   }

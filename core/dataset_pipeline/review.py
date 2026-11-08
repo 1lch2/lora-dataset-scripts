@@ -16,6 +16,8 @@ from .tagging import apply_filters, restore_captions, tag_run, validate_options
 from .tag_audit import audit_run, audit_view, edit_audit, validate_options as validate_audit_options
 from .settings import RUNTIME_KEYS, save_settings, settings_info
 from .analysis_job import AnalysisJob
+from .denoise import decode_upload, denoise_image, open_image, png_bytes, validate_options as validate_denoise_options
+from .forge import ForgeClient
 from .tools import DatasetToolsJob, scan_files
 from .datasets import delete_dataset, detect_source, import_config, import_sources, list_datasets, replace_source_image, upscale_source
 
@@ -31,9 +33,72 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
     token = secrets.token_urlsafe(24)
     mutex = threading.RLock()
     static = Path(__file__).resolve().parents[2] / 'app' / 'dist'
-    job = {"id": None, "status": "idle", "action": None, "errors": []}
+    job = {"id": None, "status": "idle", "action": None, "errors": [], "total": 0, "done": 0}
     template = dict(config if config is not None else Run.load(directory).config if directory else {})
     analysis_only = directory is None and config is None
+    denoise = {'status': 'idle', 'stage': '', 'errors': [], 'models': [], 'result': None}
+    denoise_images = {}
+
+    def denoise_status():
+        return {**denoise, 'defaultModel': template.get('upscaler_1', DEFAULTS['upscaler_1'])}
+
+    def process_denoise(action, selected, options, raw, name):
+        try:
+            if action == 'denoise':
+                with mutex:
+                    denoise['stage'] = 'decode'
+                rgb, alpha, icc = open_image(raw)
+                with mutex:
+                    denoise['stage'] = 'connect'
+            if model_setup:
+                model_setup(selected)
+            client = ForgeClient(selected)
+            if action == 'denoise_models':
+                models = client.upscalers()
+                with mutex:
+                    denoise['models'] = [{'name': item['name'], 'scale': item.get('scale')}
+                                         for item in models if item['name'] != 'None']
+            else:
+                def progress(stage):
+                    with mutex:
+                        denoise['stage'] = stage
+                output = denoise_image(rgb, alpha, icc, client, options, progress)
+                original = png_bytes(rgb, alpha, icc)
+                with mutex:
+                    denoise_images.update(original=original, output=output)
+                    denoise['result'] = {'id': job['id'], 'width': rgb.width, 'height': rgb.height,
+                                         'name': name + '_denoised.png'}
+            with mutex:
+                denoise.update(status='complete', stage='complete')
+                job.update(status='complete', done=1)
+        except Exception as error:
+            with mutex:
+                denoise.update(status='failed', errors=[str(error)])
+                job.update(status='failed', errors=[str(error)])
+
+    def start_denoise(action, data):
+        if analysis_only:
+            raise ValueError('请使用 start-webui.bat 打开图像降噪')
+        options, raw, name = None, None, None
+        if action == 'denoise':
+            options = validate_denoise_options(data)
+            raw = decode_upload(data.get('image'))
+            name = data.get('name', 'image')
+            if not isinstance(name, str) or not name or len(name) > 255:
+                raise ValueError('图片名称无效')
+            name = Path(name).stem
+        with mutex:
+            if job['status'] == 'running':
+                raise ValueError('已有任务正在运行，请等待完成')
+            selected = {**DEFAULTS, **template}
+            job.update(id=secrets.token_hex(8), status='running', action=action,
+                       errors=[], total=1, done=0, count=None)
+            denoise.update(id=job['id'], status='running', stage='connect', errors=[])
+            if action == 'denoise':
+                denoise['result'] = None
+                denoise_images.clear()
+            threading.Thread(target=process_denoise, args=(action, selected, options, raw, name), daemon=True).start()
+            return {**denoise_status(), 'id': job['id']}
 
     def load_run(folder):
         overrides = {key: template[key] for key in RUNTIME_KEYS} if settings_path else None
@@ -169,6 +234,19 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                                      'manualWorkflow': True, 'startupConfig': template, 'settingsEnabled': settings_path is not None,
                                      'settingsPath': str(Path(settings_path).resolve()) if settings_path else None,
                                      'loraOutputDir': str(LORA_OUTPUT_DIR)})
+                elif route.path == '/api/denoise/status':
+                    with mutex:
+                        self.reply(200, denoise_status())
+                elif route.path == '/api/denoise/image':
+                    query = parse_qs(route.query)
+                    with mutex:
+                        result = denoise['result']
+                        kind = query.get('kind', ['output'])[0]
+                        if (not result or query.get('id', [''])[0] != result['id']
+                                or kind not in ('original', 'output')):
+                            raise ValueError('降噪结果已过期，请重新处理')
+                        content = denoise_images[kind]
+                    self.reply(200, content, 'image/png')
                 elif route.path == '/' or route.path.startswith('/assets/'):
                     path = (static / ('index.html' if route.path == '/' else route.path.lstrip('/'))).resolve()
                     if not path.is_relative_to(static.resolve()) or not path.is_file():
@@ -199,7 +277,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     self.reply(200, {'version': 1, 'config': {**DEFAULTS, **template}, 'sources': {},
                                      'updated_at': 0, 'datasetLoaded': False})
                 elif directory is None and route.path == '/api/job' and not analysis_only:
-                    self.reply(200, {**job, 'total': 0, 'done': 0})
+                    with mutex:
+                        self.reply(200, dict(job))
                 elif directory is None:
                     self.reply(404, {'error':'独立分析模式没有审核数据'})
                 elif route.path == "/api/state":
@@ -220,7 +299,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     run = load_run(directory)
                     samples = [(s, c) for s in run.data["sources"].values() if s.get("active", True)
                                for c in s["candidates"] if c["status"] == "accepted"]
-                    if data.get('action') not in ('start_upscale', 'start_detect', 'start_audit') and not data.get('explicitTagging'):
+                    if data.get('action') not in ('start_upscale', 'start_detect', 'start_audit', 'denoise', 'denoise_models') and not data.get('explicitTagging'):
                         data.update(total=len(samples), done=sum(run.current_tag(s, c)
                                     and asset(directory, c["tag"]["image"]).is_file() for s, c in samples))
                     self.reply(200, data)
@@ -249,16 +328,22 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 return
             if self.path not in ("/api/settings", "/api/edit", '/api/analysis/start', '/api/analysis/cancel', '/api/lora/rename',
                                  '/api/datasets/import', '/api/datasets/open', '/api/datasets/delete',
+                                 '/api/denoise/start', '/api/denoise/models',
                                  '/api/tools/scan', '/api/tools/preview', '/api/tools/execute', '/api/tools/cancel'):
                 self.reply(404, {"error": "接口不存在"})
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if not 0 < length <= 1024 * 1024:
+                limit = 28 * 1024 * 1024 if self.path == '/api/denoise/start' else 1024 * 1024
+                if not 0 < length <= limit:
                     raise ValueError("请求大小无效")
                 data = json.loads(self.rfile.read(length))
                 if not isinstance(data,dict):
                     raise ValueError('请求必须为对象')
+                if self.path in ('/api/denoise/start', '/api/denoise/models'):
+                    action = 'denoise' if self.path.endswith('/start') else 'denoise_models'
+                    self.reply(202, start_denoise(action, data))
+                    return
                 if self.path == '/api/settings':
                     if settings_path is None:
                         raise ValueError('当前入口不支持网页设置')

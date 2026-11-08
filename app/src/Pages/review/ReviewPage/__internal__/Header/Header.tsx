@@ -84,6 +84,18 @@ export function Header() {
             数据集处理工具
           </button>
           <button
+            id='denoiseTab'
+            role='tab'
+            aria-selected={v.stage === 'denoise'}
+            aria-controls='denoiseView'
+            tabIndex={v.stage === 'denoise' ? 0 : -1}
+            disabled={v.busy || v.session.analysisOnly}
+            onClick={() => v.handleStage('denoise')}
+            className={v.stage === 'denoise' ? 'active' : ''}
+          >
+            图像降噪
+          </button>
+          <button
             id='loraTab'
             role='tab'
             aria-selected={v.stage === 'lora'}

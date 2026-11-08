@@ -33,19 +33,27 @@ class ForgeClient:
                 if self.config[key] not in names:
                     raise ValueError(f"Forge 中没有放大模型 {self.config[key]}")
 
-    def upscale(self, image, scale):
+    def upscalers(self):
+        return self.request("GET", "/sdapi/v1/upscalers")
+
+    def upscale(self, image, scale, *, model=None, max_pixels=None):
         data = self.request("POST", "/sdapi/v1/extra-single-image", json={
             "image": encode_image(image), "resize_mode": 0, "upscaling_resize": scale,
-            "upscaler_1": self.config["upscaler_1"], "upscaler_2": self.config["upscaler_2"],
-            "extras_upscaler_2_visibility": self.config["blend"], "upscaling_crop": False,
+            "upscaler_1": model if model is not None else self.config["upscaler_1"],
+            "upscaler_2": "None" if model is not None else self.config["upscaler_2"],
+            "extras_upscaler_2_visibility": 0 if model is not None else self.config["blend"], "upscaling_crop": False,
             "gfpgan_visibility": 0, "codeformer_visibility": 0,
         })
+        if not isinstance(data, dict) or not isinstance(data.get("image"), str):
+            raise ValueError("Forge 未返回有效图像")
         payload = data["image"].split(",")[-1]
         with Image.open(io.BytesIO(base64.b64decode(payload, validate=True))) as result:
+            if max_pixels is not None and result.width * result.height > max_pixels:
+                raise ValueError("Forge 返回图像超过降噪资源限制")
             result.load()
             # Forge rounds dimensions to multiples of eight.
             expected = tuple(round(v * scale / 8) * 8 for v in image.size)
-            if result.size != expected:
+            if model is None and result.size != expected:
                 raise ValueError(f"Forge 返回尺寸 {result.size}，预期 {expected}")
             return result.copy()
 

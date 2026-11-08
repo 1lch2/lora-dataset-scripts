@@ -1,8 +1,16 @@
 path_base: repository-root
-scope: 已核对审核前端、数据集分析、LoRA 文件工具、BAT 启动主链路，以及WebUI 处理入口与共享标签整理。
+scope: 已核对审核前端、图像降噪、数据集分析、LoRA 文件工具、BAT 启动主链路，以及WebUI 处理入口与共享标签整理。
 not_yet_mapped:
   - 检测、几何裁框与模型客户端的内部实现
 features:
+  - id: image-denoise
+    name: 二次元图像降噪与前后对比
+    keywords: [图像降噪, 鱼鳞, 伪影, L0, FFT, BOX, 预缩放, Alpha, PNG, 超分模型, 分割对比]
+    doc: docs/features/image-denoise.md
+    entrypoints:
+      - app/src/Pages/denoise/DenoisePage/DenoisePage.tsx
+      - core/dataset_pipeline/denoise.py
+      - core/dataset_pipeline/review.py
   - id: tag-audit
     name: 打标后标签异常检查与人工应用撤销
     keywords: [标签检查, 视觉模型, 人物数量, solo, full body, 构图范围, 禁用标签, virtual youtuber, 异常, 撤销, lfm3]
