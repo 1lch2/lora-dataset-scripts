@@ -15,6 +15,7 @@
 - 进入导入表单时，左侧标题和说明切换为右侧填写引导，原主按钮改为“返回已有数据集”，右侧面板以深色边框标明当前操作区域，焦点移到表单标题。左侧返回按钮与右侧“返回列表”均恢复列表并将焦点还给导入入口；返回保留未提交的表单内容。
 - 导入表单提供“递归遍历子目录”：选择完整打标类型时默认开启，选择待处理类型时默认关闭，可手动调整；`DatasetImportRequest.recursive` 经 `/api/datasets/import` 保存到运行配置。`import_config` 的图片校验、旧请求的自动类型判断与 `import_sources` 的实际同步使用相同扫描范围，关闭时仅扫描所选目录的直接文件。重新导入会更新该范围，打开与刷新沿用已保存的值；历史记录缺少此字段时继续递归扫描。
 - [useTags](../../app/src/Pages/review/useTags.ts)：筛选、选择、图片过滤篮、标签统计与操作范围。
+- [TagEditor](../../app/src/Pages/review/ReviewPage/__internal__/TagEditor/TagEditor.tsx) 组合标签工具页；[BatchEditor](../../app/src/Pages/review/ReviewPage/__internal__/BatchEditor/BatchEditor.tsx) 提供批量添加、搜索替换、删除和标签列表，由 [TagChoices](../../app/src/Pages/review/ReviewPage/__internal__/TagChoices/TagChoices.tsx) 渲染标签筛选与次级操作按钮。批量编辑的标签列表完整展开，滚动统一由外层 `#batchToolPanel` 承担，内层 `#frequencies` 不创建滚动容器。
 - [Library](../../app/src/Pages/review/ReviewPage/__internal__/Library/Library.tsx)：左侧图片列表与当前图选择；按筛选后的显示顺序从 1 编号，序号以独立背景色块显示在文件名前。
 - [CropCanvas](../../app/src/Pages/review/CropCanvas/CropCanvas.tsx)：图片四周增加长边 4% 的背景留白，让贴边手柄完整显示并可从留白区域起拖；绘制与鼠标坐标扣除留白偏移，选框新建、移动和缩放均限制在图片内，保存坐标仍相对图片。普通裁切与主体裁切共用该逻辑；通过 ref 管理 Canvas 与图片加载，卸载时释放 ResizeObserver。
 - [CropEditor](../../app/src/Pages/review/ReviewPage/__internal__/CropEditor/CropEditor.tsx)：裁切审核与倍率/主体设置，提供“识别此图主体”的单图后台任务；仅在当前图检测到人物时显示主体下拉框及生成主体裁框按钮。倍率选项根据 `original_size` 在括号内显示输出分辨率，不放大保留原尺寸，1.5/2 倍按后端 Python `round` 的中点取偶规则对齐到 8 的倍数。

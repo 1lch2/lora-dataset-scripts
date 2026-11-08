@@ -977,6 +977,7 @@ body:global(.tagEditing) :global(#tagView) {
 }
 :global(#batchToolPanel) :global(#frequencies) {
   max-height: none;
+  overflow: visible;
 }
 :global(#imageFilterBasket) {
   display: grid;
