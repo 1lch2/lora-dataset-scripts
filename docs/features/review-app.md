@@ -11,7 +11,7 @@
 - [ReviewPage](../../app/src/Pages/review/ReviewPage/ReviewPage.tsx)：组合页头、启动主页、图片库、裁切编辑、标签工具、分析页、LoRA 文件工具、底部状态与大图弹窗；主页隐藏审核工作区与底部状态，专属一级组件位于同目录 `__internal__/`。
 - 页头“设置”由 [Settings](../../app/src/Pages/review/ReviewPage/__internal__/Settings/Settings.tsx) 管理 Forge 目录和处理参数，首次未配置时自动打开；持久化、固定插件来源和内置 CSV 见[启动链的网页配置](launcher.md#网页配置)。
 - [useReview](../../app/src/Pages/review/useReview.ts)：审核状态、裁框草稿、阶段切换、编辑 mutation、任务轮询与提示；服务端数据由 TanStack Query 管理，客户端状态使用 Hooks。
-- [DatasetManager](../../app/src/Pages/review/ReviewPage/__internal__/DatasetManager/DatasetManager.tsx)：IDE 风格主页，提供已有数据集的名称/路径搜索、打开、刷新，以及显式选择完整打标/待处理类型后填写目录的导入表单；工作区显示当前目录与切换入口，待处理模式顶部明确标注超分和主体识别作用于数据集全部图片，不受筛选影响。
+- [DatasetManager](../../app/src/Pages/review/ReviewPage/__internal__/DatasetManager/DatasetManager.tsx)：IDE 风格主页，提供已有数据集的名称/路径搜索、打开、刷新，以及显式选择完整打标/待处理类型后填写目录的导入表单；工作区显示当前目录，待处理模式仅在裁切页提供超分和主体识别按钮，并明确标注作用于数据集全部图片，不受筛选影响。
 - 进入导入表单时，左侧标题和说明切换为右侧填写引导，原主按钮改为“返回已有数据集”，右侧面板以深色边框标明当前操作区域，焦点移到表单标题。左侧返回按钮与右侧“返回列表”均恢复列表并将焦点还给导入入口；返回保留未提交的表单内容。
 - 导入表单提供“递归遍历子目录”：选择完整打标类型时默认开启，选择待处理类型时默认关闭，可手动调整；`DatasetImportRequest.recursive` 经 `/api/datasets/import` 保存到运行配置。`import_config` 的图片校验、旧请求的自动类型判断与 `import_sources` 的实际同步使用相同扫描范围，关闭时仅扫描所选目录的直接文件。重新导入会更新该范围，打开与刷新沿用已保存的值；历史记录缺少此字段时继续递归扫描。
 - [useTags](../../app/src/Pages/review/useTags.ts)：筛选、选择、图片过滤篮、标签统计与操作范围。
@@ -24,7 +24,7 @@
 - “删除裁切”对未保存画框丢弃草稿，对已保存候选调用 `delete_crop`；`Run.delete_crop` 保留删除历史并从活动候选数组移除对应项，完整图禁止删除。`advanceReview` 从删除项原位置继续定位待审候选。`/api/state` 隐藏旧版 `rejected` 记录，前端只展示待审/已接受状态；文件同步保留已删除后的候选清单。
 - [styles.module.css](../../app/src/Pages/review/ReviewPage/styles.module.css)：统一使用桌面审核布局，无移动端或窄屏宽度断点；全局选择器用于保持已有 DOM 样式契约，局部 `.page` 不生成布局盒。主页样式位于 DatasetManager 同目录的 CSS Module，保留桌面窗口高度调整及减少动态效果的可访问性设置。
 - [app/src/theme.css](../../app/src/theme.css)：黑白灰语义色板与共享间距；页头、主页及普通工具页使用 `--review-page-gutter`，裁切和标签主体不增加外层留白，其数据集栏沿用 `--review-editor-gutter`。
-- 裁切和标签 tab 隐藏左侧身份选择及顶部“切换数据集”入口，切换使用主页；目录、全部图片处理范围、超分及主体识别按钮合为一行，说明由各按钮旁的问号提供悬停与键盘聚焦提示。两个 tab 使用相同的精简显示，处理范围和后端调用不变。
+- 裁切和标签编辑 tab 隐藏左侧身份选择及顶部“切换数据集”入口，切换使用主页。裁切页将目录、全部图片处理范围、超分及主体识别按钮合为一行，说明由各按钮旁的问号提供悬停与键盘聚焦提示；打标和标签编辑页的数据集栏只显示类型及目录。页头 `#tagTab` 的页面名称为“标签编辑”，内部阶段标识仍为 `tag`。
 - [app/src/api/client.ts](../../app/src/api/client.ts)：同源请求与会话 token；请求 URL、操作载荷沿用 Python 协议。
 - [webui/server.py](../../webui/server.py)：API、图片、编辑/后台任务、会话，以及可选的 `app/dist` 静态资源。
 - [core/dataset_pipeline/datasets.py](../../core/dataset_pipeline/datasets.py)：发现运行、验证目录并生成独立路径；`import_config` 使用请求的 `cropMode=prepared/manual`，未传或为 `auto` 的旧请求仍按 TXT 存在与否判断；`import_sources` 只复制原始图片和按模式接入同名标签，保留未变化的审核记录；`upscale_source` 只更新工作图并映射已有裁框，`detect_source` 在当前工作图生成候选并保留已审核/编辑的裁框。

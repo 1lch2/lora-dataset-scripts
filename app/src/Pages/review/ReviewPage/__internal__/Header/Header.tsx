@@ -57,7 +57,7 @@ export function Header() {
             onClick={() => v.handleStage('tag')}
             className={v.stage === 'tag' ? 'active' : ''}
           >
-            标签
+            标签编辑
           </button>
           <button
             id='analysisTab'

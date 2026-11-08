@@ -87,7 +87,7 @@ export function DatasetManager() {
               {v.state?.config.input_dir}
             </span>
           </div>
-          {v.stage !== 'tagging' && v.state?.datasetLoaded && v.state.config.crop_mode !== 'prepared' ? (
+          {v.stage === 'crop' && v.state?.datasetLoaded && v.state.config.crop_mode !== 'prepared' ? (
             <div className={styles.processing}>
               <span className='hint'>范围：数据集全部图片</span>
               <div className={styles.processingAction}>
