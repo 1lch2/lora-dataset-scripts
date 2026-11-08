@@ -66,8 +66,12 @@
 install-deps.bat            项目 Python 与前端依赖安装入口
 requirements-preprocess.txt Python 运行依赖清单
 start-webui.bat             WebUI 启动入口
-core/launch_webui.py        启动 API、Vite，按需协调 Forge
-core/dataset_pipeline/     后端处理、审核、设置及分析工作进程
+core/dataset_pipeline/     数据集导入、处理、裁切、打标与导出
+webui/                     Python 启动器、HTTP 服务、设置与 Vite 管理
+tools/analysis/            独立数据集统计、报告与离线分析工作进程
+tools/lora/                LoRA 文件重命名与对比提示词
+tools/dataset.py           独立批量图片处理
+tools/denoise.py           独立单图降噪
 app/src/                   React + TypeScript 前端
 data/tags/                 固定版本标签词表及来源说明
 .local/webui.json          网页生成的本机设置，不提交 Git
@@ -78,14 +82,17 @@ tests/                     现有 Python 测试
 
 前端使用 React、Vite、TanStack Query、Tailwind CSS 与 CSS Modules，仅面向桌面。
 
+Python 从仓库根目录以包方式加载，`start-webui.bat` 使用项目虚拟环境执行 `python -m webui`。WebUI 组合流水线与独立工具，流水线不依赖 WebUI；各模块的资源和工作记录仍位于原数据目录。
+
 ## 开发与验证
 
 ```powershell
 npm run build --prefix app
-$env:PYTHONPATH = (Join-Path (Get-Location) 'core')
 .\.venv-preprocess\Scripts\python.exe -m unittest discover -s tests
 ```
 
 单独运行 `npm run dev --prefix app` 时，需先启动 Python API；Vite 默认代理 `127.0.0.1:8765`，可通过 `REVIEW_API_URL` 修改。构建产物位于 `app/dist/`。
 
 构建、合成数据测试与真实模型推理分别验证；现有测试通过不代表真实模型运行通过。实现导航见 [功能索引](docs/feature-map.yaml)。
+
+测试聚焦导入与同步、裁切与打标、标签编辑与导出、分析报告及独立降噪的核心结果，同时保留原文件、人工编辑和任务互斥的关键保护。不单独验证固定参数、内部调用顺序、提示文案和重复的兼容细节。

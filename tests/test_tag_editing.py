@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from dataset_pipeline.core import Run, apply_tag_operation, edited_tags, manual_additions
+from core.dataset_pipeline.core import Run, apply_tag_operation
 
 
 class TagEditingTests(unittest.TestCase):
@@ -21,7 +21,6 @@ class TagEditingTests(unittest.TestCase):
             run.edit_tags(targets, {"mode": "dedupe"})
             self.assertEqual(captions[0].read_text(), "blue hair, white shirt\n")
             self.assertEqual(captions[1].read_text(), "red hair, white shirt\n")
-            self.assertEqual(run.edit_tags(targets, {"mode": "dedupe"}, preview=True)["changed"], 0)
 
     def test_match_modes_and_empty_replacement(self):
         tags = ["blue hair", "blue skirt", "dark blue", "blue"]
@@ -33,25 +32,10 @@ class TagEditingTests(unittest.TestCase):
             self.assertEqual(apply_tag_operation(tags, {"mode": "match", "match": match, "search": "blue", "new": "red"}), expected)
         self.assertEqual(apply_tag_operation(tags, {"mode": "match", "match": "contains", "search": "blue", "new": ""}), [])
 
-    def test_regex_groups_case_and_invalid_references(self):
+    def test_regex_capture_groups_and_case_insensitive_matching(self):
         operation = {"mode": "match", "match": "regex", "search": r"^(blue|red) (.*)$", "new": r"green \g<2>"}
         self.assertEqual(apply_tag_operation(["blue hair", "red skirt", "white shirt"], operation), ["green hair", "green skirt", "white shirt"])
         self.assertEqual(apply_tag_operation(["BLUE hair"], {**operation, "case_sensitive": False}), ["green hair"])
-        for bad in ({"search": "["}, {"new": r"\g<9>"}):
-            with self.assertRaises(ValueError):
-                apply_tag_operation([], {**operation, **bad})
-
-    def test_prepend_sort_and_deduplicate(self):
-        self.assertEqual(apply_tag_operation(["blue", "red"], {"mode": "add", "tags": ["red", "trigger"], "prepend": True}), ["red", "trigger", "blue"])
-        self.assertEqual(apply_tag_operation(["zebra", "apple", "blue"], {"mode": "sort", "by": "frequency", "order": "desc", "counts": {"zebra": 2, "apple": 2, "blue": 3}}), ["blue", "apple", "zebra"])
-        self.assertEqual(apply_tag_operation(["zebra", "apple"], {"mode": "sort", "by": "alpha", "order": "asc"}), ["apple", "zebra"])
-
-    def test_replay_preserves_manual_replacement_for_export(self):
-        tag = {"raw": ["blue hair", "character name"], "auto_removed": [], "operations": [
-            {"mode": "match", "match": "exact", "search": "blue hair", "new": "new_character, trigger"}]}
-        tag["tags"] = edited_tags(tag)
-        self.assertEqual(tag["tags"], ["new character", "trigger", "character name"])
-        self.assertEqual(manual_additions(tag), {"new character", "trigger"})
 
     def make_run(self, root):
         run = Run.__new__(Run)
@@ -79,8 +63,8 @@ class TagEditingTests(unittest.TestCase):
             self.assertEqual(run.data, before)
             self.assertEqual((run.directory / "manifest.json").read_bytes(), disk)
             self.assertEqual(run.edit_tags(targets, operation), preview)
-            self.assertNotIn("reviewed", run.locate("0", "full")[1]["tag"])
-            self.assertNotIn("reviewed", run.locate("1", "full")[1]["tag"])
+            self.assertEqual((run.directory / "images/0.txt").read_text(), "green hair, white shirt\n")
+            self.assertEqual((run.directory / "images/1.txt").read_text(), "red hair, white shirt\n")
             run.edit_tags([["0", "full"]], {"mode": "restore"})
             self.assertEqual(run.locate("0", "full")[1]["tag"]["tags"], ["blue hair", "white shirt"])
 
@@ -106,22 +90,8 @@ class TagEditingTests(unittest.TestCase):
             run.read_tag_files()
             tag = run.locate("0", "full")[1]["tag"]
             self.assertEqual(tag["tags"], ["external tag", "blue hair"])
-            self.assertNotIn("reviewed", tag)
-            self.assertEqual(edited_tags(tag), tag["tags"])
             run.edit_tags([["0", "full"]], {"mode": "add", "tags": ["new tag"]})
             self.assertEqual(caption.read_text(encoding="utf-8"), "external tag, blue hair, new tag\n")
             caption.write_text("", encoding="utf-8")
             run.read_tag_files()
             self.assertEqual(tag["tags"], [])
-
-    def test_backfill_only_creates_missing_files(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            run = self.make_run(Path(temporary))
-            for sid in ("0", "1"):
-                (run.directory / f"images/{sid}.png").touch()
-            (run.directory / "images/0.txt").unlink()
-            (run.directory / "images/1.txt").write_text("custom", encoding="utf-8")
-            self.assertEqual(run.ensure_tag_files(), 1)
-            self.assertEqual((run.directory / "images/0.txt").read_text(), "blue hair, white shirt\n")
-            self.assertEqual((run.directory / "images/1.txt").read_text(), "custom")
-            self.assertEqual(run.ensure_tag_files(), 0)

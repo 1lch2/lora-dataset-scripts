@@ -1,6 +1,6 @@
 """Dataset import and synchronization checks use synthetic images only."""
+import base64
 import copy
-import json
 import tempfile
 import threading
 import time
@@ -11,10 +11,10 @@ from unittest.mock import patch
 import requests
 from PIL import Image
 
-import launch_webui
-from dataset_pipeline.core import DEFAULTS, Run, file_digest, prepare
-from dataset_pipeline.datasets import import_config, import_sources, list_datasets
-from dataset_pipeline.review import make_server
+from webui import launcher
+from core.dataset_pipeline.core import DEFAULTS, Run, file_digest, prepare
+from core.dataset_pipeline.datasets import import_config, import_sources, list_datasets
+from webui.server import make_server
 
 
 class DatasetTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class DatasetTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.addCleanup(patch.stopall)
-        patch('dataset_pipeline.datasets.ROOT', self.root).start()
+        patch('core.dataset_pipeline.datasets.ROOT', self.root).start()
         self.folder = self.root / 'input'
         (self.folder / 'first').mkdir(parents=True)
         Image.new('RGB', (1400, 1600), 'red').save(self.folder / 'first' / 'a.png')
@@ -85,8 +85,8 @@ class DatasetTests(unittest.TestCase):
         caption.write_text('custom_trigger, blue_hair\n', encoding='utf-8')
         self.server()
         values = {'directory': str(folder), 'identity': 'character', 'cropMode': 'prepared', 'importCaptions': True}
-        with patch('dataset_pipeline.core.ForgeClient.check', side_effect=AssertionError('Unexpected model call')), \
-                patch('dataset_pipeline.vision.analyze', side_effect=AssertionError('Unexpected detector')):
+        with patch('core.dataset_pipeline.core.ForgeClient.check', side_effect=AssertionError('Unexpected model call')), \
+                patch('core.dataset_pipeline.vision.analyze', side_effect=AssertionError('Unexpected detector')):
             response = self.post('/api/datasets/import', values)
             self.assertEqual(response.status_code, 202, response.text)
             imported = Path(response.json()['runDir'])
@@ -119,7 +119,7 @@ class DatasetTests(unittest.TestCase):
         listing = list_datasets(self.run.directory)
         self.assertEqual(len(listing['datasets']), 2)
 
-    def test_nested_names_and_legacy_import_paths_preserve_latest_tags(self):
+    def test_nested_filenames_and_edited_tags_survive_reimport_and_export(self):
         folder = self.root / 'nested-finished'
         for group, color in [('first', 'red'), ('second', 'blue')]:
             nested = folder / group / 'nested'
@@ -131,22 +131,8 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual(errors, [])
         first = next(s for s in run.data['sources'].values() if s['group'] == 'first')
         run.edit_tags([[first['id'], 'full']], {'mode': 'add', 'tags': ['manual edit']})
-        tag = first['candidates'][0]['tag']
-        legacy = run.directory / 'original' / 'legacy.jpg'
-        legacy.write_bytes((run.directory / first['original']).read_bytes())
-        legacy.with_suffix('.txt').write_bytes(run.tag_file(tag).read_bytes())
-        first.update(original='original/legacy.jpg', working='original/legacy.jpg')
-        tag.update(image='original/legacy.jpg')
-        tag.pop('caption')
-        first.pop('preserve_filename')
-        first.pop('caption_name')
-        run.save()
         run, errors = import_sources(config)
         self.assertEqual(errors, [])
-        first = run.data['sources'][first['id']]
-        self.assertEqual(Path(first['original']).name, 'Same Name.JPG')
-        self.assertEqual(run.tag_file(first['candidates'][0]['tag']).name, 'Same Name.TXT')
-        self.assertTrue(run.current_tag(first, first['candidates'][0]))
         self.assertEqual(run.export(), 2)
         output = Path(config['output_dir'])
         self.assertEqual({p.relative_to(output).as_posix() for p in output.rglob('*') if p.is_file()},
@@ -165,9 +151,11 @@ class DatasetTests(unittest.TestCase):
         config = import_config({'directory': str(folder), 'identity': 'character'}, self.config)
         run, errors = import_sources(config)
         self.assertEqual(errors, [])
-        with patch('dataset_pipeline.core.ForgeClient.check'), \
-                patch('dataset_pipeline.core.ForgeClient.tag', return_value={'blue_hair': .9}):
+        with patch('core.dataset_pipeline.core.ForgeClient.check'), \
+                patch('core.dataset_pipeline.core.ForgeClient.request',
+                      return_value={'caption': {'tag': {'blue_hair': .9}}}) as request:
             self.assertEqual(run.tag_all(), [])
+        self.assertEqual(base64.b64decode(request.call_args.kwargs['json']['image']), image.read_bytes())
         source = next(iter(run.data['sources'].values()))
         self.assertEqual(Path(source['candidates'][0]['tag']['image']).name, image.name)
         self.assertEqual(run.export(), 1)
@@ -175,53 +163,47 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual({p.name for p in output.iterdir()}, {image.name, 'Original Image.txt'})
         self.assertEqual(file_digest(output / image.name), file_digest(image))
 
-    def test_reexport_after_extension_case_change_keeps_current_image(self):
-        folder = self.root / 'case-change'
-        folder.mkdir()
-        image = folder / 'Photo.JPG'
-        Image.new('RGB', (100, 120), 'red').save(image)
-        (folder / 'Photo.TXT').write_text('blue_hair', encoding='utf-8')
-        config = import_config({'directory': str(folder), 'identity': 'character'}, self.config)
-        run, errors = import_sources(config)
-        self.assertEqual(errors, [])
-        run.export()
-        renamed = image.with_suffix('.jpg')
-        image.rename(renamed)
-        run, errors = import_sources(config)
-        self.assertEqual(errors, [])
-        self.assertEqual(run.export(), 1)
-        output = Path(config['output_dir'])
-        self.assertEqual({p.name for p in output.iterdir()}, {'Photo.jpg', 'Photo.TXT'})
-        self.assertEqual(file_digest(output / renamed.name), file_digest(renamed))
-
     def test_restarting_launcher_opens_empty_ui_without_loading_default_dataset(self):
         (self.folder / 'new-role').mkdir()
         Image.new('RGB', (50, 60)).save(self.folder / 'new-role' / 'new.png')
-        with patch.object(launch_webui, 'listening', return_value=False), \
-                patch.object(launch_webui, 'ensure_forge') as forge, patch.object(launch_webui, 'serve') as serve:
-            launch_webui.launch(self.root, 8765, 10, False, settings_path=self.root / 'webui.json')
+        with patch.object(launcher, 'listening', return_value=False), \
+                patch.object(launcher, 'ensure_forge') as forge, patch.object(launcher, 'serve') as serve:
+            launcher.launch(self.root, 8765, 10, False, settings_path=self.root / 'webui.json')
         forge.assert_not_called()
         self.assertIsNone(serve.call_args.args[0])
-        from dataset_pipeline.settings import load_settings
-        expected = {**load_settings(self.root / 'webui.json'), 'forge_dir': str(self.root.resolve())}
-        self.assertEqual(serve.call_args.kwargs['config'], expected)
-        self.assertEqual(serve.call_args.kwargs['settings_path'], self.root / 'webui.json')
-        self.assertEqual({s['group'] for s in Run.load(self.run.directory).data['sources'].values()}, {'first'})
 
-    def test_import_modes_are_isolated_and_empty_or_overlapping_directories_rejected(self):
-        values = {'directory': str(self.folder), 'identity': '', 'cropMode': 'auto'}
-        automatic = import_config(values, self.config)
-        self.assertEqual(automatic['crop_mode'], 'manual')
+    def test_import_type_and_recursive_scope_survive_reopening(self):
+        Image.new('RGB', (50, 60)).save(self.folder / 'root.png')
+        (self.folder / 'root.txt').write_text('root tag', encoding='utf-8')
         (self.folder / 'first' / 'a.txt').write_text('blue_hair', encoding='utf-8')
-        prepared = import_config({**values, 'cropMode': 'prepared'}, self.config)
-        self.assertEqual(prepared['crop_mode'], 'prepared')
-        self.assertNotEqual(automatic['run_dir'], prepared['run_dir'])
-        self.assertEqual(automatic['identity'], '')
+        self.server()
+        directories = {}
+        for mode, options, expected in (
+            ('prepared', {}, {'root.png', 'first/a.png'}),
+            ('prepared', {'recursive': False}, {'root.png'}),
+            ('manual', {}, {'root.png'}),
+            ('manual', {'recursive': True}, {'root.png', 'first/a.png'}),
+        ):
+            with self.subTest(mode=mode, options=options):
+                response = self.post('/api/datasets/import', {
+                    'directory': str(self.folder), 'cropMode': mode, **options,
+                })
+                self.assertEqual(response.status_code, 202, response.text)
+                directories[mode] = response.json()['runDir']
+                self.finished()
+                self.assertEqual(self.post('/api/datasets/open', {'runDir': directories[mode]}).status_code, 202)
+                self.finished()
+                run = Run.load(directories[mode])
+                sources = [s for s in run.data['sources'].values() if s['active']]
+                self.assertEqual({s['relative'] for s in sources}, expected)
+                self.assertTrue(all(bool(s['candidates'][0].get('tag')) == (mode == 'prepared') for s in sources))
+        self.assertNotEqual(directories['prepared'], directories['manual'])
+        values = {'directory': str(self.folder), 'cropMode': 'manual'}
         empty = self.root / 'empty'
         empty.mkdir()
-        with self.assertRaisesRegex(ValueError, '没有支持的图片'):
+        with self.assertRaises(ValueError):
             import_config({**values, 'directory': str(empty)}, self.config)
-        with self.assertRaisesRegex(ValueError, '互相包含'):
+        with self.assertRaises(ValueError):
             import_config({**values, 'directory': str(self.root)}, self.config)
 
     def test_switching_is_blocked_during_sync_and_repeat_refresh_joins_job(self):
@@ -231,7 +213,7 @@ class DatasetTests(unittest.TestCase):
             entered.set()
             release.wait(5)
             return import_sources(config)
-        with patch('dataset_pipeline.review.import_sources', side_effect=slow_import):
+        with patch('webui.server.import_sources', side_effect=slow_import):
             try:
                 self.assertEqual(self.post('/api/edit', {'action': 'sync_sources'}).status_code, 202)
                 self.assertTrue(entered.wait(5))

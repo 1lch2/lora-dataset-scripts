@@ -8,7 +8,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-from .core import EXTENSIONS, file_digest
+from core.dataset_pipeline.core import EXTENSIONS, file_digest
 
 
 def ordinary_path(path):

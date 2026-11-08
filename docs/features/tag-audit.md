@@ -9,7 +9,7 @@
 - [TagEditor](../../app/src/Pages/review/ReviewPage/__internal__/TagEditor/TagEditor.tsx)：标签工具中的“标签检查”入口；可返回原标签编辑。
 - [TagAudit](../../app/src/Pages/review/ReviewPage/__internal__/TagAudit/TagAudit.tsx)：数据集级配置、类型/状态筛选、图片与删除建议并列、单项/批量应用、保留原标签、失败/不确定样本和批次撤销。
 - [tag_audit.py](../../core/dataset_pipeline/tag_audit.py)：验证配置和模型观察、从事实生成异常、结果新鲜度判定、写入与撤销。记录保存在当前运行 `tag_audit`，与打标分数分开。
-- [review.py](../../core/dataset_pipeline/review.py)：`start_audit` 使用现有后台任务、运行锁与会话校验；`apply_audit`、`ignore_audit`、`undo_audit` 与其他写入互斥；`/api/state` 计算待处理/已忽略结果是否过期。
+- [server.py](../../webui/server.py)：`start_audit` 使用现有后台任务、运行锁与会话校验；`apply_audit`、`ignore_audit`、`undo_audit` 与其他写入互斥；`/api/state` 计算待处理/已忽略结果是否过期。
 
 ## 检查协议和范围
 
@@ -27,4 +27,4 @@
 
 ## 验证入口
 
-[test_tag_audit.py](../../tests/test_tag_audit.py)：合成图片与模拟模型响应，覆盖检查不写 TXT、真实 HTTP 后台任务路由、应用/忽略/撤销、图像与标签过期、输出校验、服务失败和写入回滚。模型判断准确率需另用代表性真实图片验证；合成图上的真实模型调用只验证服务接入及有限行为。
+[test_tag_audit.py](../../tests/test_tag_audit.py)：合成图片与模拟模型响应，聚焦检查不写 TXT、真实 HTTP 后台任务的应用/忽略/撤销、逐项决策、标签过期与后续编辑保护，以及不确定观察、服务失败和写入回滚。模型判断准确率需另用代表性真实图片验证；合成图上的真实模型调用只验证服务接入及有限行为。

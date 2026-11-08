@@ -12,4 +12,4 @@
 - [审核前端](review-app.md)：标签批量前置、追加、删除、替换和排序均在网页预览后应用。旧加标签脚本的任意位置插入及直接覆盖目录 TXT 行为不再提供独立入口。
 - [LoRA 文件工具](lora-files.md)：网页重命名和对比提示词。
 
-现有验证：[test_tag_materialize.py](../../tests/test_tag_materialize.py) 保留历史裁片缩放的像素与缓存检查，[test_preprocess.py](../../tests/test_preprocess.py) 覆盖处理、审核及导出。分析内部进程见[数据集分析](dataset-analysis.md)。
+现有验证：[test_preprocess.py](../../tests/test_preprocess.py) 覆盖处理、审核及导出主流程，[test_datasets.py](../../tests/test_datasets.py) 覆盖原图片格式、文件名与打标传输保留；不再单独验证历史缩放实现与缓存分支。分析内部进程见[数据集分析](dataset-analysis.md)。

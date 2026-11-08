@@ -9,8 +9,8 @@
 - [DatasetTools](../../app/src/Pages/tools/DatasetTools/DatasetTools.tsx)：桌面双栏工具页，选择已导入数据集的来源目录、当前审核数据集或自定义目录；扫描后按子目录、相对路径搜索和逐张勾选确定范围。筛选与选择分离，提供仅选筛选结果、追加筛选结果及清空选择。
 - [api.ts](../../app/src/Pages/tools/DatasetTools/api.ts)、[types.ts](../../app/src/Pages/tools/DatasetTools/types.ts)：文件扫描、预览、执行、取消、状态轮询协议。
 - [ReviewPage](../../app/src/Pages/review/ReviewPage/ReviewPage.tsx)、[Header](../../app/src/Pages/review/ReviewPage/__internal__/Header/Header.tsx)、[useReview](../../app/src/Pages/review/useReview.ts)：tab 接入；空白审核及独立分析会话均可使用，切换 tab 保留选择，不因打标完成跳离工具页。
-- [review.py](../../core/dataset_pipeline/review.py)：`/api/tools/scan`、`preview`、`execute`、`cancel` POST 均校验会话 token；`/api/tools/status` 读取后台状态。工具处理期间拒绝删除数据集。
-- [tools.py](../../core/dataset_pipeline/tools.py)：扫描普通本地文件、选择范围校验、图片及 TXT 指纹、后台处理和取消。每个服务器同时仅运行一个工具任务，预览 ID 绑定执行。
+- [server.py](../../webui/server.py)：`/api/tools/scan`、`preview`、`execute`、`cancel` POST 均校验会话 token；`/api/tools/status` 读取后台状态。工具处理期间拒绝删除数据集。
+- [dataset.py](../../tools/dataset.py)：扫描普通本地文件、选择范围校验、图片及 TXT 指纹、后台处理和取消。每个服务器同时仅运行一个工具任务，预览 ID 绑定执行。
 
 ## 处理规则
 

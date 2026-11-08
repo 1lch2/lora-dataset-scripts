@@ -5,9 +5,9 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .core import DEFAULTS, atomic_json, validate_config
+from core.dataset_pipeline.core import DEFAULTS, atomic_json, validate_config
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 SETTINGS_PATH = ROOT / '.local' / 'webui.json'
 TAGS_CSV = ROOT / 'data' / 'tags' / 'wd-eva02-large-tagger-v3' / 'selected_tags.csv'
 TAGGER_REPOSITORY = 'https://github.com/1lch2/stable-diffusion-webui-wd14-tagger'

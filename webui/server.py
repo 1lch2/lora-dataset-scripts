@@ -7,19 +7,19 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from .generate_lora_tag import generate_lora_tags
-from .rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
+from core.dataset_pipeline.core import DEFAULTS, Run, asset, run_lock
+from core.dataset_pipeline.datasets import delete_dataset, detect_source, import_config, import_sources, list_datasets, replace_source_image, upscale_source
+from core.dataset_pipeline.forge import ForgeClient
+from core.dataset_pipeline.geometry import default_scale
+from core.dataset_pipeline.tag_audit import audit_run, audit_view, edit_audit, validate_options as validate_audit_options
+from core.dataset_pipeline.tagging import apply_filters, restore_captions, tag_run, validate_options
+from tools.analysis.job import AnalysisJob
+from tools.dataset import DatasetToolsJob, scan_files
+from tools.denoise import decode_upload, denoise_image, open_image, png_bytes, validate_options as validate_denoise_options
+from tools.lora.prompts import generate_lora_tags
+from tools.lora.rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
 
-from .core import DEFAULTS, Run, asset, run_lock
-from .geometry import default_scale
-from .tagging import apply_filters, restore_captions, tag_run, validate_options
-from .tag_audit import audit_run, audit_view, edit_audit, validate_options as validate_audit_options
 from .settings import RUNTIME_KEYS, save_settings, settings_info
-from .analysis_job import AnalysisJob
-from .denoise import decode_upload, denoise_image, open_image, png_bytes, validate_options as validate_denoise_options
-from .forge import ForgeClient
-from .tools import DatasetToolsJob, scan_files
-from .datasets import delete_dataset, detect_source, import_config, import_sources, list_datasets, replace_source_image, upscale_source
 
 
 def make_server(directory=None, port=8765, config=None, model_setup=None, settings_path=None):
@@ -27,12 +27,12 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
     if directory is not None:
         with run_lock(directory):
             Run.load(directory).ensure_tag_files()
-    cache = (directory.parent if directory else Path(__file__).resolve().parents[2]/'runs')/'.models'
+    cache = (directory.parent if directory else Path(__file__).resolve().parents[1]/'runs')/'.models'
     analysis = AnalysisJob(cache if cache.is_dir() else None)
     dataset_tools = DatasetToolsJob()
     token = secrets.token_urlsafe(24)
     mutex = threading.RLock()
-    static = Path(__file__).resolve().parents[2] / 'app' / 'dist'
+    static = Path(__file__).resolve().parents[1] / 'app' / 'dist'
     job = {"id": None, "status": "idle", "action": None, "errors": [], "total": 0, "done": 0}
     template = dict(config if config is not None else Run.load(directory).config if directory else {})
     analysis_only = directory is None and config is None
@@ -260,7 +260,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 elif route.path == '/api/analysis/report':
                     self.reply(200, analysis.report())
                 elif route.path == '/api/analysis/csv':
-                    from .analysis import csv_report
+                    from tools.analysis.analysis import csv_report
                     self.reply(200, csv_report(analysis.report()).encode('utf-8-sig'), 'text/csv; charset=utf-8')
                 elif route.path == '/api/lora/files':
                     requested = parse_qs(route.query).get('directory', [str(LORA_OUTPUT_DIR)])[0]

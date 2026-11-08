@@ -11,9 +11,9 @@ from urllib.parse import urlparse
 
 import requests
 
-from dataset_pipeline.settings import SETTINGS_PATH, load_settings, validate_forge
-from dataset_pipeline.review import serve
-from dataset_pipeline.frontend import start_frontend, stop_frontend
+from .settings import SETTINGS_PATH, load_settings, validate_forge
+from .server import serve
+from .frontend import start_frontend, stop_frontend
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -89,7 +89,7 @@ def ensure_forge(url, directory, timeout):
         forge_arguments(directory)  # Validate before opening a console.
         if os.name != 'nt':
             raise ValueError('自动启动 Forge 的 BAT 脚本仅支持 Windows')
-        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), '--forge-console',
+        subprocess.Popen([sys.executable, '-m', 'webui', '--forge-console',
                           '--forge-dir', str(directory), '--port', str(port)],
                          cwd=ROOT, creationflags=subprocess.CREATE_NEW_CONSOLE)
         print('已打开 Forge 独立终端，正在等待 API 就绪…', flush=True)

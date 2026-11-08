@@ -11,7 +11,7 @@
 - [taggingUtils](../../app/src/Pages/review/ReviewPage/__internal__/Tagging/taggingUtils.ts)：前端合并预览、互斥分组与热力图分箱。主视图按共同支持 → WD 补充 → PixAI 补充 → 已过滤的优先级归组，保留条件与后端一致；分组表示保留依据，不是准确率。
 - [tagging.py](../../core/dataset_pipeline/tagging.py)：输入校验、双模型同图推理、完整证据保存、合并和源标签恢复。任一模型失败保留该样本原有标签并报告错误；任务逐样本写入，已成功样本不会因后续样本失败回滚。重新运行会重新请求全部已接受样本，不复用旧标签跳过推理。
 - [forge.py](../../core/dataset_pipeline/forge.py)：单次调用接受明确模型及采集阈值；使用现有 `/tagger/v1/interrogators` 和 `/tagger/v1/interrogate`。
-- [review.py](../../core/dataset_pipeline/review.py)：`start_tag` 的 `tagging` 参数开启新流程，`replaceConfirmed` 防止未确认覆盖；`filter_tagging` 和 `restore_captions` 均受会话、运行锁及后台任务互斥保护。旧的无 `tagging` 参数调用仍保留历史行为。
+- [server.py](../../webui/server.py)：`start_tag` 的 `tagging` 参数开启新流程，`replaceConfirmed` 防止未确认覆盖；`filter_tagging` 和 `restore_captions` 均受会话、运行锁及后台任务互斥保护。旧的无 `tagging` 参数调用仍保留历史行为。
 - [PixAI 类别资源](../../data/tags/pixai-tagger-v1.0/README.md)：固定版本完整 meta 表。当前插件分类阈值仅有 UI 支持，HTTP 不支持；客户端在证据与 TXT 合并前过滤全部 meta 和 `masterpiece`。rating 响应不参与训练标签。
 
 ## 分数与工作标签
@@ -32,4 +32,4 @@
 
 ## 验证边界
 
-现有回归入口：[test_tag_materialize.py](../../tests/test_tag_materialize.py)、[test_tag_editing.py](../../tests/test_tag_editing.py)、[test_datasets.py](../../tests/test_datasets.py)。这些已有测试主要覆盖原打标、导出及导入兼容；双模型推理与阈值交互需另做 HTTP 和浏览器验证，不能由前端构建推断已运行模型。
+现有回归入口：[test_preprocess.py](../../tests/test_preprocess.py)、[test_tag_editing.py](../../tests/test_tag_editing.py)、[test_datasets.py](../../tests/test_datasets.py)。这些测试聚焦打标、标签编辑与导出主流程，以及导入图片原格式与传输保留；双模型推理与阈值交互需另做 HTTP 和浏览器验证，不能由前端构建推断已运行模型。

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import requests
 
-APP = Path(__file__).resolve().parents[2] / 'app'
+APP = Path(__file__).resolve().parents[1] / 'app'
 
 
 def stop_frontend(process):

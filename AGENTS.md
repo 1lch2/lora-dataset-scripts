@@ -5,9 +5,10 @@
 本项目是用于 Stable Diffusion LoRA 训练素材的本地 WebUI，包含图片处理、人工裁切审核、标签编辑与导出、数据集分析，以及 LoRA 文件工具；不提供旧版数据集处理 CLI。
 
 - 前端：React 19、TypeScript、Vite 7、TanStack Query、Tailwind CSS 4 与 CSS Modules，源码位于 `app/src/`。
-- 后端：Python 3.10，业务模块和内部分析工作进程位于 `core/dataset_pipeline/`，WebUI 启动器位于 `core/`。
+- 后端：Python 3.10；`core/dataset_pipeline/` 仅放数据集处理流水线，`webui/` 管理启动、HTTP 服务与设置，`tools/` 放独立分析、降噪、批量图片工具与 LoRA 文件工具。
 - 模型调用：人物/头部检测与姿势估计由本地模型完成，放大和 WD14 打标通过 Forge API 完成；独立数据集分析无需 Forge。
 - 运行方式：Windows 下使用 `start-webui.bat` 协调 Forge、Python API 与 Vite；脚本和开发命令从仓库根目录执行。
+- Python 包从仓库根目录导入；启动入口为 `python -m webui`，内部分析进程为 `python -m tools.analysis.worker`，不再设置 `PYTHONPATH=core`。流水线不反向依赖 WebUI 或独立工具。
 
 ## 功能导航
 
@@ -44,11 +45,12 @@ Python 预处理使用独立的 `.venv-preprocess` 环境，不与 Forge 环境�
 需要运行现有 Python 测试时，从仓库根目录执行：
 
 ```powershell
-$env:PYTHONPATH = (Join-Path (Get-Location) 'core')
 .\.venv-preprocess\Scripts\python.exe -m unittest discover -s tests
 ```
 
 纯文档修改检查相对链接与 `git diff --check` 即可。验证结论应区分文档检查、构建、现有测试和真实模型运行。
+
+测试仅围绕核心用户流程、关键算法结果和数据保护约束；优先检查实际文件与操作结果，不为固定常量、内部调用顺序、缓存命中、提示文案或显而易见的赋值增加测试。同一行为已有主流程覆盖时，不再重复铺设细节用例。
 
 ## 使用文档
 

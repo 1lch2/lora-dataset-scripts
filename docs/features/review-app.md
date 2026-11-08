@@ -24,7 +24,7 @@
 - [app/src/theme.css](../../app/src/theme.css)：黑白灰语义色板与共享间距；页头、主页及普通工具页使用 `--review-page-gutter`，裁切和标签主体不增加外层留白，其数据集栏沿用 `--review-editor-gutter`。
 - 裁切和标签 tab 隐藏左侧身份选择及顶部“切换数据集”入口，切换使用主页；目录、全部图片处理范围、超分及主体识别按钮合为一行，说明由各按钮旁的问号提供悬停与键盘聚焦提示。两个 tab 使用相同的精简显示，处理范围和后端调用不变。
 - [app/src/api/client.ts](../../app/src/api/client.ts)：同源请求与会话 token；请求 URL、操作载荷沿用 Python 协议。
-- [core/dataset_pipeline/review.py](../../core/dataset_pipeline/review.py)：API、图片、编辑/后台任务、会话，以及可选的 `app/dist` 静态资源。
+- [webui/server.py](../../webui/server.py)：API、图片、编辑/后台任务、会话，以及可选的 `app/dist` 静态资源。
 - [core/dataset_pipeline/datasets.py](../../core/dataset_pipeline/datasets.py)：发现运行、验证目录并生成独立路径；`import_config` 使用请求的 `cropMode=prepared/manual`，未传或为 `auto` 的旧请求仍按 TXT 存在与否判断；`import_sources` 只复制原始图片和按模式接入同名标签，保留未变化的审核记录；`upscale_source` 只更新工作图并映射已有裁框，`detect_source` 在当前工作图生成候选并保留已审核/编辑的裁框。
 - `datasets.replace_source_image` 负责 `crop_subject` / `restore_original`：新底图保存于工作目录，首轮主体裁切保存可恢复的 `original_backup`；每次替换重置倍率、全部裁框、检测结果和活动标签，完整图重新登记为已接受。输入目录不被覆盖，多次主体裁切仍可恢复首轮裁切前原图。`manual_processing` 阻止同步重新导入旧 TXT，并允许成品数据集中重置后的单图重新识别和超分；源文件内容变化后同步会丢弃旧底图替换状态。
 - [core/dataset_pipeline/core.py](../../core/dataset_pipeline/core.py)：保留原来的运行记录、预处理、标签与导出组织；其相邻模块的相对导入不变。
@@ -43,7 +43,7 @@
 
 主体裁切后的 `original` 指向新底图，`original_size` 与倍率选项同步更新；完整图打标和导出改为读取该底图，保留原相对文件名与扩展名，恢复后重新使用原始输入。`tag_key` 与超分缓存键包含主体底图身份，避免复用未裁切时的结果。刷新/重新打开保留未变化图片的主体底图及备份，历史标签不会自动回填为当前结果。
 
-Python 源文件整体移入 `core/`，原顶层脚本与 `dataset_pipeline/` 的相对关系不变。数据、配置、虚拟环境、测试与 BAT 仍在仓库根目录。原脚本中相对 `__file__` 的数据目录已校正到仓库根目录。
+Python 后端按职责拆分：`core/dataset_pipeline/` 保留数据集导入、处理、裁切、打标、审核记录与导出；`webui/` 负责启动、HTTP 服务、设置和 Vite；`tools/` 放独立分析、单图降噪、批量图片处理与 LoRA 文件工具。WebUI 调用流水线和工具，流水线不反向导入这两层。所有包从仓库根目录导入，测试不再设置 `PYTHONPATH=core`；数据、配置、虚拟环境和 BAT 保持原位置，已有 JSON 工作记录不需要迁移。
 
 ## 开发与验证
 
@@ -52,10 +52,9 @@ Python 源文件整体移入 `core/`，原顶层脚本与 `dataset_pipeline/` �
 Python 验证从根目录执行：
 
 ```powershell
-$env:PYTHONPATH = (Join-Path (Get-Location) 'core')
 .venv-preprocess/Scripts/python.exe -m unittest discover -s tests
 ```
 
-现有验证入口：[test_preprocess.py](../../tests/test_preprocess.py)、[test_tag_editing.py](../../tests/test_tag_editing.py)、[test_tag_materialize.py](../../tests/test_tag_materialize.py)、[test_datasets.py](../../tests/test_datasets.py)。数据集接入检查使用合成图片，通过本地 HTTP API 核对目录同步、切换、成品尺寸、TXT 与审核记录保留；不代表真实模型运行验证。
+现有验证入口：[test_preprocess.py](../../tests/test_preprocess.py)、[test_tag_editing.py](../../tests/test_tag_editing.py)、[test_datasets.py](../../tests/test_datasets.py)。数据集接入检查使用合成图片，通过本地 HTTP API 核对导入类型、递归范围及重新打开、目录同步、切换、TXT 与审核记录保留；打标传输与导出检查保留原图片字节和文件名。不代表真实模型运行验证。
 
 相关专题：[启动链](launcher.md)、[数据集分析](dataset-analysis.md)、[LoRA 文件工具](lora-files.md)。

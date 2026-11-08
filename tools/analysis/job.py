@@ -99,12 +99,12 @@ class AnalysisJob:
                            recursive=data.get('recursive',True), model_cache=str(model_cache) if model_cache else None)
             request_file = Path(self.temp.name)/'request.json'
             request_file.write_text(json.dumps(request),encoding='utf-8')
-            args = [sys.executable,'-m','dataset_pipeline.analysis_worker']
+            args = [sys.executable,'-m','tools.analysis.worker']
             env = dict(os.environ,HF_HUB_OFFLINE='1',HF_HUB_DISABLE_TELEMETRY='1',TRANSFORMERS_OFFLINE='1',PYTHONUTF8='1')
             self.state = {'status':'running','phase':'scan','done':0,'total':0}
             try:
                 with (Path(self.temp.name)/'worker.log').open('wb') as log, request_file.open('rb') as payload:
-                    self.process = subprocess.Popen(args,cwd=Path(__file__).resolve().parent.parent,
+                    self.process = subprocess.Popen(args,cwd=Path(__file__).resolve().parents[2],
                         env=env,stdin=payload,stdout=log,stderr=subprocess.STDOUT,
                         creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0)
             except Exception:
