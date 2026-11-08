@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { deleteDataset, getAllDatasetList, importDataset, openDataset } from '../../../../../api/client';
 import type { DatasetImportRequest, DatasetInfo } from '../../../../../api/types';
@@ -14,6 +14,11 @@ export function DatasetManager() {
   const [directory, setDirectory] = useState('');
   const [identity, setIdentity] = useState('');
   const [search, setSearch] = useState('');
+  const importButtonRef = useRef<HTMLButtonElement>(null);
+  const workspaceTitleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (importing) workspaceTitleRef.current?.focus();
+  }, [importing]);
   const list = useQuery({
     queryKey: ['datasets'],
     queryFn: getAllDatasetList,
@@ -47,6 +52,14 @@ export function DatasetManager() {
     onSettled: () => v.setDatasetSwitching(false),
   });
   const disabled = v.processing || v.busy || mutation.isPending || deletion.isPending;
+  function handleStartImport() {
+    setManaging(false);
+    setImporting(true);
+  }
+  function handleCloseImport() {
+    setImporting(false);
+    importButtonRef.current?.focus();
+  }
   function handleDelete(dataset: DatasetInfo) {
     if (disabled || !dataset.deletable) return;
     if (
@@ -138,14 +151,34 @@ export function DatasetManager() {
         <div className={styles.layout}>
           <section className={styles.welcome} aria-labelledby='welcomeTitle'>
             <h2 id='welcomeTitle'>
-              从一个数据集
-              <br />
-              开始工作。
+              {importing ? (
+                <>
+                  导入新的
+                  <br />
+                  数据集。
+                </>
+              ) : (
+                <>
+                  从一个数据集
+                  <br />
+                  开始工作。
+                </>
+              )}
             </h2>
             <p className={styles.description}>
-              打开已有的工作记录，或导入新的素材。
-              <br />
-              从图片准备到标签导出，按你的节奏继续。
+              {importing ? (
+                <>
+                  请在右侧选择数据集类型，
+                  <br />
+                  填写本地目录后，点击“导入并打开”。
+                </>
+              ) : (
+                <>
+                  打开已有的工作记录，或导入新的素材。
+                  <br />
+                  从图片准备到标签导出，按你的节奏继续。
+                </>
+              )}
             </p>
             <div className={styles.startActions}>
               <button
@@ -161,14 +194,22 @@ export function DatasetManager() {
               </button>
               <button
                 type='button'
-                className={`primary ${styles.importButton}`}
+                ref={importButtonRef}
+                className={`${styles.importButton} ${importing ? '' : 'primary'}`}
                 disabled={disabled}
-                onClick={() => {
-                  setManaging(false);
-                  setImporting(true);
-                }}
+                aria-expanded={importing}
+                aria-controls='datasetWorkspace'
+                onClick={importing ? handleCloseImport : handleStartImport}
               >
-                <span aria-hidden='true'>＋</span> 导入数据集 <span aria-hidden='true'>→</span>
+                {importing ? (
+                  <>
+                    <span aria-hidden='true'>←</span> 返回已有数据集
+                  </>
+                ) : (
+                  <>
+                    <span aria-hidden='true'>＋</span> 导入数据集 <span aria-hidden='true'>→</span>
+                  </>
+                )}
               </button>
               {v.state?.datasetLoaded ? (
                 <button
@@ -189,13 +230,19 @@ export function DatasetManager() {
             </div>
           </section>
 
-          <section className={styles.workspace} aria-labelledby='workspaceTitle'>
+          <section
+            id='datasetWorkspace'
+            className={`${styles.workspace} ${importing ? styles.importWorkspace : ''}`}
+            aria-labelledby='workspaceTitle'
+          >
             <div className={styles.sectionHeading}>
               <div>
-                <h2 id='workspaceTitle'>{importing ? '导入数据集' : '已有数据集'}</h2>
+                <h2 id='workspaceTitle' ref={workspaceTitleRef} tabIndex={importing ? -1 : undefined}>
+                  {importing ? '导入数据集' : '已有数据集'}
+                </h2>
               </div>
               {importing ? (
-                <button type='button' disabled={disabled} onClick={() => setImporting(false)}>
+                <button type='button' disabled={disabled} onClick={handleCloseImport}>
                   返回列表
                 </button>
               ) : (
@@ -340,7 +387,7 @@ export function DatasetManager() {
                       {search.trim() ? '试试其他名称或目录。' : '从本地目录导入素材，工作记录会保存在这里。'}
                     </p>
                     {!search.trim() ? (
-                      <button type='button' disabled={disabled} onClick={() => setImporting(true)}>
+                      <button type='button' disabled={disabled} onClick={handleStartImport}>
                         导入第一个数据集
                       </button>
                     ) : null}

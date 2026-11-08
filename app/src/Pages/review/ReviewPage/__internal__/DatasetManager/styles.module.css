@@ -97,6 +97,10 @@
   background: var(--color-review-surface);
 }
 
+.importWorkspace {
+  border-color: var(--color-review-accent);
+}
+
 .sectionHeading {
   flex: none;
   display: flex;
