@@ -20,8 +20,6 @@ export const INITIAL_FIELDS: ReviewFields = {
   matchSearch: '',
   matchReplacement: '',
   matchMode: 'exact',
-  captionSort: 'alpha',
-  captionOrder: 'asc',
   frequencySearch: '',
   frequencySearchMode: 'contains',
   frequencySort: 'alpha',

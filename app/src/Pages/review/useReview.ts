@@ -315,8 +315,10 @@ export function useReview(session: SessionInfo) {
           data.action === 'delete_crop' ? previousIndex : undefined,
         );
       else message(data.action === 'crop' ? '裁框已保存，尚待接受或删除' : '已保存');
+      return true;
     } catch (error) {
       message((error as Error).message, true);
+      return false;
     }
   }
   async function startJob(action: string, targetSourceId?: string) {
@@ -410,8 +412,6 @@ export function useReview(session: SessionInfo) {
     match: fields.matchMode,
     case_sensitive: checks.matchCase,
     prepend: checks.prependTags,
-    by: fields.captionSort,
-    order: fields.captionOrder,
   };
   const mode = fields.tagOperation;
   const applyDisabled =
@@ -421,9 +421,7 @@ export function useReview(session: SessionInfo) {
       ? !fields.oldTag.trim() || !fields.newTag.trim()
       : mode === 'match'
         ? !fields.matchSearch.trim()
-        : mode === 'sort'
-          ? false
-          : !splitTags(fields.editTags).length);
+        : !splitTags(fields.editTags).length);
   const previewSignature = JSON.stringify([operation, tags.targets]);
   const currentPreviewSignature = useRef(previewSignature);
   currentPreviewSignature.current = previewSignature;
@@ -531,8 +529,17 @@ export function useReview(session: SessionInfo) {
         [...new Set([...splitTags(fields.editTags), ...tags.frequencies.map(([t]) => t)])].join(', '),
       ),
     clearRemovalTags: () => setField('editTags', ''),
-    dedupeTags: () => edit({ action: 'tags', selections: tags.targets, operation: { mode: 'dedupe' } }),
-    applyTags: () => edit({ action: 'tags', selections: tags.targets, operation }),
+    dedupeTags: () => edit({ action: 'tags', selections: tags.allTargets, operation: { mode: 'dedupe' } }),
+    applyTags: async () => {
+      const saved = await edit({ action: 'tags', selections: tags.targets, operation });
+      if (!saved || mode !== 'remove') return;
+      setFields((previous) => ({
+        ...previous,
+        editTags: splitTags(previous.editTags)
+          .filter((tag) => !operation.tags.includes(tag))
+          .join(', '),
+      }));
+    },
     restore: () => edit({ action: 'tags', selections: tags.targets, operation: { mode: 'restore' } }),
     previewTags: async () => {
       try {

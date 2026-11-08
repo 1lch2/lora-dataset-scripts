@@ -12,11 +12,8 @@ export function TagChoices({ frequency = false }: TagChoicesProps) {
     <>
       {rows.map(([tag, count]) => {
         const marked = removing ? removals.includes(tag) : negative.includes(tag);
-        function handleSecondary() {
-          if (!removing) {
-            v.tags.handleToggleFilter('notTag', tag);
-            return;
-          }
+        const selected = removing ? marked : v.tags.clickedTags.has(tag);
+        function handleToggleRemoval() {
           v.setField(
             'editTags',
             (removals.includes(tag) ? removals.filter((t) => t !== tag) : [...removals, tag]).join(', '),
@@ -25,11 +22,11 @@ export function TagChoices({ frequency = false }: TagChoicesProps) {
         return (
           <div className='tagChoice' key={tag}>
             <button
-              className={`tagChip${v.tags.clickedTags.has(tag) ? ' active' : ''}`}
+              className={`tagChip${selected ? ' active' : ''}`}
               data-tag={frequency ? tag : undefined}
-              aria-pressed={v.tags.clickedTags.has(tag)}
+              aria-pressed={selected}
               disabled={v.busy}
-              onClick={() => v.tags.handleToggleFilter('hasTag', tag)}
+              onClick={removing ? handleToggleRemoval : () => v.tags.handleToggleFilter('hasTag', tag)}
             >
               <span className='tagText'>{tag}</span>
               <span className='tagCount'>[{count}]</span>
@@ -40,7 +37,7 @@ export function TagChoices({ frequency = false }: TagChoicesProps) {
               aria-label={`${removing ? '选择待删除标签' : '排除'} ${tag}`}
               aria-pressed={marked}
               disabled={v.busy}
-              onClick={handleSecondary}
+              onClick={removing ? handleToggleRemoval : () => v.tags.handleToggleFilter('notTag', tag)}
             >
               −
             </button>

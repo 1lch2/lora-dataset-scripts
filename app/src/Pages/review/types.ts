@@ -18,8 +18,6 @@ export interface ReviewFields {
   matchSearch: string;
   matchReplacement: string;
   matchMode: string;
-  captionSort: string;
-  captionOrder: string;
   frequencySearch: string;
   frequencySearchMode: string;
   frequencySort: string;

@@ -12,6 +12,16 @@ export function BatchEditor() {
       className='panelScroll'
       hidden={v.tool !== 'batch'}
     >
+      <div className='batchDedupe'>
+        <button
+          id='dedupeTags'
+          className='primary'
+          disabled={v.processing || !v.tags.allTargets.length}
+          onClick={() => v.handleAction('dedupeTags')}
+        >
+          移除全部图片的重复标签
+        </button>
+      </div>
       <div className='batchScope'>
         <label>
           操作范围
@@ -31,16 +41,6 @@ export function BatchEditor() {
           ? `将应用到${v.fields.editScope === 'filtered' ? '当前筛选中可编辑的' : '勾选的'} ${v.tags.targets.length} 张图片${v.tags.outside ? `，其中 ${v.tags.outside} 张不在当前筛选中` : ''}。`
           : '没有可编辑目标。请勾选图片或切换操作范围；过期标签须重新打标。'}
       </p>
-      <div className='batchDedupe'>
-        <button
-          id='dedupeTags'
-          className='primary'
-          disabled={v.processing || !v.tags.targets.length}
-          onClick={() => v.handleAction('dedupeTags')}
-        >
-          移除操作范围内图片的重复标签
-        </button>
-      </div>
       <div
         id='batchTabs'
         className='compactActions'
@@ -81,17 +81,6 @@ export function BatchEditor() {
         >
           批量删除
         </button>
-        <button
-          role='tab'
-          data-operation='sort'
-          aria-selected={v.mode === 'sort'}
-          tabIndex={v.mode === 'sort' ? 0 : -1}
-          disabled={v.busy}
-          onClick={() => v.setField('tagOperation', 'sort')}
-          className={v.mode === 'sort' ? 'active' : ''}
-        >
-          排序
-        </button>
       </div>
       <label hidden={true}>
         操作
@@ -104,7 +93,6 @@ export function BatchEditor() {
           <option value='remove'>删除标签</option>
           <option value='replace'>替换标签</option>
           <option value='match'>匹配替换／删除</option>
-          <option value='sort'>重排图片内标签</option>
         </select>
       </label>
       <label id='tagInputGroup' hidden={!['add', 'remove'].includes(v.mode)}>
@@ -208,30 +196,6 @@ export function BatchEditor() {
         </div>
         <p className='hint'>替换匹配文本；留空删除命中的标签。正则支持 \g&lt;1&gt;，逗号生成多个标签。</p>
       </div>
-      <div id='sortInputs' className='fieldRow' hidden={v.mode !== 'sort'}>
-        <label>
-          排序依据
-          <select
-            id='captionSort'
-            value={v.fields.captionSort}
-            onChange={(event) => v.handleField('captionSort', event.target.value)}
-          >
-            <option value='alpha'>字母顺序</option>
-            <option value='frequency'>操作范围内的出现频率</option>
-          </select>
-        </label>
-        <label>
-          顺序
-          <select
-            id='captionOrder'
-            value={v.fields.captionOrder}
-            onChange={(event) => v.handleField('captionOrder', event.target.value)}
-          >
-            <option value='asc'>升序</option>
-            <option value='desc'>降序</option>
-          </select>
-        </label>
-      </div>
       <div className='batchApply'>
         <button
           id='previewTags'
@@ -254,7 +218,6 @@ export function BatchEditor() {
                 remove: '删除操作范围内选中的标签',
                 replace: '应用替换',
                 match: '应用搜索替换',
-                sort: '应用标签排序',
               } as Record<string, string>
             )[v.mode]
           }
@@ -274,11 +237,14 @@ export function BatchEditor() {
           </>
         ) : null}
       </div>
-      <section className='batchTagPicker' aria-label='标签列表与图片筛选'>
-        <h3>标签列表与图片筛选</h3>
+      <section
+        className='batchTagPicker'
+        aria-label={v.mode === 'remove' ? '选择待删除标签' : '标签列表与图片筛选'}
+      >
+        <h3>{v.mode === 'remove' ? '选择待删除标签' : '标签列表与图片筛选'}</h3>
         <p id='batchTagHint' className='hint'>
           {v.mode === 'remove'
-            ? '点击标签筛选左侧图片；点击 − 选择待删除标签。'
+            ? '点击标签或 − 切换待删除项，不改变图片筛选和勾选。'
             : '点击标签筛选左侧图片；点击 − 排除包含该标签的图片。'}
         </p>
         <p id='commonTags' className='hint'>{`共同标签：${v.tags.commonTags}`}</p>

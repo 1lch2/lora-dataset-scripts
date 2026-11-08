@@ -15,6 +15,7 @@ export function useTags(
   const [clickedTags, setClickedTags] = useState<Set<string>>(new Set());
   const {
     allImages,
+    allTargets,
     filteredSources,
     visibleTags,
     focused,
@@ -34,6 +35,7 @@ export function useTags(
     const allImages = sources.flatMap((s) =>
       s.candidates.filter((c) => c.status === 'accepted' && c.tag).map((c) => [s, c] as TagImage),
     );
+    const allTargets = allImages.filter(([, c]) => c.tag_current).map(([s, c]) => [s.id, c.id]);
     const filteredSources = sources.filter(
       (s) =>
         (!fields.group || s.group === fields.group) &&
@@ -96,6 +98,7 @@ export function useTags(
     ).length;
     return {
       allImages,
+      allTargets,
       filteredSources,
       visibleTags,
       focused,
@@ -143,6 +146,7 @@ export function useTags(
     clickedTags,
     setClickedTags,
     allImages,
+    allTargets,
     filteredSources,
     visibleTags,
     selections,
