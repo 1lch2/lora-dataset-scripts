@@ -1,83 +1,459 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { updateReview } from '../../../../../api/client';
-import type { EditRequest, TagAuditFinding, TagAuditOptions } from '../../../../../api/types';
+import {
+  addAuditFeature,
+  deleteAuditFeature,
+  updateAuditFeature,
+  updateReview,
+} from '../../../../../api/client';
+import type {
+  EditRequest,
+  TagAuditFeature,
+  TagAuditFinding,
+  TagAuditOptions,
+  TagImage,
+} from '../../../../../api/types';
 import { useReviewContext } from '../../../context';
-import { splitTags } from '../../../utils';
-import type { AuditCategory, AuditStatus } from './types';
+import { imageKey, imageUrl as getImageUrl, splitTags } from '../../../utils';
+import type { AuditCategory, AuditRow, FeatureEdit, FeatureStatus } from './types';
 import styles from './styles.module.css';
 
-const CATEGORY_LABELS = { framing: '构图范围', count: '人物数量', rule: '数据集规则' };
+const CATEGORY_LABELS = { framing: '构图范围', count: '人物数量', rule: '数据集规则', feature: '核心特征' };
 const STATUS_LABELS = { pending: '待处理', ignored: '已保留', applied: '已应用', stale: '已过期' };
+const FEATURE_STATUS_LABELS = {
+  pending: '待补标',
+  consistent: '已一致',
+  absent: '未发现',
+  unobservable: '不可观察',
+  uncertain: '不确定',
+  failed: '失败',
+  ignored: '已忽略',
+  applied: '已应用',
+  stale: '已过期',
+};
 const DEFAULT_OPTIONS: TagAuditOptions = {
   visual: true,
   endpoint: 'http://localhost:23333/v1',
-  model: 'lfm3-vl-2b',
+  model: 'qwen3.5-4b-uncensored-hauhaucs-aggressive',
   concurrency: 1,
   forbidden: [],
 };
+const PAGE_SIZE = 30;
+
+interface ReferenceSelection {
+  sampleKey: string;
+  tags: string[];
+}
+
+function getReferenceTags(sample: TagImage | undefined) {
+  if (!sample) return [];
+  return [...new Set(sample[1].tag.tags.map((tag) => tag.replaceAll('_', ' ').trim()).filter(Boolean))];
+}
+
+function getFindingTags(finding: TagAuditFinding) {
+  return finding.tags ?? (finding.tag ? [finding.tag] : []);
+}
+
+interface ReferencePickerProps {
+  samples: TagImage[];
+  initialSelection?: ReferenceSelection;
+  updatedAt: string;
+  onSelect: (selection: ReferenceSelection) => void;
+  onDismiss: () => void;
+}
+
+function ReferencePicker({
+  samples,
+  initialSelection,
+  updatedAt,
+  onSelect,
+  onDismiss,
+}: ReferencePickerProps) {
+  const heading = useId();
+  const tagsHeading = useId();
+  const dialog = useRef<HTMLDialogElement>(null);
+  const selectedTile = useRef<HTMLButtonElement>(null);
+  const [selection, setSelection] = useState(
+    () => initialSelection ?? { sampleKey: imageKey(...samples[0]), tags: [] },
+  );
+  const sample = samples.find(([source, candidate]) => imageKey(source, candidate) === selection.sampleKey);
+  const tags = getReferenceTags(sample);
+  const canConfirm = selection.tags.length > 0 && selection.tags.every((tag) => tags.includes(tag));
+
+  useEffect(() => {
+    if (!dialog.current || dialog.current.open) return;
+    dialog.current.showModal();
+    selectedTile.current?.focus();
+  }, []);
+
+  function handleSelectImage(sampleKey: string) {
+    setSelection((previous) => (previous.sampleKey === sampleKey ? previous : { sampleKey, tags: [] }));
+  }
+
+  function handleToggleTag(tag: string, checked: boolean) {
+    setSelection((previous) => ({
+      ...previous,
+      tags: checked ? [...previous.tags, tag] : previous.tags.filter((value) => value !== tag),
+    }));
+  }
+
+  function handleConfirm() {
+    if (!canConfirm) return;
+    onSelect(selection);
+    dialog.current?.close();
+  }
+
+  return (
+    <dialog ref={dialog} className={styles.picker} aria-labelledby={heading} onClose={onDismiss}>
+      <div className={styles.pickerHeading}>
+        <h2 id={heading}>选择参考图和标签</h2>
+      </div>
+      <div className={styles.pickerBody}>
+        <section className={styles.pickerGallery} aria-label='参考图样本'>
+          <div className={styles.referenceGrid}>
+            {samples.map(([source, candidate]) => {
+              const key = imageKey(source, candidate);
+              const label = `${source.relative} · ${candidate.id}`;
+              const selected = key === selection.sampleKey;
+              return (
+                <button
+                  key={key}
+                  ref={selected ? selectedTile : undefined}
+                  type='button'
+                  className={styles.referenceTile}
+                  title={label}
+                  aria-pressed={selected}
+                  onClick={() => handleSelectImage(key)}
+                >
+                  <img src={getImageUrl(source, 'tag', updatedAt, candidate)} alt='' loading='lazy' />
+                  <span>{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+        <section className={styles.pickerTags} aria-labelledby={tagsHeading}>
+          <h3 id={tagsHeading}>目标标签</h3>
+          {sample ? (
+            <>
+              <p>
+                {sample[0].relative} · {sample[1].id}
+              </p>
+              <img
+                className={styles.referencePreview}
+                src={getImageUrl(sample[0], 'tag', updatedAt, sample[1])}
+                alt='当前所选参考图'
+              />
+              <div className={styles.referenceTags} role='group' aria-labelledby={tagsHeading}>
+                {tags.map((tag) => {
+                  const checked = selection.tags.includes(tag);
+                  return (
+                    <label
+                      className={`tagChip ${styles.referenceTag}${checked ? ` ${styles.referenceTagSelected}` : ''}`}
+                      key={tag}
+                    >
+                      <input
+                        type='checkbox'
+                        name={tagsHeading}
+                        value={tag}
+                        checked={checked}
+                        onChange={(event) => handleToggleTag(tag, event.currentTarget.checked)}
+                      />
+                      <span className='tagText'>{tag}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <p>请选择参考图</p>
+          )}
+        </section>
+      </div>
+      <div className={styles.pickerActions}>
+        <button type='button' onClick={() => dialog.current?.close()}>
+          取消
+        </button>
+        <button type='button' className='primary' disabled={!canConfirm} onClick={handleConfirm}>
+          确认选择
+        </button>
+      </div>
+    </dialog>
+  );
+}
+
+interface FeatureFormProps {
+  feature?: TagAuditFeature;
+  samples: TagImage[];
+  updatedAt: string;
+  disabled: boolean;
+  onSave: (edit: FeatureEdit) => void;
+  onCancel: () => void;
+  onPreview: (url: string) => void;
+}
+
+function FeatureForm({
+  feature,
+  samples,
+  updatedAt,
+  disabled,
+  onSave,
+  onCancel,
+  onPreview,
+}: FeatureFormProps) {
+  const heading = useId();
+  const saved = feature?.reference;
+  const [selection, setSelection] = useState<ReferenceSelection | undefined>(() =>
+    saved && feature ? { sampleKey: `${saved.source}/${saved.candidate}`, tags: feature.tags } : undefined,
+  );
+  const [pickingReference, setPickingReference] = useState(false);
+  const sample = samples.find(([source, candidate]) => imageKey(source, candidate) === selection?.sampleKey);
+  const validTags = getReferenceTags(sample);
+  const chosenTags =
+    selection && selection.tags.every((tag) => validTags.includes(tag)) ? selection.tags : [];
+  const previewUrl = sample ? getImageUrl(sample[0], 'tag', updatedAt, sample[1]) : '';
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pickingReference || !sample || !chosenTags.length) return;
+    const [source, candidate] = sample;
+    const form = new FormData(event.currentTarget);
+    onSave({
+      action: 'save',
+      feature,
+      fields: {
+        name: String(form.get('name')),
+        description: String(form.get('description')),
+        tags: chosenTags,
+        reference: { source: source.id, candidate: candidate.id },
+      },
+    });
+  }
+
+  return (
+    <form action='/api/tag-audit/feature' method='post' onSubmit={handleSubmit} aria-labelledby={heading}>
+      <fieldset disabled={disabled}>
+        <legend id={heading}>{feature ? '编辑核心特征' : '新增核心特征'}</legend>
+        <div className={styles.detail}>
+          <div className={styles.toolbar}>
+            <button
+              type='button'
+              aria-haspopup='dialog'
+              disabled={!samples.length}
+              onClick={() => setPickingReference(true)}
+            >
+              {sample ? '更换参考图或标签' : '选择参考图和标签'}
+            </button>
+            {sample ? (
+              <small>
+                {sample[0].relative} · {sample[1].id}
+              </small>
+            ) : null}
+          </div>
+          {chosenTags.length ? (
+            <div className={styles.toolbar}>
+              <small>目标标签</small>
+              {chosenTags.map((tag) => (
+                <span className='tagChip' key={tag}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {!samples.length ? <p>没有带标签的有效样本</p> : null}
+          {previewUrl ? (
+            <button type='button' className={styles.reference} onClick={() => onPreview(previewUrl)}>
+              <img src={previewUrl} alt='查看参考图' />
+            </button>
+          ) : null}
+        </div>
+        {pickingReference && samples.length ? (
+          <ReferencePicker
+            samples={samples}
+            initialSelection={sample ? selection : undefined}
+            updatedAt={updatedAt}
+            onSelect={setSelection}
+            onDismiss={() => setPickingReference(false)}
+          />
+        ) : null}
+        <label>
+          名称
+          <input name='name' defaultValue={feature?.name} required maxLength={100} />
+        </label>
+        <label>
+          可观察描述
+          <textarea
+            name='description'
+            defaultValue={feature?.description}
+            required
+            maxLength={2000}
+            rows={3}
+            placeholder='例如，参考图中白色衬衫的领口或衣身清晰可见。'
+          />
+        </label>
+        <div className={styles.toolbar}>
+          <button type='submit' className='primary' disabled={!sample || !chosenTags.length}>
+            保存特征
+          </button>
+          <button type='button' onClick={onCancel}>
+            取消
+          </button>
+        </div>
+      </fieldset>
+    </form>
+  );
+}
 
 export function TagAudit() {
   const v = useReviewContext();
   const client = useQueryClient();
   const audit = v.state?.tag_audit;
+  const latest = audit?.featureRun;
+  const [featureMode, setFeatureMode] = useState(!!latest || !!v.job.auditFeature);
   const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, ...audit?.options });
   const [forbidden, setForbidden] = useState(options.forbidden.join(', '));
   const [category, setCategory] = useState<AuditCategory>('all');
-  const [status, setStatus] = useState<AuditStatus>('pending');
+  const [status, setStatus] = useState<FeatureStatus>('pending');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
-  const findings = audit?.findings || [];
-  const visible = useMemo(
-    () =>
-      findings.filter(
-        (f) => (category === 'all' || f.category === category) && (status === 'all' || f.status === status),
-      ),
-    [findings, category, status],
+  const [featureId, setFeatureId] = useState(latest?.feature.id);
+  const [form, setForm] = useState<'new' | 'edit'>();
+  const features = Object.values(audit?.features || {});
+  const feature = features.find((item) => item.id === featureId) || features[0];
+  const referenceSamples = useMemo(
+    () => v.tags.allImages.filter(([, candidate]) => candidate.tag_current && candidate.tag.tags.length),
+    [v.tags.allImages],
   );
-  const selectedIds = visible.filter((f) => f.status === 'pending' && selected.has(f.id)).map((f) => f.id);
-  const pageCount = Math.max(1, Math.ceil(visible.length / 30));
+  const savedReference = feature?.reference;
+  const referenceSample = savedReference
+    ? referenceSamples.find(
+        ([source, candidate]) =>
+          source.id === savedReference.source && candidate.id === savedReference.candidate,
+      )
+    : undefined;
+  const updatedAt = v.state?.updated_at || '';
+  const forbiddenTags = splitTags(forbidden);
+  const conflict = feature?.tags.filter((tag) => forbiddenTags.includes(tag)) ?? [];
+  const rows = useMemo<AuditRow[]>(() => {
+    const findings = audit?.findings || [];
+    if (!featureMode) {
+      return findings
+        .filter((finding) => finding.action !== 'add')
+        .map((finding) => ({ ...finding, finding }));
+    }
+    const byId = new Map(
+      findings.filter((finding) => finding.action === 'add').map((finding) => [finding.id, finding]),
+    );
+    return (latest?.samples || []).map((sample) => {
+      const finding = sample.findingId ? byId.get(sample.findingId) : undefined;
+      return {
+        ...sample,
+        id: `${sample.source}/${sample.candidate}`,
+        name: `${sample.name} · ${sample.candidate}`,
+        status: finding?.status ?? (sample.status === 'present' ? 'stale' : sample.status),
+        reason: sample.error || sample.reason,
+        finding,
+      };
+    });
+  }, [audit?.findings, featureMode, latest]);
+
+  const visible = rows.filter(
+    (row) =>
+      (featureMode || category === 'all' || row.finding?.category === category) &&
+      (status === 'all' || row.status === status),
+  );
+  const selectedIds = visible.flatMap((row) =>
+    row.finding?.status === 'pending' && selected.has(row.finding.id) ? [row.finding.id] : [],
+  );
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount - 1);
-  const pending = findings.filter((f) => f.status === 'pending').length;
-  const uncertain = audit?.samples?.filter((s) => s.status === 'uncertain') || [];
-  const failed = audit?.samples?.filter((s) => s.status === 'failed') || [];
+  const pageRows = visible.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE);
+  const pagePendingIds = pageRows.flatMap((row) =>
+    row.finding?.status === 'pending' ? [row.finding.id] : [],
+  );
+  const pending = rows.filter((row) => row.status === 'pending').length;
+  const uncertain = audit?.samples?.filter((sample) => sample.status === 'uncertain') || [];
+  const failed = audit?.samples?.filter((sample) => sample.status === 'failed') || [];
   const eligible = v.sources.reduce(
-    (sum, s) => sum + s.candidates.filter((c) => c.status === 'accepted' && c.tag_current).length,
+    (sum, source) =>
+      sum +
+      source.candidates.filter((candidate) => candidate.status === 'accepted' && candidate.tag_current)
+        .length,
     0,
   );
+  const activeAudit = v.job.action === 'start_audit' && v.job.status === 'running';
+  const featureFailed = featureMode ? rows.filter((row) => row.status === 'failed').length : 0;
+  const refresh = () => client.invalidateQueries({ queryKey: ['run'] });
   const mutation = useMutation({
     mutationFn: (data: EditRequest) => updateReview(data, v.session.token),
     onMutate: () => v.setDatasetSwitching(true),
     onSuccess: async (_result, data) => {
       setSelected(new Set());
       if (data.action === 'start_audit') {
+        setPage(0);
+        setStatus('pending');
         client.setQueryData(['job'], {
-          ...v.job,
           status: 'running',
           action: 'start_audit',
+          auditFeature: data.featureId ? feature : null,
           total: eligible,
           done: 0,
           errors: [],
+          failedCount: 0,
         });
-        v.message('标签检查已开始，仅生成建议，不修改工作 TXT。');
+        v.message('标签检查已开始，工作 TXT 保持原样。');
       } else v.message(data.action === 'undo_audit' ? '已撤销该批次。' : '检查结果已保存。');
-      await Promise.all([
-        client.invalidateQueries({ queryKey: ['run'] }),
-        client.invalidateQueries({ queryKey: ['job'] }),
-      ]);
+      await Promise.all([refresh(), client.invalidateQueries({ queryKey: ['job'] })]);
     },
     onError: (error: Error) => v.message(error.message, true),
     onSettled: () => v.setDatasetSwitching(false),
   });
-  const disabled = v.processing || mutation.isPending;
+  const featureMutation = useMutation({
+    mutationFn: (edit: FeatureEdit) => {
+      const runDir = v.state!.config.run_dir;
+      const token = v.session.token;
+      if (edit.action === 'delete') return deleteAuditFeature(runDir, edit.feature.id, token);
+      if (edit.feature) return updateAuditFeature(runDir, edit.feature.id, edit.fields, token);
+      return addAuditFeature(runDir, edit.fields, token);
+    },
+    onMutate: () => v.setDatasetSwitching(true),
+    onSuccess: async (response, edit) => {
+      await refresh();
+      setFeatureId(edit.action === 'save' ? response.result.id : undefined);
+      setForm(undefined);
+      v.message(edit.action === 'save' ? '已保存特征。' : '已删除特征。');
+    },
+    onError: (error: Error) => v.message(error.message, true),
+    onSettled: () => v.setDatasetSwitching(false),
+  });
+  const disabled = v.processing || mutation.isPending || featureMutation.isPending;
+
+  function handleFilter(nextStatus: FeatureStatus, nextCategory = category) {
+    setStatus(nextStatus);
+    setCategory(nextCategory);
+    setPage(0);
+    setSelected(new Set());
+  }
+
+  function handleModeChange(next: boolean) {
+    setFeatureMode(next);
+    handleFilter('pending', 'all');
+  }
 
   function handleDecision(action: 'apply_audit' | 'ignore_audit', ids: string[]) {
     if (!ids.length || disabled) return;
     if (action === 'apply_audit') {
-      const tags = [...new Set(findings.filter((f) => ids.includes(f.id)).map((f) => f.tag))];
+      const idSet = new Set(ids);
+      const tags = [
+        ...new Set(
+          rows.flatMap(({ finding }) => (finding && idSet.has(finding.id) ? getFindingTags(finding) : [])),
+        ),
+      ];
+      const change = featureMode ? '追加所选建议的标签' : '删除所选异常对应的标签';
       if (
         !window.confirm(
-          `将删除所选 ${ids.length} 项异常对应的标签：\n${tags.join(', ')}\n\n仅修改工作 TXT，可在本页撤销该批次。`,
+          `将${change}（${ids.length} 项）：\n${tags.join(', ')}\n\n仅修改工作 TXT，可在本页撤销该批次。`,
         )
       )
         return;
@@ -85,10 +461,14 @@ export function TagAudit() {
     mutation.mutate({ action, ids });
   }
 
-  function imageUrl(finding: Pick<TagAuditFinding, 'source' | 'candidate'>) {
-    return `/image?source=${encodeURIComponent(finding.source)}&candidate=${encodeURIComponent(finding.candidate)}&kind=tag&v=${encodeURIComponent(v.state?.updated_at || '')}`;
+  function imageUrl(sample: Pick<AuditRow, 'source' | 'candidate'>) {
+    return `/image?source=${encodeURIComponent(sample.source)}&candidate=${encodeURIComponent(sample.candidate)}&kind=tag&v=${encodeURIComponent(v.state?.updated_at || '')}`;
   }
 
+  const statusLabels = featureMode ? FEATURE_STATUS_LABELS : STATUS_LABELS;
+  const referenceUrl = referenceSample
+    ? getImageUrl(referenceSample[0], 'tag', updatedAt, referenceSample[1])
+    : '';
   return (
     <main
       id='tagView'
@@ -97,40 +477,32 @@ export function TagAudit() {
       aria-labelledby='tagTab'
       hidden={v.stage !== 'tag'}
     >
-      <section className={`tagGallery ${styles.results}`} aria-label='标签异常结果'>
+      <section
+        className={`tagGallery ${styles.results}`}
+        aria-label={featureMode ? '核心特征检查结果' : '标签异常结果'}
+      >
         <div className={styles.toolbar}>
-          <h2>检查结果</h2>
-          <span>待处理 {pending} 项</span>
-          <label>
-            类型
-            <select
-              value={category}
-              onChange={(e) => {
-                setCategory(e.target.value as AuditCategory);
-                setPage(0);
-                setSelected(new Set());
-              }}
-            >
-              <option value='all'>全部类型</option>
-              {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+          <h2>{featureMode ? '核心特征补标' : '检查结果'}</h2>
+          {!featureMode ? <span>待处理 {pending} 项</span> : null}
+          {!featureMode ? (
+            <label>
+              类型
+              <select
+                value={category}
+                onChange={(event) => handleFilter(status, event.target.value as AuditCategory)}
+              >
+                <option value='all'>全部类型</option>
+                <option value='framing'>{CATEGORY_LABELS.framing}</option>
+                <option value='count'>{CATEGORY_LABELS.count}</option>
+                <option value='rule'>{CATEGORY_LABELS.rule}</option>
+              </select>
+            </label>
+          ) : null}
           <label>
             状态
-            <select
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value as AuditStatus);
-                setPage(0);
-                setSelected(new Set());
-              }}
-            >
+            <select value={status} onChange={(event) => handleFilter(event.target.value as FeatureStatus)}>
               <option value='all'>全部状态</option>
-              {Object.entries(STATUS_LABELS).map(([key, label]) => (
+              {Object.entries(statusLabels).map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
                 </option>
@@ -138,21 +510,18 @@ export function TagAudit() {
             </select>
           </label>
         </div>
+        {featureMode && latest ? (
+          <p>
+            最近一轮：{latest.feature.name} · {latest.feature.tags.join(' + ')} · {latest.samples.length} /{' '}
+            {latest.total} 份 · 待补标 {pending} 份 · 失败 {featureFailed} 份
+          </p>
+        ) : null}
         <div className={styles.toolbar}>
           <button
-            disabled={disabled}
-            onClick={() =>
-              setSelected(
-                new Set(
-                  visible
-                    .slice(currentPage * 30, (currentPage + 1) * 30)
-                    .filter((f) => f.status === 'pending')
-                    .map((f) => f.id),
-                ),
-              )
-            }
+            disabled={disabled || !pagePendingIds.length}
+            onClick={() => setSelected(new Set(pagePendingIds))}
           >
-            选择本页待处理项
+            选择本页{featureMode ? '待补标项' : '待处理项'}
           </button>
           <button disabled={disabled || !selectedIds.length} onClick={() => setSelected(new Set())}>
             清空选择
@@ -162,85 +531,95 @@ export function TagAudit() {
             disabled={disabled || !selectedIds.length}
             onClick={() => handleDecision('apply_audit', selectedIds)}
           >
-            应用所选删除（{selectedIds.length}）
+            {featureMode ? '补标所选' : '应用所选删除'}（{selectedIds.length}）
           </button>
           <button
             disabled={disabled || !selectedIds.length}
             onClick={() => handleDecision('ignore_audit', selectedIds)}
           >
-            保留所选原标签
+            {featureMode ? '忽略所选' : '保留所选原标签'}
           </button>
         </div>
-        <p>视觉判断是待核实的建议。只删除明确选中的标签，不补写其他标签；点击图片查看大图。</p>
         <div className={styles.list}>
-          {visible.slice(currentPage * 30, (currentPage + 1) * 30).map((finding) => (
-            <article key={finding.id} className={styles.finding}>
-              <button
-                className={styles.imageButton}
-                aria-label={`查看 ${finding.name}`}
-                onClick={() => v.setPreviewImage(imageUrl(finding))}
-              >
-                <img src={imageUrl(finding)} alt={finding.name} loading='lazy' />
-              </button>
-              <div className={styles.detail}>
-                <span>{finding.name}</span>
-                <strong>
-                  {CATEGORY_LABELS[finding.category]} · {finding.tag}
-                </strong>
-                <p>{finding.reason}</p>
-                <span>
-                  建议删除：{finding.tag} · {STATUS_LABELS[finding.status]}
-                </span>
-                {finding.model ? <small>观察模型：{finding.model}</small> : null}
-                {finding.status === 'pending' ? (
-                  <div className={styles.toolbar}>
-                    <label>
-                      <input
-                        type='checkbox'
-                        checked={selected.has(finding.id)}
+          {pageRows.map((row) => {
+            const finding = row.finding;
+            const url = imageUrl(row);
+            return (
+              <article key={row.id} className={styles.finding}>
+                <button
+                  className={styles.imageButton}
+                  aria-label={`查看 ${row.name}`}
+                  onClick={() => v.setPreviewImage(url)}
+                >
+                  <img src={url} alt={row.name} loading='lazy' />
+                </button>
+                <div className={styles.detail}>
+                  <span>{row.name}</span>
+                  <strong>
+                    {featureMode
+                      ? `${finding ? getFindingTags(finding).join(' + ') : latest?.feature.tags.join(' + ')} · ${FEATURE_STATUS_LABELS[row.status]}`
+                      : `${CATEGORY_LABELS[finding!.category]} · ${finding!.tag}`}
+                  </strong>
+                  <p>{row.reason}</p>
+                  {!featureMode && finding ? (
+                    <span>
+                      建议删除：{finding.tag} · {STATUS_LABELS[finding.status]}
+                    </span>
+                  ) : null}
+                  {finding?.model ? <small>观察模型：{finding.model}</small> : null}
+                  {finding?.status === 'pending' ? (
+                    <div className={styles.toolbar}>
+                      <label>
+                        <input
+                          type='checkbox'
+                          checked={selected.has(finding.id)}
+                          disabled={disabled}
+                          onChange={(event) => {
+                            const checked = event.target.checked;
+                            setSelected((previous) => {
+                              const next = new Set(previous);
+                              if (checked) next.add(finding.id);
+                              else next.delete(finding.id);
+                              return next;
+                            });
+                          }}
+                        />
+                        选择此项
+                      </label>
+                      <button disabled={disabled} onClick={() => handleDecision('apply_audit', [finding.id])}>
+                        {featureMode ? '应用补标' : '应用删除'}
+                      </button>
+                      <button
                         disabled={disabled}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setSelected((previous) => {
-                            const next = new Set(previous);
-                            if (checked) next.add(finding.id);
-                            else next.delete(finding.id);
-                            return next;
-                          });
-                        }}
-                      />
-                      选择此项
-                    </label>
-                    <button disabled={disabled} onClick={() => handleDecision('apply_audit', [finding.id])}>
-                      应用删除
-                    </button>
-                    <button disabled={disabled} onClick={() => handleDecision('ignore_audit', [finding.id])}>
-                      保留原标签
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            </article>
-          ))}
+                        onClick={() => handleDecision('ignore_audit', [finding.id])}
+                      >
+                        {featureMode ? '忽略此项' : '保留原标签'}
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </article>
+            );
+          })}
           {!visible.length ? (
             <p className='emptyState'>
-              {audit
-                ? '当前筛选下没有异常建议；这不代表全部标签已经验证正确。'
-                : '运行检查后，这里只展示需要注意的标签。'}
+              {featureMode && !latest ? '保存一条特征，再检查当前数据集。' : '当前筛选下没有检查结果。'}
             </p>
           ) : null}
         </div>
-        <div className={styles.toolbar}>
-          <button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>
-            上一页
-          </button>
-          <span>
-            {visible.length} 项 · {currentPage + 1} / {pageCount} 页
-          </span>
-          <button disabled={currentPage + 1 >= pageCount} onClick={() => setPage(currentPage + 1)}>
-            下一页
-          </button>
-        </div>
+        {visible.length ? (
+          <div className={styles.toolbar}>
+            <button disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>
+              上一页
+            </button>
+            <span>
+              {visible.length} 项 · {currentPage + 1} / {pageCount} 页
+            </span>
+            <button disabled={currentPage + 1 >= pageCount} onClick={() => setPage(currentPage + 1)}>
+              下一页
+            </button>
+          </div>
+        ) : null}
       </section>
       <aside className={`tagTools ${styles.controls}`} aria-label='标签检查设置'>
         <div className={styles.toolbar}>
@@ -250,49 +629,137 @@ export function TagAudit() {
           </button>
         </div>
         <div className={`panelScroll ${styles.settings}`}>
-          <p>范围：当前数据集全部 {eligible} 份有效标签样本，不受标签页筛选或勾选影响。</p>
+          <div className={styles.toolbar} role='group' aria-label='检查类型'>
+            <button
+              aria-pressed={!featureMode}
+              className={!featureMode ? 'active' : ''}
+              onClick={() => handleModeChange(false)}
+            >
+              标签异常检查
+            </button>
+            <button
+              aria-pressed={featureMode}
+              className={featureMode ? 'active' : ''}
+              onClick={() => handleModeChange(true)}
+            >
+              核心特征补标
+            </button>
+          </div>
+          {featureMode ? (
+            <>
+              <label>
+                要检查的特征
+                <select
+                  disabled={disabled || !!form || !features.length}
+                  value={feature?.id || ''}
+                  onChange={(event) => setFeatureId(event.target.value)}
+                >
+                  {!features.length ? <option value=''>暂无特征</option> : null}
+                  {features.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name} · {item.tags.join(' + ')}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className={styles.toolbar}>
+                <button disabled={disabled || !!form} onClick={() => setForm('new')}>
+                  新增特征
+                </button>
+                {feature ? (
+                  <>
+                    <button disabled={disabled || !!form} onClick={() => setForm('edit')}>
+                      编辑特征
+                    </button>
+                    <button
+                      disabled={disabled || !!form}
+                      onClick={() => {
+                        if (window.confirm(`删除特征「${feature.name}」？该特征的待处理建议将过期。`))
+                          featureMutation.mutate({ action: 'delete', feature });
+                      }}
+                    >
+                      删除特征
+                    </button>
+                  </>
+                ) : null}
+              </div>
+              {form ? (
+                <FeatureForm
+                  key={form === 'edit' ? feature?.id : 'new'}
+                  feature={form === 'edit' ? feature : undefined}
+                  samples={referenceSamples}
+                  updatedAt={updatedAt}
+                  disabled={disabled}
+                  onSave={(edit) => featureMutation.mutate(edit)}
+                  onCancel={() => setForm(undefined)}
+                  onPreview={v.setPreviewImage}
+                />
+              ) : feature ? (
+                <div className={styles.detail}>
+                  <p>{feature.description}</p>
+                  {referenceSample ? (
+                    <small>
+                      参考图 · {referenceSample[0].relative} · {referenceSample[1].id}
+                    </small>
+                  ) : null}
+                  {referenceUrl ? (
+                    <button className={styles.reference} onClick={() => v.setPreviewImage(referenceUrl)}>
+                      <img src={referenceUrl} alt='查看参考图' />
+                    </button>
+                  ) : null}
+                  {feature.referenceError ? <p role='status'>{feature.referenceError}</p> : null}
+                </div>
+              ) : null}
+            </>
+          ) : null}
+          <p>范围为当前数据集全部 {eligible} 份有效标签样本，独立于标签页筛选。</p>
           <fieldset disabled={disabled}>
             <legend>本地视觉检查</legend>
-            <label className={styles.check}>
-              <input
-                type='checkbox'
-                checked={options.visual}
-                onChange={(e) => setOptions({ ...options, visual: e.target.checked })}
-              />
-              检查构图范围和人物数量
-            </label>
+            {!featureMode ? (
+              <label className={styles.check}>
+                <input
+                  type='checkbox'
+                  checked={options.visual}
+                  onChange={(event) => setOptions({ ...options, visual: event.target.checked })}
+                />
+                检查构图范围和人物数量
+              </label>
+            ) : null}
             <label>
               API 地址（包含 /v1）
               <input
                 value={options.endpoint}
-                disabled={!options.visual}
-                onChange={(e) => setOptions({ ...options, endpoint: e.target.value })}
+                disabled={!featureMode && !options.visual}
+                onChange={(event) => setOptions({ ...options, endpoint: event.target.value })}
               />
             </label>
             <label>
               模型 ID
               <input
                 value={options.model}
-                disabled={!options.visual}
-                onChange={(e) => setOptions({ ...options, model: e.target.value })}
+                disabled={!featureMode && !options.visual}
+                onChange={(event) => setOptions({ ...options, model: event.target.value })}
               />
             </label>
-            <label>
-              并发请求数
-              <select
+            <label className={styles.concurrency}>
+              <span>
+                并发请求数
+                <output htmlFor='auditConcurrency'>{options.concurrency}</output>
+              </span>
+              <input
                 id='auditConcurrency'
+                aria-label='并发请求数'
+                type='range'
+                min={1}
+                max={16}
+                step={1}
                 value={options.concurrency}
-                disabled={!options.visual}
-                onChange={(e) => setOptions({ ...options, concurrency: Number(e.target.value) })}
-              >
-                {Array.from({ length: 16 }, (_, index) => index + 1).map((count) => (
-                  <option key={count} value={count}>
-                    {count}
-                  </option>
-                ))}
-              </select>
+                disabled={!featureMode && !options.visual}
+                onChange={(event) =>
+                  setOptions({ ...options, concurrency: event.currentTarget.valueAsNumber })
+                }
+              />
             </label>
-            <p>发送实际训练样本到本机接口。先独立观察图片，再对照数量与构图标签。</p>
           </fieldset>
           <label>
             当前数据集禁用标签
@@ -300,30 +767,46 @@ export function TagAudit() {
               rows={3}
               value={forbidden}
               disabled={disabled}
-              placeholder='例如 virtual youtuber；逗号或换行分隔'
-              onChange={(e) => setForbidden(e.target.value)}
+              placeholder='例如 virtual youtuber，逗号或换行分隔'
+              onChange={(event) => setForbidden(event.target.value)}
             />
           </label>
-          <p>只填写你明确不使用的标签。不根据“游戏角色”自动推断身份，规则在运行检查时保存到当前数据集。</p>
+          {featureMode && conflict.length ? (
+            <p role='status'>目标标签 {conflict.join('、')} 已被禁用，请先调整禁用规则或目标标签。</p>
+          ) : null}
           <button
             className='primary'
-            disabled={disabled || !eligible}
+            disabled={
+              disabled ||
+              !eligible ||
+              (featureMode && (!feature || !!form || !!conflict.length || !!feature.referenceError))
+            }
             onClick={() =>
               mutation.mutate({
                 action: 'start_audit',
-                audit: { ...options, forbidden: splitTags(forbidden) },
+                audit: { ...options, forbidden: forbiddenTags },
+                featureId: featureMode ? feature?.id : undefined,
               })
             }
           >
-            运行检查，不改标签
+            {featureMode ? '检查此特征' : '运行检查，不改标签'}
           </button>
-          {audit?.samples ? (
+          {activeAudit ? (
+            <div className={styles.detail} role='status'>
+              <p>
+                {v.job.auditFeature ? `正在检查「${v.job.auditFeature.name}」` : '正在检查标签异常'} ·{' '}
+                {v.job.done} / {v.job.total} 份 · 失败 {v.job.failedCount || 0} 份
+              </p>
+              <progress aria-label='标签检查进度' max={Math.max(v.job.total, 1)} value={v.job.done} />
+            </div>
+          ) : null}
+          {!featureMode && audit?.samples ? (
             <p>
               最近一轮：检查 {audit.samples.length} 份 · 部分不确定 {uncertain.length} 份 · 失败{' '}
               {failed.length} 份。
             </p>
           ) : null}
-          {uncertain.length || failed.length ? (
+          {!featureMode && (uncertain.length || failed.length) ? (
             <details>
               <summary>查看不确定与失败样本</summary>
               {[...failed, ...uncertain].map((sample) => (
@@ -341,7 +824,7 @@ export function TagAudit() {
           ) : null}
           <details>
             <summary>应用历史与撤销</summary>
-            <p>每次单项或批量应用都可撤销；之后标签或图片改变时拒绝覆盖，请先撤销后续批次。</p>
+            <p>图片或标签有后续编辑时，需先撤销后续批次，或在标签编辑中手动恢复。</p>
             {[...(audit?.batches || [])].reverse().map((batch, index) => (
               <div key={batch.id} className={styles.toolbar}>
                 <span>

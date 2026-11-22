@@ -229,7 +229,7 @@ export function Tagging() {
     if (
       hasTags &&
       !window.confirm(
-        `将重新打标全部 ${v.samples.length} 份已接受样本，替换工作目录内的原有标签及其编辑结果。\n\n${v.state?.config.run_dir}\n\n导入来源不变。${prepared ? '可通过“重新导入源 TXT”安全恢复完整图的原始标签。' : '原始素材不会被修改。'}`,
+        `将重新打标全部 ${v.samples.length} 份已接受样本，替换工作目录内的原有标签、人工编辑和已应用的核心特征补标。\n\n${v.state?.config.run_dir}\n\n导入来源不变。${prepared ? '可通过“重新导入源 TXT”安全恢复完整图的原始标签。' : '原始素材不会被修改。'}`,
       )
     )
       return;
@@ -239,7 +239,7 @@ export function Tagging() {
     if (!selected.length || disabled) return;
     if (
       !window.confirm(
-        `将当前阈值应用到所选 ${selected.length} 份样本，并替换工作标签（包括之前的人工编辑）。原始模型分数保留，可调低阈值恢复。`,
+        `将当前阈值应用到所选 ${selected.length} 份样本，并替换工作标签（包括人工编辑和已应用的核心特征补标）。原始模型分数保留，可调低阈值恢复。`,
       )
     )
       return;

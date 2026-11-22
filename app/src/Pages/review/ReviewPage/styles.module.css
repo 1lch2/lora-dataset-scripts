@@ -1006,7 +1006,7 @@ body:global(.tagEditing) :global(#tagView) {
 :global(.tagChoice) {
   align-items: stretch;
 }
-:global(.tagChoice) :global(.tagChip) {
+:global(.tagChip) {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1019,7 +1019,6 @@ body:global(.tagEditing) :global(#tagView) {
   font-size: 14px;
   line-height: 1.4;
   color: var(--color-review-ink);
-  cursor: pointer;
   text-align: left;
   overflow-wrap: anywhere;
 }

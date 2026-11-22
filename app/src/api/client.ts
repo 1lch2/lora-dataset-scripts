@@ -10,6 +10,7 @@ import type {
   LoraRenameResult,
   RunInfo,
   SessionInfo,
+  TagAuditFeatureFields,
 } from './types';
 
 export async function request<T>(url: string, data?: unknown, token?: string): Promise<T> {
@@ -39,6 +40,23 @@ export const openDataset = (runDir: string, token: string) =>
   request<DatasetOpenResult>('/api/datasets/open', { runDir }, token);
 export const updateReview = (data: EditRequest, token: string) =>
   request<EditResult>('/api/edit', data, token);
+
+export const addAuditFeature = (runDir: string, fields: TagAuditFeatureFields, token: string) =>
+  request<EditResult>('/api/tag-audit/feature', { action: 'save_feature', runDir, ...fields }, token);
+export const updateAuditFeature = (
+  runDir: string,
+  featureId: string,
+  fields: TagAuditFeatureFields,
+  token: string,
+) =>
+  request<EditResult>(
+    '/api/tag-audit/feature',
+    { action: 'save_feature', runDir, featureId, ...fields },
+    token,
+  );
+export const deleteAuditFeature = (runDir: string, featureId: string, token: string) =>
+  request<EditResult>('/api/tag-audit/feature', { action: 'delete_feature', runDir, featureId }, token);
+
 export const getLoraFilesInfo = (directory: string) =>
   request<LoraFilesInfo>(`/api/lora/files?directory=${encodeURIComponent(directory)}`);
 export const renameLoraFiles = (directory: string, changes: LoraRenameChange[], token: string) =>

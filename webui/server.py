@@ -11,7 +11,9 @@ from core.dataset_pipeline.core import DEFAULTS, Run, asset, run_lock
 from core.dataset_pipeline.datasets import delete_dataset, detect_source, import_config, import_sources, list_datasets, replace_source_image, upscale_source
 from core.dataset_pipeline.forge import ForgeClient
 from core.dataset_pipeline.geometry import default_scale
-from core.dataset_pipeline.tag_audit import audit_run, audit_view, edit_audit, validate_options as validate_audit_options
+from core.dataset_pipeline.feature_audit import edit_feature
+from core.dataset_pipeline.tag_audit import (audit_run, audit_view, edit_audit, eligible_samples,
+                                             prepare_feature_check, validate_options as validate_audit_options)
 from core.dataset_pipeline.tagging import apply_filters, restore_captions, tag_run, validate_options
 from tools.analysis.job import AnalysisJob
 from tools.dataset import DatasetToolsJob, scan_files
@@ -104,7 +106,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
         overrides = {key: template[key] for key in RUNTIME_KEYS} if settings_path else None
         return Run.load(folder, config_overrides=overrides)
 
-    def process_job(action, group=None, source_id=None, tagging=None, audit=None):
+    def process_job(action, group=None, source_id=None, tagging=None, audit=None, feature_id=None):
         try:
             with run_lock(directory):
                 run = load_run(directory)
@@ -138,7 +140,12 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     def audit_progress(done, total):
                         with mutex:
                             job.update(done=done, total=total)
-                    errors = audit_run(run, audit, audit_progress)
+
+                    def report_failure():
+                        with mutex:
+                            job['failedCount'] += 1
+
+                    errors = audit_run(run, audit, audit_progress, feature_id, report_failure)
                 elif action == 'start_tag' and tagging is not None:
                     if model_setup:
                         model_setup(run.config)
@@ -159,7 +166,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
             with mutex:
                 job.update(status="failed", errors=[str(error)])
 
-    def start_job(action, group=None, source_id=None, tagging=None, replace_confirmed=False, audit=None):
+    def start_job(action, group=None, source_id=None, tagging=None, replace_confirmed=False, audit=None, feature_id=None):
         with mutex:
             if directory is None:
                 raise ValueError('请先选择并导入数据集')
@@ -173,11 +180,17 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 raise ValueError("已有任务正在运行")
             with run_lock(directory):
                 run = load_run(directory)
+                audit_feature, audit_total = None, 0
                 if action == 'start_audit':
+                    if feature_id is not None and isinstance(audit, dict):
+                        audit = {**audit, 'visual': True}
                     audit = validate_audit_options(audit)
-                    if not any(s.get('active', True) and c['status'] == 'accepted' and run.current_tag(s, c)
-                               for s in run.data['sources'].values() for c in s['candidates']):
+                    audit_total = len(eligible_samples(run))
+                    if not audit_total:
                         raise ValueError('没有可检查的有效标签')
+                    if feature_id is not None:
+                        feature = prepare_feature_check(run, feature_id, audit)
+                        audit_feature = {key: feature[key] for key in ('id', 'name')}
                 sources = ([run.locate(source_id)] if source_id is not None else
                            [s for s in run.data["sources"].values() if s.get("active", True)
                             and (action not in ('start_upscale', 'start_detect') or not group or s['group'] == group)])
@@ -190,7 +203,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     if action == 'start_tag' and tagging is not None:
                         tagging = validate_options(tagging)
                         if any(c.get('tag') for s in sources for c in s['candidates'] if c['status'] == 'accepted') and replace_confirmed is not True:
-                            raise ValueError('请确认替换工作目录中的已有标签；导入来源不会被修改')
+                            raise ValueError('请确认替换工作目录中的已有标签，包括已应用的核心特征补标')
                     if not sources or any(s.get("error") for s in sources):
                         raise ValueError("没有可用图片或图片准备失败，请先完成准备")
                     if any(c["status"] == "pending" for s in sources for c in s["candidates"]):
@@ -199,8 +212,9 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                                               for s in sources for c in s["candidates"] if c["status"] == "accepted"):
                         raise ValueError("请先完成所有接受样本的打标")
             job.update(id=secrets.token_hex(8), status="running", action=action, errors=[], count=None,
-                       total=0, done=0, explicitTagging=tagging is not None)
-        threading.Thread(target=process_job, args=(action, group, source_id, tagging, audit), daemon=True).start()
+                       total=audit_total, done=0, explicitTagging=tagging is not None,
+                       auditFeature=audit_feature, failedCount=0)
+        threading.Thread(target=process_job, args=(action, group, source_id, tagging, audit, feature_id), daemon=True).start()
 
     class Handler(BaseHTTPRequestHandler):
         def valid_host(self):
@@ -328,7 +342,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 return
             if self.path not in ("/api/settings", "/api/edit", '/api/analysis/start', '/api/analysis/cancel', '/api/lora/rename',
                                  '/api/datasets/import', '/api/datasets/open', '/api/datasets/delete',
-                                 '/api/denoise/start', '/api/denoise/models',
+                                 '/api/denoise/start', '/api/denoise/models', '/api/tag-audit/feature',
                                  '/api/tools/scan', '/api/tools/preview', '/api/tools/execute', '/api/tools/cancel'):
                 self.reply(404, {"error": "接口不存在"})
                 return
@@ -343,6 +357,20 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 if self.path in ('/api/denoise/start', '/api/denoise/models'):
                     action = 'denoise' if self.path.endswith('/start') else 'denoise_models'
                     self.reply(202, start_denoise(action, data))
+                    return
+                if self.path == '/api/tag-audit/feature':
+                    action = data.get('action')
+                    if action not in ('save_feature', 'delete_feature'):
+                        raise ValueError('未知特征操作')
+                    with mutex:
+                        requested = data.get('runDir')
+                        if directory is None or not isinstance(requested, str) or Path(requested).resolve() != directory:
+                            raise ValueError('当前数据集已变化，请刷新后重试')
+                        if job['status'] == 'running':
+                            raise ValueError('任务正在运行，完成后可编辑特征')
+                        with run_lock(directory):
+                            result = edit_feature(load_run(directory), data)
+                    self.reply(200, {'ok': True, 'result': result})
                     return
                 if self.path == '/api/settings':
                     if settings_path is None:
@@ -432,7 +460,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     return
                 if data.get("action") in ("start_tag", "export", "sync_sources", 'start_upscale', 'start_detect', 'start_audit'):
                     start_job(data["action"], data.get('group'), data.get('source'),
-                              data.get('tagging'), data.get('replaceConfirmed', False), data.get('audit'))
+                              data.get('tagging'), data.get('replaceConfirmed', False), data.get('audit'),
+                              data.get('featureId'))
                     self.reply(202, {"ok": True, "result": {}})
                     return
                 with mutex, run_lock(directory):

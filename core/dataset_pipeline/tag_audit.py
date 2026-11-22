@@ -9,10 +9,13 @@ from urllib.parse import urlparse
 import requests
 from PIL import Image, ImageOps
 
-from .core import asset, digest, normalize
+from .core import apply_tag_operation, asset, digest, normalize
+from .feature_audit import (FEATURE_PROMPT, check_feature_conflict, check_reference, feature_tags,
+                            get_feature, image_version, validate_feature_observation)
 from .forge import encode_image
 
 FRAMING = {'full body', 'upper body', 'lower body', 'portrait', 'cowboy shot'}
+FEATURE_INPUT = 'target_only'
 COUNT = re.compile(r'^(?:[1-6](?:girl|boy)s?|multiple (?:girls|boys)|solo|no humans)$')
 PROMPT = '''Observe only the supplied training image, not the original uncropped scene.
 Do not infer hidden body parts or character identity. Return ONLY one JSON object:
@@ -56,21 +59,17 @@ def validate_options(value):
             'forbidden': forbidden, 'concurrency': concurrency}
 
 
-def image_version(run, source, candidate):
-    if not source.get('active', True) or candidate['status'] != 'accepted' or not run.current_tag(source, candidate):
-        raise ValueError('样本标签已过期或不可用')
-    tag = candidate['tag']
-    path = asset(run.directory, tag['image'])
-    stat = path.stat()
-    return digest([tag['key'], tag['image'], candidate.get('box'), stat.st_size, stat.st_mtime_ns])
-
-
 def context_tags(tags, category, name):
     if category == 'count':
         return sorted(t for t in tags if COUNT.fullmatch(t))
     if category == 'framing':
         return sorted(t for t in tags if t in FRAMING)
     return [name] if name in tags else []
+
+
+def feature_context(tags, required):
+    present = {normalize(tag) for tag in tags}
+    return [tag for tag in required if tag in present]
 
 
 def validate_observation(value):
@@ -98,31 +97,49 @@ def validate_observation(value):
                                           'framing_certain', 'count_reason', 'framing_reason')}
 
 
-def observe(path, options):
+def image_part(path):
     with Image.open(path) as image:
         oriented = ImageOps.exif_transpose(image).convert('RGB')
         oriented.thumbnail((1536, 1536), Image.Resampling.LANCZOS)
         payload = encode_image(oriented)
+    return {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + payload}}
+
+
+def observe(path, options):
+    return request_observation(options, [{'type': 'text', 'text': PROMPT}, image_part(path)], validate_observation)
+
+
+def observe_feature(path, options, feature):
+    definition = json.dumps({'name': feature['name'], 'description': feature['description']}, ensure_ascii=False)
+    content = [
+        {'type': 'text', 'text': f'{FEATURE_PROMPT}\nFeature definition: {definition}'},
+        image_part(path),
+    ]
+    return request_observation(options, content, validate_feature_observation)
+
+
+def request_observation(options, content, validate):
     # 禁止跟随重定向，图片仅发送到用户配置的本机服务。
     with requests.Session() as session:
         session.trust_env = False
         response = session.post(options['endpoint'] + '/chat/completions', timeout=(10, 180), allow_redirects=False,
                                 json={'model': options['model'], 'temperature': 0, 'max_tokens': 4096,
-                                      'messages': [{'role': 'user', 'content': [
-                                          {'type': 'text', 'text': PROMPT},
-                                          {'type': 'image_url', 'image_url': {'url': 'data:image/png;base64,' + payload}}]}]})
+                                      'messages': [{'role': 'user', 'content': content}]})
     if response.status_code != 200:
         raise ValueError(f'本地视觉接口返回 HTTP {response.status_code}')
     try:
         choice = response.json()['choices'][0]
         if choice.get('finish_reason') == 'length':
             raise ValueError('模型输出达到长度限制，未完成观察；请关闭模型思考模式或使用其他视觉模型')
-        content = choice['message']['content']
+        message = choice['message']
+        if choice.get('finish_reason') not in (None, 'stop') or message.get('refusal'):
+            raise ValueError('模型拒绝或未完成观察')
+        content = message['content']
         if not isinstance(content, str):
             raise ValueError('模型未返回文本')
         content = re.sub(r'^```(?:json)?\s*|\s*```$', '', content.strip())
-        return validate_observation(json.loads(content))
-    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
+        return validate(json.loads(content))
+    except (KeyError, IndexError, TypeError, AttributeError, json.JSONDecodeError) as error:
         raise ValueError('模型未返回有效的观察 JSON；未更改标签') from error
 
 
@@ -157,31 +174,89 @@ def suggestions(tags, observation):
     return result
 
 
-def finding_current(run, finding, options, versions=None):
+def current_result_candidate(run, result, versions):
+    source, candidate = run.locate(result['source'], result['candidate'])
+    pair = (source['id'], candidate['id'])
+    if pair not in versions:
+        versions[pair] = image_version(run, source, candidate)
+    if versions[pair] != result['imageVersion']:
+        raise ValueError('目标图片已变化')
+    return candidate
+
+
+def feature_current(run, feature, checked):
+    key = (feature['id'], feature['version'])
+    if key not in checked:
+        try:
+            saved = get_feature(run, feature['id'])
+            if saved['version'] != feature['version']:
+                raise ValueError('特征定义已变化')
+            check_reference(run, saved)
+            checked[key] = True
+        except (ValueError, OSError):
+            checked[key] = False
+    return checked[key]
+
+
+def finding_current(run, finding, audit, versions, checked):
     try:
-        source, candidate = run.locate(finding['source'], finding['candidate'])
-        pair = (source['id'], candidate['id'])
-        if versions is not None and pair in versions:
-            version = versions[pair]
-        else:
-            version = image_version(run, source, candidate)
-            if versions is not None:
-                versions[pair] = version
-        if version != finding['imageVersion']:
-            return False
+        candidate = current_result_candidate(run, finding, versions)
+        options = audit.get('options', {})
+        if finding.get('action') == 'add':
+            latest = audit.get('featureRun', {})
+            if finding['round'] != latest.get('id') or latest.get('input') != FEATURE_INPUT:
+                return False
+            feature = latest['feature']
+            check_feature_conflict(feature, options)
+            if not feature_current(run, finding['feature'], checked):
+                return False
+            return finding['context'] == feature_context(candidate['tag']['tags'], feature_tags(feature))
         if finding['category'] == 'rule' and finding['tag'] not in options.get('forbidden', []):
             return False
-        return finding['context'] == context_tags(candidate['tag']['tags'], finding['category'], finding['tag'])
+        context = context_tags(candidate['tag']['tags'], finding['category'], finding['tag'])
+        return finding['context'] == context
     except (KeyError, ValueError, OSError, StopIteration):
         return False
 
 
 def audit_view(run):
     audit = copy.deepcopy(run.data.get('tag_audit', {}))
-    versions = {}
+    versions, checked = {}, {}
+    for feature in audit.get('features', {}).values():
+        feature['tags'] = feature_tags(feature)
+        if feature.get('reference'):
+            feature['reference'].pop('region', None)
+        try:
+            check_reference(run, feature)
+            valid = True
+        except ValueError as error:
+            feature['referenceError'] = str(error)
+            valid = False
+        checked[(feature['id'], feature['version'])] = valid
     for finding in audit.get('findings', []):
-        if finding['status'] in ('pending', 'ignored') and not finding_current(run, finding, audit.get('options', {}), versions):
+        if finding.get('action') == 'add' and finding['round'] != audit.get('featureRun', {}).get('id'):
+            continue
+        if finding['status'] in ('pending', 'ignored') and not finding_current(run, finding, audit, versions, checked):
             finding['status'] = 'stale'
+    latest = audit.get('featureRun')
+    if latest:
+        feature = latest['feature']
+        feature['tags'] = feature_tags(feature)
+        if feature.get('reference'):
+            feature['reference'].pop('region', None)
+        valid_feature = latest.get('input') == FEATURE_INPUT and feature_current(run, feature, checked)
+        for sample in latest['samples']:
+            if sample.get('findingId') or sample['status'] == 'failed':
+                continue
+            try:
+                candidate = current_result_candidate(run, sample, versions)
+                context = feature_context(candidate['tag']['tags'], feature['tags'])
+                if not valid_feature or sample['context'] != context:
+                    sample['status'] = 'stale'
+            except (KeyError, ValueError, OSError, StopIteration):
+                sample['status'] = 'stale'
+        audit['findings'] = [f for f in audit['findings']
+                             if f.get('action') != 'add' or f['round'] == latest['id']]
     return audit
 
 
@@ -206,33 +281,101 @@ def inspect_sample(run, source, candidate, options):
             fid = digest([source['id'], candidate['id'], version, category, name])
             findings.append({'id': fid, 'source': source['id'], 'candidate': candidate['id'],
                              'name': f"{source['relative']} · {candidate['id']}", 'category': category,
-                             'tag': name, 'reason': reason, 'status': 'pending', 'imageVersion': version,
+                             'action': 'remove', 'tag': name, 'reason': reason, 'status': 'pending', 'imageVersion': version,
                              'context': context, 'model': options['model'] if category != 'rule' else None})
     except Exception as error:
         sample.update(status='failed', error=str(error))
     return sample, findings
 
 
-def audit_run(run, options, progress):
-    audit = run.data.setdefault('tag_audit', {'findings': [], 'batches': []})
-    audit['options'] = options
-    audit['samples'] = []
-    samples = [(s, c) for s in run.data['sources'].values() if s.get('active', True)
-               for c in s['candidates'] if c['status'] == 'accepted' and run.current_tag(s, c)]
+def inspect_feature_sample(run, source, candidate, options, latest):
+    feature = latest['feature']
+    sample = {'source': source['id'], 'candidate': candidate['id'], 'name': source['relative']}
+    try:
+        sample['imageVersion'] = image_version(run, source, candidate)
+        sample['context'] = feature_context(candidate['tag']['tags'], feature_tags(feature))
+        observation = observe_feature(asset(run.directory, candidate['tag']['image']), options, feature)
+        sample.update(status=observation['state'], reason=observation['reason'])
+    except Exception as error:
+        sample.update(status='failed', error=f'特征检查失败：{error}')
+        return sample, []
+    if sample['status'] != 'present':
+        return sample, []
+    missing = [tag for tag in feature_tags(feature) if tag not in sample['context']]
+    if not missing:
+        sample['status'] = 'consistent'
+        return sample, []
+    finding = {**sample, 'id': secrets.token_hex(12), 'name': f"{sample['name']} · {candidate['id']}",
+               'feature': {'id': feature['id'], 'version': feature['version']}, 'round': latest['id'],
+               'category': 'feature', 'action': 'add', 'tags': missing, 'status': 'pending',
+               'model': options['model']}
+    return sample, [finding]
+
+
+def eligible_samples(run):
+    return [(s, c) for s in run.data['sources'].values() if s.get('active', True)
+            for c in s['candidates'] if c['status'] == 'accepted' and run.current_tag(s, c)]
+
+
+def prepare_feature_check(run, feature_id, options):
+    feature = get_feature(run, feature_id)
+    check_feature_conflict(feature, options)
+    check_reference(run, feature)
+    return feature
+
+
+def ignore_key(finding):
+    return (finding['source'], finding['candidate'], finding['imageVersion'],
+            finding['feature']['id'], finding['feature']['version'], tuple(feature_tags(finding)))
+
+
+def audit_run(run, options, progress, feature_id=None, report_failure=None):
+    samples = eligible_samples(run)
     if not samples:
         raise ValueError('没有可检查的有效标签，请先完成打标或导入 TXT')
+    audit = run.data.setdefault('tag_audit', {'findings': [], 'batches': []})
+    latest = None
+    if feature_id is not None:
+        feature = copy.deepcopy(prepare_feature_check(run, feature_id, options))
+        feature['reference'].pop('region', None)
+        latest = {'id': secrets.token_hex(12), 'feature': feature, 'total': len(samples), 'samples': [],
+                  'input': FEATURE_INPUT}
+        audit['featureRun'] = latest
+        audit['findings'] = [f for f in audit['findings'] if f.get('action') != 'add' or f['status'] != 'pending']
+    else:
+        audit['samples'] = []
+    # 特征检查始终使用视觉服务，保留原有人数与构图检查的开关。
+    audit['options'] = {**options, 'visual': audit.get('options', {}).get('visual', True)} if latest else options
+    run.save()
     progress(0, len(samples))
     errors = []
-    existing = {f['id']: f for f in audit['findings']}
+    existing = {f['id']: f for f in audit['findings'] if f.get('action') != 'add'}
+    ignored = {ignore_key(f): f for f in audit['findings']
+               if f.get('action') == 'add' and f['status'] == 'ignored'} if latest else {}
     workers = min(options.get('concurrency', 1), len(samples)) if options['visual'] else 1
     # 工作线程只观察样本；结果合并、进度和记录写入集中在当前线程，避免并发修改运行记录。
     with ThreadPoolExecutor(max_workers=workers) as executor:
-        futures = [executor.submit(inspect_sample, run, source, candidate, options) for source, candidate in samples]
+        if latest:
+            futures = [executor.submit(inspect_feature_sample, run, s, c, options, latest) for s, c in samples]
+        else:
+            futures = [executor.submit(inspect_sample, run, s, c, options) for s, c in samples]
         for index, future in enumerate(as_completed(futures), 1):
             sample, findings = future.result()
             if sample['status'] == 'failed':
-                errors.append(f"{sample['name']}/{sample['candidate']}: {sample['error']}")
+                error = f"{sample['name']}/{sample['candidate']}: {sample['error']}"
+                errors.append(error)
+                if report_failure:
+                    report_failure()
             for finding in findings:
+                if latest:
+                    previous = ignored.get(ignore_key(finding))
+                    if previous:
+                        previous.update(round=latest['id'], reason=finding['reason'], model=finding['model'])
+                        finding = previous
+                    else:
+                        audit['findings'].append(finding)
+                    sample['findingId'] = finding['id']
+                    continue
                 fid = finding['id']
                 if (fid in existing and existing[fid]['status'] in ('pending', 'ignored')
                         and existing[fid]['context'] == finding['context']):
@@ -241,7 +384,7 @@ def audit_run(run, options, progress):
                     audit['findings'].remove(existing[fid])
                 audit['findings'].append(finding)
                 existing[fid] = finding
-            audit['samples'].append(sample)
+            (latest or audit)['samples'].append(sample)
             run.save()
             progress(index, len(samples))
     return errors
@@ -283,13 +426,13 @@ def edit_audit(run, data):
 
 
 def rebase_findings(audit, changes, reverse=False):
-    # 本页明确删除/恢复标签不会改变视觉事实；保留其他建议，避免逐项应用后被迫重跑模型。
+    # 本页应用或撤销不会改变视觉事实；保留仍适用的其他建议。
     for change in changes:
         before, after = (change['after'], change['before']) if reverse else (change['before'], change['after'])
         for finding in audit['findings']:
-            if (finding['status'] in ('pending', 'ignored') and finding['source'] == change['source']
+            if (finding.get('action') != 'add' and finding['status'] in ('pending', 'ignored')
+                    and finding['source'] == change['source'] and finding['tag'] in after
                     and finding['candidate'] == change['candidate'] and finding['imageVersion'] == change['imageVersion']
-                    and finding['tag'] in after
                     and finding['context'] == context_tags(before, finding['category'], finding['tag'])):
                 finding['context'] = context_tags(after, finding['category'], finding['tag'])
 
@@ -310,7 +453,12 @@ def _edit_audit(run, data):
                 raise ValueError('应用后图片或标签已有变化，请先撤销后续批次，或在标签编辑中手动恢复')
             targets.append((candidate, change))
         for candidate, change in targets:
-            candidate['tag']['operations'].append({'mode': 'set', 'tags': change['before'], 'origin': 'audit_undo'})
+            before, after = change['before'], change['after']
+            if after[:len(before)] == before:
+                operation = {'mode': 'remove', 'tags': after[len(before):], 'origin': 'audit_undo'}
+            else:
+                operation = {'mode': 'set', 'tags': before, 'origin': 'audit_undo'}
+            candidate['tag']['operations'].append(operation)
             candidate['tag']['tags'] = change['before'][:]
             run.write_tag_file(candidate['tag'])
         rebase_findings(audit, batch['changes'], reverse=True)
@@ -325,8 +473,12 @@ def _edit_audit(run, data):
         raise ValueError('请选择检查结果')
     by_id = {f['id']: f for f in audit['findings']}
     findings = [by_id.get(i) for i in dict.fromkeys(ids)]
-    if any(not f or f['status'] != 'pending' or not finding_current(run, f, audit['options']) for f in findings):
-        raise ValueError('所选结果已处理或过期，请刷新检查结果')
+    versions, checked = {}, {}
+    for finding in findings:
+        if finding and finding.get('action') == 'add':
+            check_feature_conflict(audit['featureRun']['feature'], audit.get('options', {}))
+        if not finding or finding['status'] != 'pending' or not finding_current(run, finding, audit, versions, checked):
+            raise ValueError('所选结果已处理或过期，请刷新检查结果')
     if action == 'ignore_audit':
         for finding in findings:
             finding['status'] = 'ignored'
@@ -337,16 +489,21 @@ def _edit_audit(run, data):
     changes = {}
     for finding in findings:
         pair = (finding['source'], finding['candidate'])
-        source, candidate = run.locate(*pair)
+        _, candidate = run.locate(*pair)
         if pair not in changes:
             before = candidate['tag']['tags'][:]
             changes[pair] = {'source': pair[0], 'candidate': pair[1], 'imageVersion': finding['imageVersion'],
                              'before': before, 'after': before[:]}
-        changes[pair]['after'] = [t for t in changes[pair]['after'] if t != finding['tag']]
+        operation = {'mode': finding.get('action', 'remove'), 'tags': feature_tags(finding)}
+        changes[pair]['after'] = apply_tag_operation(changes[pair]['after'], operation)
     batch = {'id': secrets.token_hex(8), 'findings': list(dict.fromkeys(ids)), 'changes': list(changes.values()), 'undone': False}
     for pair, change in changes.items():
         _, candidate = run.locate(*pair)
-        candidate['tag']['operations'].append({'mode': 'remove', 'tags': [t for t in change['before'] if t not in change['after']], 'origin': 'audit'})
+        for mode, before, after in (('remove', change['after'], change['before']),
+                                    ('add', change['before'], change['after'])):
+            difference = [tag for tag in after if tag not in before]
+            if difference:
+                candidate['tag']['operations'].append({'mode': mode, 'tags': difference, 'origin': 'audit'})
         candidate['tag']['tags'] = change['after'][:]
         run.write_tag_file(candidate['tag'])
     for finding in findings:

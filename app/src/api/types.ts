@@ -114,6 +114,8 @@ export interface JobInfo {
   done: number;
   count?: number;
   errors: string[];
+  auditFeature?: Pick<TagAuditFeature, 'id' | 'name'> | null;
+  failedCount?: number;
 }
 export interface PreviewInfo {
   total: number;
@@ -142,15 +144,40 @@ export interface TagAuditFinding {
   source: string;
   candidate: string;
   name: string;
-  category: 'framing' | 'count' | 'rule';
-  tag: string;
+  category: 'framing' | 'count' | 'rule' | 'feature';
+  action?: 'add' | 'remove';
+  tag?: string;
+  tags?: string[];
   reason: string;
   status: 'pending' | 'ignored' | 'applied' | 'stale';
   model: string | null;
 }
+export interface TagAuditFeatureFields {
+  name: string;
+  description: string;
+  tags: string[];
+  reference: Pick<TagAuditFinding, 'source' | 'candidate'>;
+}
+export interface TagAuditFeature extends Omit<TagAuditFeatureFields, 'reference'> {
+  id: string;
+  version: string;
+  reference?: TagAuditFeatureFields['reference'];
+  referenceError?: string;
+}
+export interface TagAuditFeatureSample {
+  source: string;
+  candidate: string;
+  name: string;
+  status: 'present' | 'consistent' | 'absent' | 'unobservable' | 'uncertain' | 'failed' | 'stale';
+  findingId?: string;
+  reason?: string;
+  error?: string;
+}
 export interface TagAuditInfo {
   options?: TagAuditOptions;
   findings: TagAuditFinding[];
+  features?: Record<string, TagAuditFeature>;
+  featureRun?: { id: string; feature: TagAuditFeature; total: number; samples: TagAuditFeatureSample[] };
   samples?: {
     source: string;
     candidate: string;
