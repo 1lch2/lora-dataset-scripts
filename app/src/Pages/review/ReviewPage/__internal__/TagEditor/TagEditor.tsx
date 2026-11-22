@@ -10,7 +10,7 @@ import { TagCards } from '../TagCards';
 export function TagEditor() {
   const v = useReviewContext();
   return (
-    <main id='tagView' role='tabpanel' aria-labelledby='tagTab' hidden={v.stage !== 'tag'}>
+    <main id='tagView' role='tabpanel' aria-labelledby='tagTab'>
       <section className='tagGallery' aria-label='标签样本'>
         <div className='galleryHeading'>
           <strong id='visibleCount'>{`${v.tags.visibleTags.length} 份样本`}</strong>

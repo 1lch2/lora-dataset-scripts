@@ -1,3 +1,4 @@
+import { Activity } from 'react';
 import { ReviewContext } from '../context';
 import { useReview } from '../useReview';
 import { Header } from './__internal__/Header';
@@ -17,6 +18,7 @@ import styles from './styles.module.css';
 export function ReviewPage({ session }: ReviewPageProps) {
   const startInAnalysis = session.analysisOnly || new URLSearchParams(location.search).has('analysis');
   const review = useReview(session, startInAnalysis);
+  const runDirectory = review.state?.datasetLoaded ? review.state.config.run_dir : undefined;
   return (
     <ReviewContext value={review}>
       <div className={styles.page}>
@@ -31,11 +33,15 @@ export function ReviewPage({ session }: ReviewPageProps) {
           />
           <Library />
           <CropEditor />
-          {review.stage === 'tagging' && review.state?.datasetLoaded ? (
-            <Tagging key={review.state.config.run_dir} />
+          {review.stage === 'tagging' && runDirectory ? <Tagging key={`tagging:${runDirectory}`} /> : null}
+          <Activity mode={review.stage === 'tag' ? 'visible' : 'hidden'}>
+            <TagEditor />
+          </Activity>
+          {runDirectory ? (
+            <Activity key={`audit:${runDirectory}`} mode={review.stage === 'audit' ? 'visible' : 'hidden'}>
+              <TagAudit />
+            </Activity>
           ) : null}
-          <TagEditor />
-          {review.state?.datasetLoaded ? <TagAudit key={review.state.config.run_dir} /> : null}
         </div>
         {review.stage !== 'home' ? <StatusBar /> : null}
         <PreviewDialog />

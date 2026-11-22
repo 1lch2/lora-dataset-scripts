@@ -560,13 +560,7 @@ export function TagAudit() {
     ? getImageUrl(referenceSample[0], 'tag', updatedAt, referenceSample[1])
     : '';
   return (
-    <main
-      id='auditView'
-      className={styles.page}
-      role='tabpanel'
-      aria-labelledby='auditTab'
-      hidden={v.stage !== 'audit'}
-    >
+    <main id='auditView' className={styles.page} role='tabpanel' aria-labelledby='auditTab'>
       {supplement ? (
         <SupplementDialog confirmation={supplement} disabled={disabled} onClose={handleSupplementClose} />
       ) : null}
