@@ -1,1 +1,0 @@
-export { Tagging } from './Tagging';

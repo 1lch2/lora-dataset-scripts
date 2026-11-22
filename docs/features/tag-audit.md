@@ -6,8 +6,8 @@
 
 ## 入口和实现
 
-- [Header](../../app/src/Pages/review/ReviewPage/__internal__/Header/Header.tsx)：顶栏“标签检查”入口，与“标签编辑”并列，打开数据集后可用。
-- [TagAudit](../../app/src/Pages/review/ReviewPage/__internal__/TagAudit/TagAudit.tsx) 提供“错标检查”和“漏标补充”，包括特征编辑、图片预览、状态筛选、单项或批量处理、共用应用历史与撤销。
+- [Header](../../app/src/App/__internal__/Header/Header.tsx)：顶栏“标签检查”入口，与“标签编辑”并列，打开数据集后可用。
+- [TagAuditPage](../../app/src/Pages/TagAuditPage/TagAuditPage.tsx) 提供“错标检查”和“漏标补充”，包括特征编辑、图片预览、状态筛选、单项或批量处理、共用应用历史与撤销。
 - [tag_audit.py](../../core/dataset_pipeline/tag_audit.py) 复用本地服务请求与图像预处理。`audit_run` 并发观察，后台任务线程逐样本合并和保存。原异常结果与最近一轮特征观察均保存在运行记录 `tag_audit`，共用建议与批次处理。
 - [feature_audit.py](../../core/dataset_pipeline/feature_audit.py) 管理特征定义、参考图版本、禁用标签冲突及特征观察协议。
 - [server.py](../../webui/server.py) 通过 `start_audit` 启动两类检查，通过 `retry_audit_failed` 重试异常检查的失败样本。前端热更新时，旧 Python 后端会拒绝独立重试操作并提示重启 WebUI。`apply_audit`、`ignore_audit`、`undo_audit` 和特征编辑与后台任务互斥。`/api/tag-audit/feature` 保存定义及所选样本，`/image` 提供训练图预览，`/api/state` 检查参考图及结果是否有效。

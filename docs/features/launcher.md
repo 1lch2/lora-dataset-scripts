@@ -19,7 +19,7 @@
 ## 网页配置
 
 - [settings.py](../../webui/settings.py)：设置白名单、类型和数值验证、原子保存；检查 Forge 根目录与已启用的 `1lch2/stable-diffusion-webui-wd14-tagger` Git origin，固定 EVA02-Large v3 模型和项目内置 CSV。不会安装插件或移动模型。
-- [Settings](../../app/src/Pages/review/ReviewPage/__internal__/Settings/Settings.tsx)：顶部设置弹窗，首次未配置时自动显示；默认只需 Forge 目录，处理参数放在折叠区。使用 TanStack Query 获取和保存设置。
+- [Settings](../../app/src/App/__internal__/Settings/Settings.tsx)：顶部设置弹窗，首次未配置时自动显示；默认只需 Forge 目录，处理参数放在折叠区。使用 TanStack Query 获取和保存设置。
 - [server.py](../../webui/server.py)：`GET/POST /api/settings`，写入受本地 Host、会话 token 与任务互斥保护；读取运行时覆盖处理参数，保留数据集路径与身份。独立分析和未启用设置的入口不显示设置控件。
 - [core.py](../../core/dataset_pipeline/core.py)：`Run.load(config_overrides=...)` 在创建模型客户端前应用当前配置；词表使用内置资源。
 - [词表来源](../../data/tags/README.md)：固定 revision、文件用途与 SHA-256。

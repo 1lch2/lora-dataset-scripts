@@ -8,7 +8,7 @@ features:
     keywords: [图像降噪, 鱼鳞, 伪影, L0, FFT, BOX, 预缩放, Alpha, PNG, 超分模型, 分割对比]
     doc: docs/features/image-denoise.md
     entrypoints:
-      - app/src/Pages/denoise/DenoisePage/DenoisePage.tsx
+      - app/src/Pages/DatasetToolsPage/DenoisePage/DenoisePage.tsx
       - tools/denoise.py
       - webui/server.py
   - id: tag-audit
@@ -16,7 +16,7 @@ features:
     keywords: [标签检查, 核心特征, 漏标, 补标, 补标确认, 数据集参考图, 参考图选择弹窗, 标签组合, 多选, 可观察描述, 工作标签, 目标标签, 视觉模型, 默认模型, qwen3.5, 人物数量, solo, full body, 构图范围, 禁用标签, virtual youtuber, 异常, 撤销, 并发, 并发滑杆, 并发请求数, 失败原因, 重试失败项, retry_audit_failed]
     doc: docs/features/tag-audit.md
     entrypoints:
-      - app/src/Pages/review/ReviewPage/__internal__/TagAudit/TagAudit.tsx
+      - app/src/Pages/TagAuditPage/TagAuditPage.tsx
       - core/dataset_pipeline/tag_audit.py
       - core/dataset_pipeline/feature_audit.py
       - webui/server.py
@@ -25,7 +25,7 @@ features:
     keywords: [打标, tagger, WD, PixAI, 混合, meta, highres, masterpiece, 置信度, 共同支持, 补充, 增减预览, 热力图, 重合, 恢复TXT, 首次打标, 缩略图, 过滤标签, 对应图片]
     doc: docs/features/tagging.md
     entrypoints:
-      - app/src/Pages/review/ReviewPage/__internal__/Tagging/Tagging.tsx
+      - app/src/Pages/TaggingPage/TaggingPage.tsx
       - core/dataset_pipeline/tagging.py
       - core/dataset_pipeline/forge.py
   - id: dataset-tools
@@ -33,8 +33,8 @@ features:
     keywords: [数据集工具, 左侧导航, 二级导航, 批量处理, 处理工具, 范围, 子目录, 勾选, resize, reverse, deduplicate, 缩放, 镜像, 去重, 另存]
     doc: docs/features/dataset-tools.md
     entrypoints:
-      - app/src/Pages/review/ReviewPage/__internal__/DatasetToolsPage/DatasetToolsPage.tsx
-      - app/src/Pages/tools/DatasetTools/DatasetTools.tsx
+      - app/src/Pages/DatasetToolsPage/DatasetToolsPage.tsx
+      - app/src/Pages/DatasetToolsPage/BatchProcessingPage/BatchProcessingPage.tsx
       - tools/dataset.py
       - webui/server.py
   - id: dataset-utilities
@@ -48,22 +48,24 @@ features:
     keywords: [React, Vite, app/src, 主页, 欢迎页, IDE, 已有数据集, 导入, 递归遍历, 子目录, 完整打标, 待处理, 图片列表, 序号, 裁框, 删除裁切, 标签, 标签编辑, 页签切换, 批量编辑, 批量删除, 重复标签, 筛选, 预览, 导出, 数据集目录, 接入, 已裁切, 同步, 预处理, 放大, 倍率, 批量超分, 单图识别, 主体, 裁切主体, 替换完整图, 恢复原始图, 原文件名, 扩展名]
     doc: docs/features/review-app.md
     entrypoints:
-      - app/src/Pages/review/ReviewPage/ReviewPage.tsx
-      - app/src/Pages/review/useReview.ts
+      - app/src/App/App.tsx
+      - app/src/Pages/HomePage/HomePage.tsx
+      - app/src/Pages/CropPage/CropPage.tsx
+      - app/src/review/useReview.ts
       - webui/server.py
   - id: dataset-analysis
     name: 本地数据集分析
     keywords: [分析, 亮度, 姿势, 重复, 报告, CSV, 对照]
     doc: docs/features/dataset-analysis.md
     entrypoints:
-      - app/src/Pages/analysis/AnalysisView/AnalysisView.tsx
+      - app/src/Pages/DatasetToolsPage/AnalysisPage/AnalysisPage.tsx
       - tools/analysis/job.py
   - id: lora-files
     name: LoRA 文件重命名与效果对比提示词
     keywords: [LoRA, output, safetensors, rename, generate_lora_tag, 重命名, 提示词]
     doc: docs/features/lora-files.md
     entrypoints:
-      - app/src/Pages/lora/LoraTools/LoraTools.tsx
+      - app/src/Pages/LoraToolsPage/LoraToolsPage.tsx
       - tools/lora/rename.py
       - tools/lora/prompts.py
   - id: launcher

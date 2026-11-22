@@ -1,0 +1,1 @@
+export { TaggingPage } from './TaggingPage';

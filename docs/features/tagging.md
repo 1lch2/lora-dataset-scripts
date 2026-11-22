@@ -6,9 +6,9 @@
 
 ## 入口与实现
 
-- [Header](../../app/src/Pages/review/ReviewPage/__internal__/Header/Header.tsx)：打标 tab 位于裁切之后、标签编辑之前；未加载数据集时禁用。页头不再直接启动打标。
-- [Tagging](../../app/src/Pages/review/ReviewPage/__internal__/Tagging/Tagging.tsx)：选择 WD EVA02 Large v3、PixAI v1.0 或混合模式；整个数据集全部已接受样本运行，待审裁框阻止启动。有旧标签时要求确认替换；完整打标数据集在配置中提示替换影响，并提供重新导入源 TXT。没有可用模型证据时居中显示模型、保留下限和开始按钮，不展示空结果区；导入 TXT 本身不视为模型证据。打标中显示进度，任务结束并读取完整状态后切换为左侧缩略图、右侧分数与合并结果；读取失败提供重试，任务部分失败仍可审核有效结果。结果页的重新打标配置默认折叠。
-- [taggingUtils](../../app/src/Pages/review/ReviewPage/__internal__/Tagging/taggingUtils.ts)：前端合并预览、互斥分组与热力图分箱。主视图按共同支持 → WD 补充 → PixAI 补充 → 已过滤的优先级归组，保留条件与后端一致；分组表示保留依据，不是准确率。
+- [Header](../../app/src/App/__internal__/Header/Header.tsx)：打标 tab 位于裁切之后、标签编辑之前；未加载数据集时禁用。页头不再直接启动打标。
+- [TaggingPage](../../app/src/Pages/TaggingPage/TaggingPage.tsx)：选择 WD EVA02 Large v3、PixAI v1.0 或混合模式；整个数据集全部已接受样本运行，待审裁框阻止启动。有旧标签时要求确认替换；完整打标数据集在配置中提示替换影响，并提供重新导入源 TXT。没有可用模型证据时居中显示模型、保留下限和开始按钮，不展示空结果区；导入 TXT 本身不视为模型证据。打标中显示进度，任务结束并读取完整状态后切换为左侧缩略图、右侧分数与合并结果；读取失败提供重试，任务部分失败仍可审核有效结果。结果页的重新打标配置默认折叠。
+- [taggingUtils](../../app/src/Pages/TaggingPage/taggingUtils.ts)：前端合并预览、互斥分组与热力图分箱。主视图按共同支持 → WD 补充 → PixAI 补充 → 已过滤的优先级归组，保留条件与后端一致；分组表示保留依据，不是准确率。
 - [tagging.py](../../core/dataset_pipeline/tagging.py)：输入校验、双模型同图推理、完整证据保存、合并和源标签恢复。任一模型失败保留该样本原有标签并报告错误；任务逐样本写入，已成功样本不会因后续样本失败回滚。重新运行会重新请求全部已接受样本，不复用旧标签跳过推理。
 - [forge.py](../../core/dataset_pipeline/forge.py)：单次调用接受明确模型及采集阈值；使用现有 `/tagger/v1/interrogators` 和 `/tagger/v1/interrogate`。
 - [server.py](../../webui/server.py)：`start_tag` 的 `tagging` 参数开启新流程，`replaceConfirmed` 防止未确认覆盖；`filter_tagging` 和 `restore_captions` 均受会话、运行锁及后台任务互斥保护。旧的无 `tagging` 参数调用仍保留历史行为。

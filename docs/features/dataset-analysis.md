@@ -4,8 +4,8 @@
 
 核对日期：2026-09-27。已核对前端表单、后台任务、报告展示及内部工作进程；统计公式内部未在本次重构中修改。
 
-- [AnalysisView](../../app/src/Pages/analysis/AnalysisView/AnalysisView.tsx)：从「数据集工具 → 数据集分析」打开，提供分析表单、报告操作和逐图筛选分页；`__internal__/` 中拆分 Histogram、Metrics、Similarity。
-- [useAnalysis](../../app/src/Pages/analysis/useAnalysis.ts)：TanStack Query 轮询、任务 mutation、JSON/CSV 下载及本地对照报告。
+- [AnalysisPage](../../app/src/Pages/DatasetToolsPage/AnalysisPage/AnalysisPage.tsx)：从「数据集工具 → 数据集分析」打开，提供分析表单、报告操作和逐图筛选分页；`__internal__/` 中拆分 Histogram、Metrics、Similarity。
+- [useAnalysis](../../app/src/Pages/DatasetToolsPage/AnalysisPage/useAnalysis.ts)：TanStack Query 轮询、任务 mutation、JSON/CSV 下载及本地对照报告。
 - [server.py](../../webui/server.py)：`/api/analysis/*` 路由与会话校验。
 - [job.py](../../tools/analysis/job.py)：启动、取消分析子进程；从仓库根目录执行 `python -m tools.analysis.worker`，不依赖 `PYTHONPATH=core`。
 - [analysis.py](../../tools/analysis/analysis.py)：统计与报告算法保持原状。
