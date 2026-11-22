@@ -47,6 +47,11 @@ interface ReferenceSelection {
   tags: string[];
 }
 
+interface SupplementConfirmation {
+  ids: string[];
+  tags: string[];
+}
+
 function getReferenceTags(sample: TagImage | undefined) {
   if (!sample) return [];
   return [...new Set(sample[1].tag.tags.map((tag) => tag.replaceAll('_', ' ').trim()).filter(Boolean))];
@@ -54,6 +59,56 @@ function getReferenceTags(sample: TagImage | undefined) {
 
 function getFindingTags(finding: TagAuditFinding) {
   return finding.tags ?? (finding.tag ? [finding.tag] : []);
+}
+
+interface SupplementDialogProps {
+  confirmation: SupplementConfirmation;
+  disabled: boolean;
+  onClose: (confirmed: boolean) => void;
+}
+
+function SupplementDialog({ confirmation, disabled, onClose }: SupplementDialogProps) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const heading = useId();
+  const summary = useId();
+  const consequence = useId();
+
+  useEffect(() => {
+    if (dialog.current && !dialog.current.open) dialog.current.showModal();
+  }, []);
+
+  return (
+    <dialog
+      ref={dialog}
+      className={styles.confirmation}
+      aria-labelledby={heading}
+      aria-describedby={`${summary} ${consequence}`}
+      onClose={(event) => onClose(event.currentTarget.returnValue === 'apply')}
+    >
+      <div className={styles.dialogHeading}>
+        <h2 id={heading}>确认补标</h2>
+      </div>
+      <div className={styles.confirmationBody}>
+        <p id={summary}>将应用 {confirmation.ids.length} 项补标建议，追加以下标签。</p>
+        <ul className={styles.confirmationTags}>
+          {confirmation.tags.map((tag) => (
+            <li className='tagChip' key={tag}>
+              {tag}
+            </li>
+          ))}
+        </ul>
+        <p id={consequence}>仅修改工作 TXT，可通过「应用历史与撤销」恢复该批次。</p>
+      </div>
+      <form className={styles.dialogActions} method='dialog'>
+        <button type='submit' value='cancel' autoFocus>
+          取消
+        </button>
+        <button type='submit' className='primary' value='apply' disabled={disabled}>
+          确认补标
+        </button>
+      </form>
+    </dialog>
+  );
 }
 
 interface ReferencePickerProps {
@@ -107,7 +162,7 @@ function ReferencePicker({
 
   return (
     <dialog ref={dialog} className={styles.picker} aria-labelledby={heading} onClose={onDismiss}>
-      <div className={styles.pickerHeading}>
+      <div className={styles.dialogHeading}>
         <h2 id={heading}>选择参考图和标签</h2>
       </div>
       <div className={styles.pickerBody}>
@@ -172,7 +227,7 @@ function ReferencePicker({
           )}
         </section>
       </div>
-      <div className={styles.pickerActions}>
+      <div className={styles.dialogActions}>
         <button type='button' onClick={() => dialog.current?.close()}>
           取消
         </button>
@@ -317,6 +372,7 @@ export function TagAudit() {
   const [category, setCategory] = useState<AuditCategory>('all');
   const [status, setStatus] = useState<FeatureStatus>('pending');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [supplement, setSupplement] = useState<SupplementConfirmation>();
   const [page, setPage] = useState(0);
   const [featureId, setFeatureId] = useState(latest?.feature.id);
   const [form, setForm] = useState<'new' | 'edit'>();
@@ -472,10 +528,13 @@ export function TagAudit() {
           rows.flatMap(({ finding }) => (finding && idSet.has(finding.id) ? getFindingTags(finding) : [])),
         ),
       ];
-      const change = featureMode ? '追加所选建议的标签' : '删除所选异常对应的标签';
+      if (featureMode) {
+        setSupplement({ ids, tags });
+        return;
+      }
       if (
         !window.confirm(
-          `将${change}（${ids.length} 项）：\n${tags.join(', ')}\n\n仅修改工作 TXT，可在本页撤销该批次。`,
+          `将删除所选异常对应的标签（${ids.length} 项）：\n${tags.join(', ')}\n\n仅修改工作 TXT，可在本页撤销该批次。`,
         )
       )
         return;
@@ -483,11 +542,19 @@ export function TagAudit() {
     mutation.mutate({ action, ids });
   }
 
+  function handleSupplementClose(confirmed: boolean) {
+    setSupplement(undefined);
+    if (confirmed && supplement && !disabled) {
+      mutation.mutate({ action: 'apply_audit', ids: supplement.ids });
+    }
+  }
+
   function imageUrl(sample: Pick<AuditRow, 'source' | 'candidate'>) {
     return `/image?source=${encodeURIComponent(sample.source)}&candidate=${encodeURIComponent(sample.candidate)}&kind=tag&v=${encodeURIComponent(v.state?.updated_at || '')}`;
   }
 
   const statusLabels = featureMode ? FEATURE_STATUS_LABELS : ANOMALY_STATUS_LABELS;
+  const modeTitle = featureMode ? '漏标补充' : '错标检查';
   const showingFailed = !featureMode && status === 'failed';
   const referenceUrl = referenceSample
     ? getImageUrl(referenceSample[0], 'tag', updatedAt, referenceSample[1])
@@ -500,12 +567,12 @@ export function TagAudit() {
       aria-labelledby='tagTab'
       hidden={v.stage !== 'tag'}
     >
-      <section
-        className={`tagGallery ${styles.results}`}
-        aria-label={featureMode ? '核心特征检查结果' : '标签异常结果'}
-      >
+      {supplement ? (
+        <SupplementDialog confirmation={supplement} disabled={disabled} onClose={handleSupplementClose} />
+      ) : null}
+      <section className={`tagGallery ${styles.results}`} aria-label={`${modeTitle}结果`}>
         <div className={styles.toolbar}>
-          <h2>{featureMode ? '核心特征补标' : '检查结果'}</h2>
+          <h2>{modeTitle}</h2>
           {!featureMode ? <span>待处理 {pending} 项</span> : null}
           {!featureMode && !showingFailed && failed.length ? (
             <button type='button' onClick={() => handleFilter('failed')}>
@@ -684,14 +751,14 @@ export function TagAudit() {
               className={!featureMode ? 'active' : ''}
               onClick={() => handleModeChange(false)}
             >
-              标签异常检查
+              错标检查
             </button>
             <button
               aria-pressed={featureMode}
               className={featureMode ? 'active' : ''}
               onClick={() => handleModeChange(true)}
             >
-              核心特征补标
+              漏标补充
             </button>
           </div>
           {featureMode ? (
@@ -837,7 +904,7 @@ export function TagAudit() {
           {activeAudit ? (
             <div className={styles.detail} role='status'>
               <p>
-                {v.job.auditFeature ? `正在检查「${v.job.auditFeature.name}」` : '正在检查标签异常'} ·{' '}
+                {v.job.auditFeature ? `正在检查「${v.job.auditFeature.name}」` : '正在检查错标'} ·{' '}
                 {v.job.done} / {v.job.total} 份
               </p>
               <progress aria-label='标签检查进度' max={Math.max(v.job.total, 1)} value={v.job.done} />

@@ -61,16 +61,25 @@
   height: 72px;
   object-fit: contain;
 }
-.picker {
-  width: min(94vw, 1080px);
-  height: min(80dvh, 740px);
+.picker,
+.confirmation {
   padding: 0;
   overflow: hidden;
   background: var(--color-review-surface);
   color: var(--color-review-ink);
   border-radius: var(--review-panel-radius);
 }
-.picker[open] {
+.picker {
+  width: min(94vw, 1080px);
+  height: min(80dvh, 740px);
+}
+.confirmation {
+  width: min(94vw, 560px);
+  height: fit-content;
+  max-height: 80dvh;
+}
+.picker[open],
+.confirmation[open] {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
@@ -81,13 +90,14 @@
   overflow: hidden;
   overscroll-behavior: contain;
 }
-.pickerHeading,
-.pickerActions,
+.dialogHeading,
+.dialogActions,
+.confirmationBody,
 .pickerGallery,
 .pickerTags {
   padding: var(--review-space-4);
 }
-.pickerHeading {
+.dialogHeading {
   border-bottom: 1px solid var(--color-review-line);
 }
 .pickerBody {
@@ -172,11 +182,30 @@
 .referenceTags .referenceTagSelected:hover {
   border-color: var(--color-review-accent);
 }
-.pickerActions {
+.dialogActions {
   display: flex;
   justify-content: flex-end;
   gap: var(--review-space-2);
   border-top: 1px solid var(--color-review-line);
+}
+.confirmationBody {
+  display: grid;
+  align-content: start;
+  gap: var(--review-space-3);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.confirmationBody p,
+.confirmationTags {
+  margin: 0;
+}
+.confirmationTags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--review-space-2);
+  padding: 0;
+  list-style: none;
 }
 .detail {
   display: flex;
