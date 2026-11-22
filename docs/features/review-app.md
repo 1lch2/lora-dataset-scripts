@@ -10,7 +10,8 @@
 - [app/src/App/App.tsx](../../app/src/App/App.tsx) 从 `/api/session` 获取会话，由 `Workspace` 组合页头、各一级页面与底部状态。顶栏页签由 `ReviewStage` 控制，主页隐藏审核工作区与底部状态。`?analysis` 从数据集工具的分析子页进入。
 - `app/src/Pages/` 按顶栏一级页签组织，工具的二级页面位于 [DatasetToolsPage](../../app/src/Pages/DatasetToolsPage/DatasetToolsPage.tsx) 下。页面专属组件随页面放在 `__internal__/` 中，可复用组件在平级的 `app/src/components/` 中按组件名分目录，通过各自的 `index.ts` 导出。
 - 页头“设置”由 [Settings](../../app/src/App/__internal__/Settings/Settings.tsx) 管理 Forge 目录和处理参数，首次未配置时自动打开；持久化、固定插件来源和内置 CSV 见[启动链的网页配置](launcher.md#网页配置)。
-- [useReview](../../app/src/review/useReview.ts)：审核状态、裁框草稿、阶段切换、编辑 mutation、任务轮询与提示；服务端数据由 TanStack Query 管理，客户端状态使用 Hooks。
+- [useReview](../../app/src/review/useReview.ts) 管理审核状态、裁框草稿、阶段切换、编辑 mutation 和任务轮询，并通过 `showToast` 发布短提示。服务端数据由 TanStack Query 管理，客户端状态使用 Hooks。
+- [Toast](../../app/src/components/Toast/Toast.tsx) 由工作台挂载，在视口右上角显示蓝色信息、红色错误和绿色成功通知。普通通知在 6 秒后关闭，悬停或聚焦时暂停。错误与处理中的通知保留到关闭或被后续消息替换。页面底部继续显示任务进度与处理结果。
 - 打标与标签检查使用各自带数据集标识的 React key。标签编辑与检查页通过 `Activity` 保留筛选和选择，隐藏时以较低优先级更新。
 - [HomePage](../../app/src/Pages/HomePage/HomePage.tsx) 提供已有数据集的名称和路径搜索、打开、刷新，以及完整打标和待处理数据集的导入表单。
 - [DatasetToolbar](../../app/src/App/__internal__/DatasetToolbar/DatasetToolbar.tsx) 在裁切、打标和标签编辑页显示当前目录。待处理模式的裁切页提供超分和主体识别按钮，作用于数据集全部图片。

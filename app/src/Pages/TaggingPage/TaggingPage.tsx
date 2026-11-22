@@ -196,19 +196,20 @@ export function TaggingPage() {
           total: v.samples.length,
           done: 0,
         });
-        v.message('打标任务已开始，结果会保留两套独立分数。');
+        v.showToast('打标任务已开始，结果会保留两套独立分数。', 'info');
       } else
-        v.message(
+        v.showToast(
           data.action === 'restore_captions'
             ? '已重新导入源 TXT；来源文件未修改。'
             : '已将预览范围的过滤结果写入工作标签。',
+          'success',
         );
       await Promise.all([
         client.invalidateQueries({ queryKey: ['run'] }),
         client.invalidateQueries({ queryKey: ['job'] }),
       ]);
     },
-    onError: (error: Error) => v.message(error.message, true),
+    onError: (error: Error) => v.showToast(error.message, 'error'),
     onSettled: () => v.setDatasetSwitching(false),
   });
   const disabled = v.processing || mutation.isPending || awaitingResults;
@@ -223,7 +224,7 @@ export function TaggingPage() {
   function handleStart() {
     if (disabled || !v.ready) return;
     if (v.box && (!v.candidate?.box || v.box.some((value, index) => value !== v.candidate?.box?.[index]))) {
-      v.message('当前裁框尚未保存，请返回裁切页保存或取消修改。', true);
+      v.showToast('当前裁框尚未保存，请返回裁切页保存或取消修改。', 'error');
       return;
     }
     if (

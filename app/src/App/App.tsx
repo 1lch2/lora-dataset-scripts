@@ -2,6 +2,7 @@ import { Activity } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getSessionInfo } from '../api/client';
 import { PreviewDialog } from '../components/PreviewDialog';
+import { Toast } from '../components/Toast';
 import { CropPage } from '../Pages/CropPage';
 import { DatasetToolsPage } from '../Pages/DatasetToolsPage';
 import { HomePage } from '../Pages/HomePage';
@@ -33,6 +34,7 @@ function Workspace({ session }: WorkspaceProps) {
             token={session.token}
             defaultDirectory={session.loraOutputDir}
             active={review.stage === 'lora'}
+            onToast={review.showToast}
           />
           <CropPage />
           {review.stage === 'tagging' && runDirectory ? (
@@ -53,6 +55,7 @@ function Workspace({ session }: WorkspaceProps) {
           alt='样本大图'
           onClose={() => review.setPreviewImage('')}
         />
+        <Toast message={review.toast} onDismiss={review.dismissToast} />
       </div>
     </ReviewContext>
   );

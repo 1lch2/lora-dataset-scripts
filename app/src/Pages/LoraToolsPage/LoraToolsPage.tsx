@@ -5,11 +5,9 @@ import type { LoraFilesInfo } from '../../api/types';
 import type { LoraToolsPageProps } from './types';
 import styles from './styles.module.css';
 
-export function LoraToolsPage({ token, defaultDirectory, active }: LoraToolsPageProps) {
+export function LoraToolsPage({ token, defaultDirectory, active, onToast }: LoraToolsPageProps) {
   const [directory, setDirectory] = useState(defaultDirectory);
   const [selectedDirectory, setSelectedDirectory] = useState(defaultDirectory);
-  const [notice, setNotice] = useState('');
-  const [noticeError, setNoticeError] = useState(false);
   const filesQuery = useQuery({
     queryKey: ['lora-files', selectedDirectory],
     queryFn: () => getLoraFilesInfo(selectedDirectory),
@@ -24,11 +22,9 @@ export function LoraToolsPage({ token, defaultDirectory, active }: LoraToolsPage
   function handleLoad(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!directory.trim()) {
-      setNotice('请输入 LoRA 目录');
-      setNoticeError(true);
+      onToast('请输入 LoRA 目录', 'error');
       return;
     }
-    setNotice('');
     if (directoryChanged) {
       setSelectedDirectory(directory.trim());
       return;
@@ -41,11 +37,9 @@ export function LoraToolsPage({ token, defaultDirectory, active }: LoraToolsPage
     try {
       const result = await renameMutation.mutateAsync(info);
       await filesQuery.refetch();
-      setNotice(`已重命名 ${result.renamed} 个 LoRA 文件`);
-      setNoticeError(false);
+      onToast(`已重命名 ${result.renamed} 个 LoRA 文件`, 'success');
     } catch (error) {
-      setNotice((error as Error).message);
-      setNoticeError(true);
+      onToast((error as Error).message, 'error');
     }
   }
 
@@ -53,11 +47,9 @@ export function LoraToolsPage({ token, defaultDirectory, active }: LoraToolsPage
     if (!info?.prompts) return;
     try {
       await navigator.clipboard.writeText(info.prompts);
-      setNotice('提示词已复制到剪贴板');
-      setNoticeError(false);
+      onToast('提示词已复制到剪贴板', 'success');
     } catch {
-      setNotice('复制失败，请在文本框中手动复制');
-      setNoticeError(true);
+      onToast('复制失败，请在文本框中手动复制', 'error');
     }
   }
 
@@ -84,11 +76,6 @@ export function LoraToolsPage({ token, defaultDirectory, active }: LoraToolsPage
           {filesQuery.error ? (
             <p role='alert' className={styles.error}>
               {filesQuery.error.message}
-            </p>
-          ) : null}
-          {notice ? (
-            <p role='status' className={noticeError ? styles.error : ''}>
-              {notice}
             </p>
           ) : null}
           {info && !filesQuery.isError ? (

@@ -464,13 +464,16 @@ export function TagAuditPage() {
           errors: [],
           failedCount: 0,
         });
-        v.message(retry ? '正在重试失败样本。' : '标签检查已开始，工作 TXT 保持原样。');
-      } else v.message(data.action === 'undo_audit' ? '已撤销该批次。' : '检查结果已保存。');
+        v.showToast(retry ? '正在重试失败样本。' : '标签检查已开始，工作 TXT 保持原样。', 'info');
+      } else v.showToast(data.action === 'undo_audit' ? '已撤销该批次。' : '检查结果已保存。', 'success');
       await Promise.all([refresh(), client.invalidateQueries({ queryKey: ['job'] })]);
     },
     onError: (error: Error, data) => {
       const outdated = data.action === 'retry_audit_failed' && error.message === '未知操作';
-      v.message(outdated ? '当前 WebUI 后端版本过旧。请重启 WebUI 后再重试失败项。' : error.message, true);
+      v.showToast(
+        outdated ? '当前 WebUI 后端版本过旧。请重启 WebUI 后再重试失败项。' : error.message,
+        'error',
+      );
     },
     onSettled: () => v.setDatasetSwitching(false),
   });
@@ -487,9 +490,9 @@ export function TagAuditPage() {
       await refresh();
       setFeatureId(edit.action === 'save' ? response.result.id : undefined);
       setForm(undefined);
-      v.message(edit.action === 'save' ? '已保存特征。' : '已删除特征。');
+      v.showToast(edit.action === 'save' ? '已保存特征。' : '已删除特征。', 'success');
     },
-    onError: (error: Error) => v.message(error.message, true),
+    onError: (error: Error) => v.showToast(error.message, 'error'),
     onSettled: () => v.setDatasetSwitching(false),
   });
   const disabled = v.processing || mutation.isPending || featureMutation.isPending;

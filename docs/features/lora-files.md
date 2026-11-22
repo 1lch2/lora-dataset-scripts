@@ -6,7 +6,7 @@
 
 ## 入口与职责
 
-- [LoraToolsPage](../../app/src/Pages/LoraToolsPage/LoraToolsPage.tsx)：目录输入、文件列表、重命名预览、执行反馈、提示词展示与浏览器剪贴板复制。
+- [LoraToolsPage](../../app/src/Pages/LoraToolsPage/LoraToolsPage.tsx) 提供目录输入、文件列表、重命名预览和提示词复制。重命名和复制操作的反馈使用工作台右上角的 [Toast](../../app/src/components/Toast/Toast.tsx)。
 - [client.ts](../../app/src/api/client.ts)：`getLoraFilesInfo` 与 `renameLoraFiles` 请求；后者携带会话 token 和当前预览。
 - [App](../../app/src/App/App.tsx) 挂载 LoRA 文件页，页签切换使用工作台的阶段状态。
 - [server.py](../../webui/server.py)：`/api/lora/files` 返回文件、预览及提示词；`/api/lora/rename` 校验会话并执行重命名。独立分析入口也开放这两个接口。

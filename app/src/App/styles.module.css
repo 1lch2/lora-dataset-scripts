@@ -1101,39 +1101,6 @@ body:global(.tagEditing) :global(#tagView) {
   flex: none;
   accent-color: var(--color-review-accent);
 }
-:global(#notification) {
-  position: fixed;
-  z-index: 5;
-  right: 16px;
-  top: 64px;
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  max-width: min(440px, calc(100vw - 32px));
-  background: var(--color-review-tint);
-  border: 1px solid var(--color-review-line);
-  border-radius: 6px;
-  padding: 10px 12px;
-  box-shadow: 0 3px 14px var(--color-review-shadow);
-}
-:global(#message) {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-height: 140px;
-  overflow-y: auto;
-  color: var(--color-review-ink);
-}
-:global(#message):global(.error) {
-  color: var(--color-review-ink);
-  font-weight: 600;
-}
-:global(#dismissMessage) {
-  flex: none;
-  border: 0;
-  background: transparent;
-  padding: 0 5px;
-  font-size: 18px;
-}
 dialog {
   width: min(96vw, 1300px);
   height: 94dvh;

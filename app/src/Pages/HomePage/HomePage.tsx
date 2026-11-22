@@ -32,9 +32,9 @@ export function HomePage() {
       await v.handleDatasetChange();
       await list.refetch();
       setImporting(false);
-      v.message('已选择数据集，正在同步文件。');
+      v.showToast('已选择数据集，正在同步文件。', 'info');
     },
-    onError: (error: Error) => v.message(error.message, true),
+    onError: (error: Error) => v.showToast(error.message, 'error'),
     onSettled: () => v.setDatasetSwitching(false),
   });
   const deletion = useMutation({
@@ -43,11 +43,11 @@ export function HomePage() {
     onSuccess: async (result) => {
       if (result.currentDeleted) await v.handleDatasetChange();
       await list.refetch();
-      v.message('已移除数据集，并清理工作记录和导出产物。');
+      v.showToast('已移除数据集，并清理工作记录和导出产物。', 'success');
     },
     onError: async (error: Error) => {
       await list.refetch();
-      v.message(error.message, true);
+      v.showToast(error.message, 'error');
     },
     onSettled: () => v.setDatasetSwitching(false),
   });

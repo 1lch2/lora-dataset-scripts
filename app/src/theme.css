@@ -14,6 +14,12 @@
   --color-review-tint: #f0f0f0;
   --color-review-current-bg: #dcfce7;
   --color-review-current-ink: #166534;
+  --color-review-toast-info: #1d4ed8;
+  --color-review-toast-info-bg: #eff6ff;
+  --color-review-toast-error: #b91c1c;
+  --color-review-toast-error-bg: #fef2f2;
+  --color-review-toast-success: #166534;
+  --color-review-toast-success-bg: #f0fdf4;
   --color-review-accent-hover: #404040;
   --color-review-canvas-stage: #e8e8e8;
   --color-review-overlay: #00000066;

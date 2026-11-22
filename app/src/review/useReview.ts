@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getJobInfo, getRunInfo, updateReview } from '../api/client';
 import type { Box, EditRequest, JobInfo, PreviewInfo, RunInfo, SessionInfo, Source } from '../api/types';
+import type { ToastMessage, ToastVariant } from '../components/Toast';
 import { CROP_NAMES, splitTags } from './utils';
 import { useTags } from './useTags';
 import { INITIAL_FIELDS } from './constants';
@@ -20,7 +21,7 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
   const [sourceId, setSourceId] = useState<string>();
   const [candidateId, setCandidateId] = useState<string | null>();
   const [box, setBox] = useState<Box | null>(null);
-  const [notice, setNotice] = useState({ text: '', error: false });
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   const [jobStatus, setJobStatus] = useState('');
   const [preview, setPreview] = useState<PreviewInfo>();
   const [previewImage, setPreviewImage] = useState('');
@@ -52,9 +53,12 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
   const job: JobInfo = jobQuery.data || { status: 'idle', total: 0, done: 0, errors: [] };
   const busy = mutation.isPending || datasetSwitching;
   const processing = busy || job.status === 'running';
-  function message(text: string, error = false) {
-    setNotice({ text, error });
-  }
+  const showToast = useCallback((text: string, variant: ToastVariant, persistent = false) => {
+    setToast({ text, variant, persistent });
+  }, []);
+  const dismissToast = useCallback((message: ToastMessage) => {
+    setToast((current) => (current === message ? null : current));
+  }, []);
   function setField(name: FieldName, value: string) {
     setFields((previous) => ({ ...previous, [name]: value }));
     setPreview(undefined);
@@ -107,13 +111,8 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
     initialized.current = groups.length > 0;
   }, [state]);
   useEffect(() => {
-    if (!notice.text || notice.error || notice.text === '处理中…') return;
-    const timer = setTimeout(() => setNotice({ text: '', error: false }), 6000);
-    return () => clearTimeout(timer);
-  }, [notice]);
-  useEffect(() => {
-    if (runQuery.error) message(runQuery.error.message, true);
-  }, [runQuery.error]);
+    if (runQuery.error) showToast(runQuery.error.message, 'error');
+  }, [runQuery.error, showToast]);
   useEffect(() => {
     if (!tags.singleKey || tags.focused) return;
     tags.handleFocus();
@@ -255,8 +254,9 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
     if (next) {
       setSourceId(previousSource);
       setCandidateId(next.id);
-      message(
+      showToast(
         `${result}，已切换到「${CROP_NAMES[next.kind]}」。本图还剩 ${crops.filter((c) => c.status === 'pending').length} 个待审裁框。`,
+        'success',
       );
       return;
     }
@@ -273,14 +273,15 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
     if (nextSource) {
       setSourceId(nextSource.id);
       setCandidateId(undefined);
-      message(`「${s.relative}」裁切审核完成。已进入下一张：${nextSource.relative}`);
+      showToast(`「${s.relative}」裁切审核完成。已进入下一张：${nextSource.relative}`, 'success');
       return;
     }
     const remaining = Object.values(data.sources).some(
       (s) => s.active && (s.error || s.candidates.some((c) => c.status === 'pending')),
     );
-    message(
+    showToast(
       `「${s.relative}」裁切审核完成。${remaining ? '当前筛选范围内没有可继续审核的裁框，请检查其他图片或处理失败项。' : '全部图片裁切审核完成，可以开始打标。'}`,
+      'success',
     );
   }
   async function edit(data: EditRequest, advance = false) {
@@ -288,7 +289,7 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
     const previousSource = source?.id,
       previousCandidate = candidate?.id;
     const previousIndex = source?.candidates.findIndex((c) => c.id === previousCandidate);
-    message('处理中…');
+    showToast('处理中…', 'info', true);
     try {
       const result = await mutation.mutateAsync(data);
       if (result.result.id) setCandidateId(result.result.id);
@@ -311,17 +312,17 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
           data.action === 'delete_crop' ? '已删除裁切' : '已接受',
           data.action === 'delete_crop' ? previousIndex : undefined,
         );
-      else message(data.action === 'crop' ? '裁框已保存，尚待接受或删除' : '已保存');
+      else showToast(data.action === 'crop' ? '裁框已保存，尚待接受或删除' : '已保存', 'success');
       return true;
     } catch (error) {
-      message((error as Error).message, true);
+      showToast((error as Error).message, 'error');
       return false;
     }
   }
   async function startJob(action: string, targetSourceId?: string) {
     if (processing || !state?.datasetLoaded) return;
     if (action === 'start_tag' && box && (!candidate?.box || box.some((v, i) => v !== candidate.box![i]))) {
-      message('当前裁框尚未保存，请先保存并审核，再开始打标。', true);
+      showToast('当前裁框尚未保存，请先保存并审核，再开始打标。', 'error');
       return;
     }
     if (
@@ -338,15 +339,15 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
         ...(targetSourceId ? { source: targetSourceId } : {}),
       });
       client.setQueryData(['job'], { ...job, status: 'running', action });
-      message('');
+      setToast(null);
     } catch (error) {
-      message((error as Error).message, true);
+      showToast((error as Error).message, 'error');
     }
     await jobQuery.refetch();
   }
   async function replaceSourceImage(action: 'crop_subject' | 'restore_original', subjectBox?: Box) {
     if (processing || !source) return false;
-    message('处理中…');
+    showToast('处理中…', 'info', true);
     try {
       await mutation.mutateAsync({ action, source: source.id, ...(subjectBox ? { box: subjectBox } : {}) });
       setCandidateId('full');
@@ -359,14 +360,15 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
       tags.setImageFilter(null);
       if (tags.singleKey && belongsToSource(tags.singleKey)) tags.setSingleKey(undefined);
       setJobStatus('');
-      message(
+      showToast(
         action === 'crop_subject'
           ? '主体已替换完整图，本图裁框、识别结果和标签已清空，可重新处理。'
           : '原始图已恢复，本图裁框、识别结果和标签已清空，可重新处理。',
+        'success',
       );
       return true;
     } catch (error) {
-      message((error as Error).message, true);
+      showToast((error as Error).message, 'error');
       return false;
     }
   }
@@ -424,7 +426,6 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
   currentPreviewSignature.current = previewSignature;
   const previewValidSignature = useRef('');
   const actions: Record<string, () => void | Promise<unknown>> = {
-    dismissMessage: () => message(''),
     startTag: () => startJob('start_tag'),
     upscaleDataset: () => startJob('start_upscale'),
     detectDataset: () => startJob('start_detect'),
@@ -441,21 +442,21 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
         }
         await reload();
       } catch (error) {
-        message((error as Error).message, true);
+        showToast((error as Error).message, 'error');
       }
     },
     openWorkdir: async () => {
       try {
         await updateReview({ action: 'open_workdir' }, session.token);
       } catch (error) {
-        message((error as Error).message, true);
+        showToast((error as Error).message, 'error');
       }
     },
     focusCrop: () => setFocusCrop((v) => !v),
     newCrop: () => {
       setCandidateId(null);
       setBox(null);
-      message('新建裁框：在工作图上拖出矩形，尺寸达到下限后即可接受。');
+      showToast('新建裁框：在工作图上拖出矩形，尺寸达到下限后即可接受。', 'info');
     },
     saveCrop: () =>
       edit({ action: 'crop', source: source?.id, candidate: candidate?.id ?? null, box, status: 'pending' }),
@@ -468,7 +469,7 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
       if (!source || full || processing) return;
       if (!candidate) {
         restoreDraft(source);
-        message('已删除未保存的裁切');
+        showToast('已删除未保存的裁切', 'success');
         return;
       }
       return edit({ action: 'delete_crop', source: source.id, candidate: candidate.id }, true);
@@ -549,7 +550,7 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
         previewValidSignature.current = previewSignature;
         setPreview(data.result as PreviewInfo);
       } catch (error) {
-        message((error as Error).message, true);
+        showToast((error as Error).message, 'error');
       }
     },
     saveDrop: () => edit({ action: 'drop_tags', tags: splitTags(fields.dropTags) }),
@@ -597,8 +598,9 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
     restoreDraft,
     box,
     setBox,
-    notice,
-    message,
+    toast,
+    showToast,
+    dismissToast,
     preview: visiblePreview,
     previewImage,
     setPreviewImage,
