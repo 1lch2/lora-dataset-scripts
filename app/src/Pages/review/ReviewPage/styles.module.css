@@ -16,15 +16,6 @@ body:global(.tagging) :global(.appShell) {
   background: var(--color-review-canvas);
   color-scheme: light;
 }
-body:global(.analyzing) :global(.libraryPanel),
-body:global(.analyzing) :global(.stageActions),
-body:global(.analyzing) :global(.appStatus) {
-  display: none;
-}
-body:global(.analyzing) :global(.appShell) {
-  display: block;
-  overflow: hidden;
-}
 body:global(.loraTools) :global(.libraryPanel),
 body:global(.loraTools) :global(.stageActions),
 body:global(.loraTools) :global(.appStatus) {

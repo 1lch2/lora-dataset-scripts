@@ -2,11 +2,11 @@
 
 [返回功能导航](../feature-map.yaml)
 
-核对日期：2026-11-22。覆盖标签页入口、后台检查、本地观察、数据集参考图、人工应用、忽略和批次撤销。打标或导入 TXT 后都可使用。
+核对日期：2026-11-22。覆盖顶栏入口、后台检查、本地观察、数据集参考图、人工应用、忽略和批次撤销。打标或导入 TXT 后都可使用。
 
 ## 入口和实现
 
-- [TagEditor](../../app/src/Pages/review/ReviewPage/__internal__/TagEditor/TagEditor.tsx)：标签工具中的“标签检查”入口；可返回原标签编辑。
+- [Header](../../app/src/Pages/review/ReviewPage/__internal__/Header/Header.tsx)：顶栏“标签检查”入口，与“标签编辑”并列，打开数据集后可用。
 - [TagAudit](../../app/src/Pages/review/ReviewPage/__internal__/TagAudit/TagAudit.tsx) 提供“错标检查”和“漏标补充”，包括特征编辑、图片预览、状态筛选、单项或批量处理、共用应用历史与撤销。
 - [tag_audit.py](../../core/dataset_pipeline/tag_audit.py) 复用本地服务请求与图像预处理。`audit_run` 并发观察，后台任务线程逐样本合并和保存。原异常结果与最近一轮特征观察均保存在运行记录 `tag_audit`，共用建议与批次处理。
 - [feature_audit.py](../../core/dataset_pipeline/feature_audit.py) 管理特征定义、参考图版本、禁用标签冲突及特征观察协议。

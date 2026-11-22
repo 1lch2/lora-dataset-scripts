@@ -561,11 +561,11 @@ export function TagAudit() {
     : '';
   return (
     <main
-      id='tagView'
+      id='auditView'
       className={styles.page}
       role='tabpanel'
-      aria-labelledby='tagTab'
-      hidden={v.stage !== 'tag'}
+      aria-labelledby='auditTab'
+      hidden={v.stage !== 'audit'}
     >
       {supplement ? (
         <SupplementDialog confirmation={supplement} disabled={disabled} onClose={handleSupplementClose} />
@@ -739,10 +739,7 @@ export function TagAudit() {
       </section>
       <aside className={`tagTools ${styles.controls}`} aria-label='标签检查设置'>
         <div className={styles.toolbar}>
-          <h2>标签检查</h2>
-          <button onClick={() => v.setTool('filter')} disabled={disabled}>
-            返回标签编辑
-          </button>
+          <h2>标签检查设置</h2>
         </div>
         <div className={`panelScroll ${styles.settings}`}>
           <div className={styles.toolbar} role='group' aria-label='检查类型'>

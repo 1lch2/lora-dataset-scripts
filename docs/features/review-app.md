@@ -8,7 +8,7 @@
 
 - [app/src/main.tsx](../../app/src/main.tsx)：React StrictMode 与 TanStack Query Provider。
 - [app/src/App/App.tsx](../../app/src/App/App.tsx)：从 `/api/session` 获取审核会话，再挂载页面。
-- [ReviewPage](../../app/src/Pages/review/ReviewPage/ReviewPage.tsx)：组合页头、启动主页、图片库、裁切编辑、标签工具、分析页、LoRA 文件工具、底部状态与大图弹窗；主页隐藏审核工作区与底部状态，专属一级组件位于同目录 `__internal__/`。
+- [ReviewPage](../../app/src/Pages/review/ReviewPage/ReviewPage.tsx)：组合页头、启动主页、图片库、裁切编辑、标签编辑、独立的标签检查、数据集工具和 LoRA 文件工具、底部状态与大图弹窗；主页隐藏审核工作区与底部状态，专属一级组件位于同目录 `__internal__/`。
 - 页头“设置”由 [Settings](../../app/src/Pages/review/ReviewPage/__internal__/Settings/Settings.tsx) 管理 Forge 目录和处理参数，首次未配置时自动打开；持久化、固定插件来源和内置 CSV 见[启动链的网页配置](launcher.md#网页配置)。
 - [useReview](../../app/src/Pages/review/useReview.ts)：审核状态、裁框草稿、阶段切换、编辑 mutation、任务轮询与提示；服务端数据由 TanStack Query 管理，客户端状态使用 Hooks。
 - [DatasetManager](../../app/src/Pages/review/ReviewPage/__internal__/DatasetManager/DatasetManager.tsx)：IDE 风格主页，提供已有数据集的名称/路径搜索、打开、刷新，以及显式选择完整打标/待处理类型后填写目录的导入表单；工作区显示当前目录，待处理模式仅在裁切页提供超分和主体识别按钮，并明确标注作用于数据集全部图片，不受筛选影响。
@@ -33,7 +33,7 @@
 - `atomic_json` 先写入并刷盘临时文件，再原子替换记录；Windows 访问/共享冲突（5/32/33）最多重试两秒，兼容页面轮询短暂读取 manifest。不会先删除旧记录；持续占用、权限不足及其他写入错误仍报告失败。
 - [core/dataset_pipeline/geometry.py](../../core/dataset_pipeline/geometry.py)：`default_scale` 决定按尺寸超分倍率；总像素小于 `1024² × 80%` 时为 1.5 倍，其余为 1 倍。网页 `start_upscale` 只处理需要提高倍率的图片；历史自动流程的内部 `Run.prepare_source` 保留运行记录兼容能力，手动或保存的 `scale_override` 优先。
 
-普通审核启动进入 `home`，首次只读取状态和已有运行列表，不加载目录；空白会话返回 `datasetLoaded=false`，裁切/标签 tab 在加载数据集前禁用。独立分析及 `?analysis` 入口仍进入分析页。显式导入、打开已有数据集或顶部刷新通过带会话 token 的 `sync_sources` 调用 `import_sources`，不执行图片处理；切换重置筛选和选择。完整打标数据集在没有待审裁框时进入标签页，待处理数据集进入裁切页；返回主页保留当前工作，继续按钮恢复本次会话的审核阶段。主页不会被后台打标完成自动跳转。
+普通审核启动进入 `home`，首次只读取状态和已有运行列表，不加载目录；空白会话返回 `datasetLoaded=false`，裁切/标签 tab 在加载数据集前禁用。独立分析及 `?analysis` 入口直接打开“数据集工具 → 数据集分析”。显式导入、打开已有数据集或顶部刷新通过带会话 token 的 `sync_sources` 调用 `import_sources`，不执行图片处理；切换重置筛选和选择。完整打标数据集在没有待审裁框时进入标签页，待处理数据集进入裁切页；返回主页保留当前工作，继续按钮恢复本次会话的审核阶段。主页不会被后台打标完成自动跳转。
 
 2026-10-29：裁切后新增独立[打标 tab](tagging.md)，同样要求已导入数据集；页头打标按钮已移入此页。支持 WD / PixAI 单模型与混合打标，完成后停留打标页查看合并分组、标签增减与置信度过滤，热力图默认折叠作为额外参考；标签编辑页保持原有职责。完整数据集重新导入源 TXT 的恢复行为见该专题。
 

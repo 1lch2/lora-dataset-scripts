@@ -114,15 +114,15 @@ export function DatasetTools({ active, token, currentDirectory }: DatasetToolsPr
 
   return (
     <section
-      id='toolsView'
+      id='processingView'
       role='tabpanel'
-      aria-labelledby='toolsTab'
+      aria-labelledby='processingTab'
       hidden={!active}
       className={styles.page}
     >
       <header className={styles.heading}>
         <div>
-          <h2>数据集处理工具</h2>
+          <h2>批量处理</h2>
           <p>选择素材与范围，预览后另存。原图保留，同名 TXT 随图片复制。</p>
         </div>
         <span className={styles.count}>

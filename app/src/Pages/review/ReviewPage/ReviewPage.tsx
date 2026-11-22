@@ -5,35 +5,25 @@ import { DatasetManager } from './__internal__/DatasetManager';
 import { Library } from './__internal__/Library';
 import { CropEditor } from './__internal__/CropEditor';
 import { TagEditor } from './__internal__/TagEditor';
+import { TagAudit } from './__internal__/TagAudit';
 import { Tagging } from './__internal__/Tagging';
+import { DatasetToolsPage } from './__internal__/DatasetToolsPage';
 import { StatusBar } from './__internal__/StatusBar';
 import { PreviewDialog } from './__internal__/PreviewDialog';
-import { AnalysisView } from '../../analysis/AnalysisView';
 import { LoraTools } from '../../lora/LoraTools';
-import { DatasetTools } from '../../tools/DatasetTools';
-import { DenoisePage } from '../../denoise/DenoisePage';
 import type { ReviewPageProps } from './types';
 import styles from './styles.module.css';
 
 export function ReviewPage({ session }: ReviewPageProps) {
-  const review = useReview(session);
+  const startInAnalysis = session.analysisOnly || new URLSearchParams(location.search).has('analysis');
+  const review = useReview(session, startInAnalysis);
   return (
     <ReviewContext value={review}>
       <div className={styles.page}>
         <Header />
         <DatasetManager />
         <div className='appShell' hidden={review.stage === 'home'}>
-          <DenoisePage
-            token={session.token}
-            active={review.stage === 'denoise'}
-            processing={review.processing}
-          />
-          <AnalysisView token={session.token} active={review.stage === 'analysis'} />
-          <DatasetTools
-            token={session.token}
-            active={review.stage === 'tools'}
-            currentDirectory={review.state?.datasetLoaded ? review.state.config.input_dir : undefined}
-          />
+          <DatasetToolsPage initialSection={startInAnalysis ? 'analysis' : 'processing'} />
           <LoraTools
             token={session.token}
             defaultDirectory={session.loraOutputDir}
@@ -45,6 +35,7 @@ export function ReviewPage({ session }: ReviewPageProps) {
             <Tagging key={review.state.config.run_dir} />
           ) : null}
           <TagEditor />
+          {review.state?.datasetLoaded ? <TagAudit key={review.state.config.run_dir} /> : null}
         </div>
         {review.stage !== 'home' ? <StatusBar /> : null}
         <PreviewDialog />

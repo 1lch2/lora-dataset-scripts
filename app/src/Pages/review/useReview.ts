@@ -5,14 +5,14 @@ import type { Box, EditRequest, JobInfo, PreviewInfo, RunInfo, SessionInfo, Sour
 import { CROP_NAMES, splitTags } from './utils';
 import { useTags } from './useTags';
 import { INITIAL_FIELDS } from './constants';
-import type { FieldName } from './types';
+import type { FieldName, ReviewStage } from './types';
 
-export function useReview(session: SessionInfo) {
+const DATASET_STAGES: ReviewStage[] = ['crop', 'tagging', 'tag', 'audit'];
+
+export function useReview(session: SessionInfo, startInAnalysis: boolean) {
   const client = useQueryClient();
-  const [stage, setStage] = useState(
-    session.analysisOnly || new URLSearchParams(location.search).has('analysis') ? 'analysis' : 'home',
-  );
-  const [reviewStarted, setReviewStarted] = useState(stage !== 'analysis');
+  const [stage, setStage] = useState<ReviewStage>(startInAnalysis ? 'tools' : 'home');
+  const [reviewStarted, setReviewStarted] = useState(!startInAnalysis);
   const [focusCrop, setFocusCrop] = useState(false);
   const [fields, setFields] = useState(INITIAL_FIELDS);
   const [checks, setChecks] = useState({ matchCase: true, prependTags: false });
@@ -28,7 +28,7 @@ export function useReview(session: SessionInfo) {
   const [datasetSwitching, setDatasetSwitching] = useState(false);
   const handledJob = useRef<string | undefined>(undefined);
   const initialized = useRef(false);
-  const lastReviewStage = useRef<string | undefined>(undefined);
+  const lastReviewStage = useRef<ReviewStage | undefined>(undefined);
   const mutation = useMutation({
     mutationFn: (data: EditRequest) => updateReview(data, session.token),
     onSuccess: async (_result, data) => {
@@ -143,7 +143,7 @@ export function useReview(session: SessionInfo) {
         );
         if (job.status === 'complete' && job.action === 'start_tag')
           setStage((previous) =>
-            ['home', 'analysis', 'lora', 'tools', 'denoise'].includes(previous) ? previous : 'tagging',
+            ['home', 'lora', 'tools', 'audit'].includes(previous) ? previous : 'tagging',
           );
         if (
           job.status === 'complete' &&
@@ -165,25 +165,23 @@ export function useReview(session: SessionInfo) {
       });
   }, [job, busy, client]);
   useEffect(() => {
-    document.body.classList.toggle('analyzing', stage === 'analysis');
-    document.body.classList.toggle('tagEditing', stage === 'tag');
+    document.body.classList.toggle('tagEditing', stage === 'tag' || stage === 'audit');
     document.body.classList.toggle('tagging', stage === 'tagging');
-    document.body.classList.toggle('loraTools', ['lora', 'tools', 'denoise'].includes(stage));
+    document.body.classList.toggle('loraTools', stage === 'lora' || stage === 'tools');
     document.body.classList.toggle('focusCrop', focusCrop && stage === 'crop');
-    return () =>
-      document.body.classList.remove('analyzing', 'tagEditing', 'tagging', 'loraTools', 'focusCrop');
+    return () => document.body.classList.remove('tagEditing', 'tagging', 'loraTools', 'focusCrop');
   }, [stage, focusCrop]);
-  function handleStage(next: string) {
-    if (['crop', 'tagging', 'tag'].includes(next) && !state?.datasetLoaded) return;
-    if (['crop', 'tagging', 'tag'].includes(stage)) lastReviewStage.current = stage;
-    if (['crop', 'tagging', 'tag'].includes(next)) lastReviewStage.current = next;
+  function handleStage(next: ReviewStage) {
+    if (DATASET_STAGES.includes(next) && !state?.datasetLoaded) return;
+    if (DATASET_STAGES.includes(stage)) lastReviewStage.current = stage;
+    if (DATASET_STAGES.includes(next)) lastReviewStage.current = next;
     setStage(next);
     if (next !== 'crop') setFocusCrop(false);
     if (next === 'home') {
       setReviewStarted(true);
       return;
     }
-    if (['analysis', 'lora', 'tools', 'denoise'].includes(next)) return;
+    if (next === 'tools' || next === 'lora') return;
     setReviewStarted(true);
     if (stage !== 'home') restoreDraft(source, candidate?.id);
   }
@@ -204,8 +202,7 @@ export function useReview(session: SessionInfo) {
   async function reload() {
     const result = await runQuery.refetch();
     if (result.error) throw result.error;
-    if (stage !== 'analysis')
-      restoreDraft(source ? result.data!.sources[source.id] : undefined, candidate?.id);
+    if (stage !== 'tools') restoreDraft(source ? result.data!.sources[source.id] : undefined, candidate?.id);
     setPreview(undefined);
     return result.data!;
   }
@@ -377,7 +374,7 @@ export function useReview(session: SessionInfo) {
   const samples = sources.flatMap((s) => s.candidates.filter((c) => c.status === 'accepted'));
   const untagged = samples.filter((c) => !c.tag_current).length;
   const ready = sources.length > 0 && !pending && !sources.some((s) => s.error);
-  const tagging = stage === 'tag';
+  const tagging = stage === 'tag' || stage === 'audit';
   const stageStatus = !state
     ? '读取进度…'
     : !state.datasetLoaded

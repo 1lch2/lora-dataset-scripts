@@ -56,7 +56,10 @@ export function tagMatcher(query: string, mode: string) {
   }
 }
 export function handleTabKeys(event: KeyboardEvent<HTMLElement>) {
-  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  const vertical = event.currentTarget.getAttribute('aria-orientation') === 'vertical';
+  const previousKey = vertical ? 'ArrowUp' : 'ArrowLeft';
+  const nextKey = vertical ? 'ArrowDown' : 'ArrowRight';
+  if (![previousKey, nextKey, 'Home', 'End'].includes(event.key)) return;
   event.preventDefault();
   const buttons = [...event.currentTarget.querySelectorAll<HTMLButtonElement>('[role=tab]')].filter(
     (b) => !b.disabled,
@@ -67,7 +70,7 @@ export function handleTabKeys(event: KeyboardEvent<HTMLElement>) {
       ? 0
       : event.key === 'End'
         ? buttons.length - 1
-        : (i + (event.key === 'ArrowRight' ? 1 : buttons.length - 1)) % buttons.length;
+        : (i + (event.key === nextKey ? 1 : buttons.length - 1)) % buttons.length;
   buttons[next]?.click();
   buttons[next]?.focus();
 }

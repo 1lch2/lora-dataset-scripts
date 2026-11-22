@@ -8,7 +8,7 @@ import type { AnalysisViewProps } from './types';
 export function AnalysisView({ token, active }: AnalysisViewProps) {
   const a = useAnalysis(token, active);
   return (
-    <main id='analysisView' role='tabpanel' aria-labelledby='analysisTab' hidden={!active}>
+    <section id='analysisView' role='tabpanel' aria-labelledby='analysisTab' hidden={!active}>
       <section className='analysisSetup'>
         <h2>数据集特性分析</h2>
         <p className='hint'>
@@ -326,6 +326,6 @@ export function AnalysisView({ token, active }: AnalysisViewProps) {
           </details>
         </section>
       </section>
-    </main>
+    </section>
   );
 }

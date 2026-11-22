@@ -1,5 +1,8 @@
-:global(body.tagEditing) .page:global(#tagView) {
+.page {
+  display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  min-height: 0;
+  overflow: hidden;
 }
 .results {
   display: flex;

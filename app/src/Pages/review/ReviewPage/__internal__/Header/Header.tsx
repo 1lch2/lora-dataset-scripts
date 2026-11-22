@@ -4,6 +4,7 @@ import { Settings } from '../Settings';
 
 export function Header() {
   const v = useReviewContext();
+  const datasetTabDisabled = v.busy || v.session.analysisOnly || !v.state?.datasetLoaded;
   return (
     <>
       <header className='appHeader'>
@@ -29,7 +30,7 @@ export function Header() {
             aria-selected={v.stage === 'crop'}
             aria-controls='cropView'
             className={v.stage === 'crop' ? 'active' : ''}
-            disabled={v.busy || v.session.analysisOnly || !v.state?.datasetLoaded}
+            disabled={datasetTabDisabled}
             onClick={() => v.handleStage('crop')}
             tabIndex={v.stage === 'crop' ? 0 : -1}
           >
@@ -41,7 +42,7 @@ export function Header() {
             aria-selected={v.stage === 'tagging'}
             aria-controls='taggingView'
             className={v.stage === 'tagging' ? 'active' : ''}
-            disabled={v.busy || v.session.analysisOnly || !v.state?.datasetLoaded}
+            disabled={datasetTabDisabled}
             onClick={() => v.handleStage('tagging')}
             tabIndex={v.stage === 'tagging' ? 0 : -1}
           >
@@ -53,23 +54,23 @@ export function Header() {
             aria-selected={v.stage === 'tag'}
             aria-controls='tagView'
             tabIndex={v.stage === 'tag' ? 0 : -1}
-            disabled={v.busy || v.session.analysisOnly || !v.state?.datasetLoaded}
+            disabled={datasetTabDisabled}
             onClick={() => v.handleStage('tag')}
             className={v.stage === 'tag' ? 'active' : ''}
           >
             标签编辑
           </button>
           <button
-            id='analysisTab'
+            id='auditTab'
             role='tab'
-            aria-selected={v.stage === 'analysis'}
-            aria-controls='analysisView'
-            tabIndex={v.stage === 'analysis' ? 0 : -1}
-            disabled={v.busy}
-            onClick={() => v.handleStage('analysis')}
-            className={v.stage === 'analysis' ? 'active' : ''}
+            aria-selected={v.stage === 'audit'}
+            aria-controls='auditView'
+            tabIndex={v.stage === 'audit' ? 0 : -1}
+            disabled={datasetTabDisabled}
+            onClick={() => v.handleStage('audit')}
+            className={v.stage === 'audit' ? 'active' : ''}
           >
-            数据集分析
+            标签检查
           </button>
           <button
             id='toolsTab'
@@ -81,19 +82,7 @@ export function Header() {
             onClick={() => v.handleStage('tools')}
             className={v.stage === 'tools' ? 'active' : ''}
           >
-            数据集处理工具
-          </button>
-          <button
-            id='denoiseTab'
-            role='tab'
-            aria-selected={v.stage === 'denoise'}
-            aria-controls='denoiseView'
-            tabIndex={v.stage === 'denoise' ? 0 : -1}
-            disabled={v.busy || v.session.analysisOnly}
-            onClick={() => v.handleStage('denoise')}
-            className={v.stage === 'denoise' ? 'active' : ''}
-          >
-            图像降噪
+            数据集工具
           </button>
           <button
             id='loraTab'
@@ -114,7 +103,7 @@ export function Header() {
           <button
             id='exportDataset'
             className='primary'
-            hidden={v.stage !== 'tag'}
+            hidden={v.stage !== 'tag' && v.stage !== 'audit'}
             disabled={v.processing || !v.state?.datasetLoaded}
             onClick={() => v.handleAction('exportDataset')}
           >

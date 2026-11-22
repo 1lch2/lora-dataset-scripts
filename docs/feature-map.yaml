@@ -29,10 +29,11 @@ features:
       - core/dataset_pipeline/tagging.py
       - core/dataset_pipeline/forge.py
   - id: dataset-tools
-    name: 数据集处理工具、短边缩放、镜像翻转与去重另存
-    keywords: [处理工具, 范围, 子目录, 勾选, resize, reverse, deduplicate, 缩放, 镜像, 去重, 另存]
+    name: 数据集工具左侧导航与批量处理
+    keywords: [数据集工具, 左侧导航, 二级导航, 批量处理, 处理工具, 范围, 子目录, 勾选, resize, reverse, deduplicate, 缩放, 镜像, 去重, 另存]
     doc: docs/features/dataset-tools.md
     entrypoints:
+      - app/src/Pages/review/ReviewPage/__internal__/DatasetToolsPage/DatasetToolsPage.tsx
       - app/src/Pages/tools/DatasetTools/DatasetTools.tsx
       - tools/dataset.py
       - webui/server.py

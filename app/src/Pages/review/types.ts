@@ -29,3 +29,4 @@ export interface ReviewFields {
 }
 
 export type FieldName = keyof ReviewFields;
+export type ReviewStage = 'home' | 'crop' | 'tagging' | 'tag' | 'audit' | 'tools' | 'lora';
