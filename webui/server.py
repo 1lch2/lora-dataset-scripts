@@ -106,7 +106,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
         overrides = {key: template[key] for key in RUNTIME_KEYS} if settings_path else None
         return Run.load(folder, config_overrides=overrides)
 
-    def process_job(action, group=None, source_id=None, tagging=None, audit=None, feature_id=None):
+    def process_job(action, group=None, source_id=None, tagging=None, audit=None, feature_id=None, retry_failed=False):
         try:
             with run_lock(directory):
                 run = load_run(directory)
@@ -145,7 +145,9 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                         with mutex:
                             job['failedCount'] += 1
 
-                    errors = audit_run(run, audit, audit_progress, feature_id, report_failure)
+                    audit_run(run, audit, audit_progress, feature_id, report_failure, retry_failed=retry_failed)
+                    # 样本失败已写入检查记录，任务错误只用于整轮检查异常中断。
+                    errors = []
                 elif action == 'start_tag' and tagging is not None:
                     if model_setup:
                         model_setup(run.config)
@@ -166,7 +168,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
             with mutex:
                 job.update(status="failed", errors=[str(error)])
 
-    def start_job(action, group=None, source_id=None, tagging=None, replace_confirmed=False, audit=None, feature_id=None):
+    def start_job(action, group=None, source_id=None, tagging=None, replace_confirmed=False, audit=None,
+                  feature_id=None, retry_failed=False):
         with mutex:
             if directory is None:
                 raise ValueError('请先选择并导入数据集')
@@ -182,12 +185,14 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 run = load_run(directory)
                 audit_feature, audit_total = None, 0
                 if action == 'start_audit':
-                    if feature_id is not None and isinstance(audit, dict):
+                    if type(retry_failed) is not bool or (retry_failed and feature_id is not None):
+                        raise ValueError('失败重试参数无效')
+                    if (feature_id is not None or retry_failed) and isinstance(audit, dict):
                         audit = {**audit, 'visual': True}
                     audit = validate_audit_options(audit)
-                    audit_total = len(eligible_samples(run))
+                    audit_total = len(eligible_samples(run, retry_failed))
                     if not audit_total:
-                        raise ValueError('没有可检查的有效标签')
+                        raise ValueError('没有可重试的失败样本' if retry_failed else '没有可检查的有效标签')
                     if feature_id is not None:
                         feature = prepare_feature_check(run, feature_id, audit)
                         audit_feature = {key: feature[key] for key in ('id', 'name')}
@@ -214,7 +219,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
             job.update(id=secrets.token_hex(8), status="running", action=action, errors=[], count=None,
                        total=audit_total, done=0, explicitTagging=tagging is not None,
                        auditFeature=audit_feature, failedCount=0)
-        threading.Thread(target=process_job, args=(action, group, source_id, tagging, audit, feature_id), daemon=True).start()
+        threading.Thread(target=process_job, args=(action, group, source_id, tagging, audit, feature_id, retry_failed),
+                         daemon=True).start()
 
     class Handler(BaseHTTPRequestHandler):
         def valid_host(self):
@@ -458,10 +464,13 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     os.startfile(directory)
                     self.reply(200, {"ok": True, "result": {}})
                     return
-                if data.get("action") in ("start_tag", "export", "sync_sources", 'start_upscale', 'start_detect', 'start_audit'):
-                    start_job(data["action"], data.get('group'), data.get('source'),
+                action = data.get('action')
+                if action in ('start_tag', 'export', 'sync_sources', 'start_upscale', 'start_detect',
+                              'start_audit', 'retry_audit_failed'):
+                    retry = action == 'retry_audit_failed'
+                    start_job('start_audit' if retry else action, data.get('group'), data.get('source'),
                               data.get('tagging'), data.get('replaceConfirmed', False), data.get('audit'),
-                              data.get('featureId'))
+                              data.get('featureId'), retry_failed=retry or data.get('retryFailed', False))
                     self.reply(202, {"ok": True, "result": {}})
                     return
                 with mutex, run_lock(directory):

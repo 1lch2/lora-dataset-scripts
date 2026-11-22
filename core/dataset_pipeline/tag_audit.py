@@ -312,9 +312,16 @@ def inspect_feature_sample(run, source, candidate, options, latest):
     return sample, [finding]
 
 
-def eligible_samples(run):
+def failed_sample_indices(audit):
+    return {(sample['source'], sample['candidate']): index
+            for index, sample in enumerate(audit.get('samples', [])) if sample['status'] == 'failed'}
+
+
+def eligible_samples(run, retry_failed=False):
+    failed = failed_sample_indices(run.data.get('tag_audit', {})) if retry_failed else None
     return [(s, c) for s in run.data['sources'].values() if s.get('active', True)
-            for c in s['candidates'] if c['status'] == 'accepted' and run.current_tag(s, c)]
+            for c in s['candidates'] if (failed is None or (s['id'], c['id']) in failed)
+            and c['status'] == 'accepted' and run.current_tag(s, c)]
 
 
 def prepare_feature_check(run, feature_id, options):
@@ -329,13 +336,17 @@ def ignore_key(finding):
             finding['feature']['id'], finding['feature']['version'], tuple(feature_tags(finding)))
 
 
-def audit_run(run, options, progress, feature_id=None, report_failure=None):
-    samples = eligible_samples(run)
+def audit_run(run, options, progress, feature_id=None, report_failure=None, retry_failed=False):
+    samples = eligible_samples(run, retry_failed)
     if not samples:
-        raise ValueError('没有可检查的有效标签，请先完成打标或导入 TXT')
+        raise ValueError('没有可重试的失败样本' if retry_failed else '没有可检查的有效标签，请先完成打标或导入 TXT')
     audit = run.data.setdefault('tag_audit', {'findings': [], 'batches': []})
     latest = None
-    if feature_id is not None:
+    failed_indices = {}
+    if retry_failed:
+        failed_indices = failed_sample_indices(audit)
+        options = {**options, 'forbidden': audit.get('options', {}).get('forbidden', [])}
+    elif feature_id is not None:
         feature = copy.deepcopy(prepare_feature_check(run, feature_id, options))
         feature['reference'].pop('region', None)
         latest = {'id': secrets.token_hex(12), 'feature': feature, 'total': len(samples), 'samples': [],
@@ -344,8 +355,9 @@ def audit_run(run, options, progress, feature_id=None, report_failure=None):
         audit['findings'] = [f for f in audit['findings'] if f.get('action') != 'add' or f['status'] != 'pending']
     else:
         audit['samples'] = []
-    # 特征检查始终使用视觉服务，保留原有人数与构图检查的开关。
-    audit['options'] = {**options, 'visual': audit.get('options', {}).get('visual', True)} if latest else options
+    # 特征检查和失败重试始终使用视觉服务，保留全量异常检查的开关。
+    audit['options'] = ({**options, 'visual': audit.get('options', {}).get('visual', True)}
+                        if latest or retry_failed else options)
     run.save()
     progress(0, len(samples))
     errors = []
@@ -384,7 +396,10 @@ def audit_run(run, options, progress, feature_id=None, report_failure=None):
                     audit['findings'].remove(existing[fid])
                 audit['findings'].append(finding)
                 existing[fid] = finding
-            (latest or audit)['samples'].append(sample)
+            if retry_failed:
+                audit['samples'][failed_indices[sample['source'], sample['candidate']]] = sample
+            else:
+                (latest or audit)['samples'].append(sample)
             run.save()
             progress(index, len(samples))
     return errors

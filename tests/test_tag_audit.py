@@ -205,6 +205,77 @@ class TagAuditTests(unittest.TestCase):
         self.addCleanup(server.shutdown)
         return f'http://127.0.0.1:{server.server_port}'
 
+    def test_http_retry_replaces_only_failed_observations(self):
+        folder = self.caption.parent
+        for stem, color in (('b', 'blue'), ('c', 'red')):
+            Image.new('RGB', (100, 100), color).save(folder / f'{stem}.png')
+            (folder / f'{stem}.txt').write_bytes(self.caption.read_bytes())
+        self.run, errors = import_sources(self.run.config)
+        self.assertEqual(errors, [])
+        captions = {self.run.tag_file(c['tag']): self.run.tag_file(c['tag']).read_bytes()
+                    for s in self.run.data['sources'].values() for c in s['candidates']}
+        url = self.serve(make_server(self.run.directory, 0))
+        failures = {(0, 0, 255): 'invalid JSON', (255, 0, 0): 'invalid JSON'}
+        checked = []
+
+        def observe_sample(path, _options):
+            with Image.open(path) as image:
+                color = image.getpixel((0, 0))
+            checked.append(color)
+            if color in failures:
+                raise ValueError(failures[color])
+            return OBSERVATION
+
+        with requests.Session() as session, patch('core.dataset_pipeline.tag_audit.observe', side_effect=observe_sample):
+            session.trust_env = False
+            session.headers['X-Review-Token'] = session.get(url + '/api/session', timeout=5).json()['token']
+
+            def submit(retry=False):
+                return session.post(url + '/api/edit', json={
+                    'action': 'retry_audit_failed' if retry else 'start_audit',
+                    'audit': self.options,
+                }, timeout=5)
+
+            def wait_for_results(retry, total, failed):
+                response = submit(retry)
+                self.assertEqual(response.status_code, 202, response.text)
+                for _ in range(100):
+                    job = session.get(url + '/api/job', timeout=5).json()
+                    if job['status'] != 'running':
+                        break
+                    time.sleep(.02)
+                self.assertEqual(job['status'], 'complete', job)
+                self.assertEqual(job['errors'], [])
+                self.assertEqual((job['done'], job['total'], job['failedCount']), (total, total, failed))
+                return session.get(url + '/api/state', timeout=5).json()['tag_audit']
+
+            first = wait_for_results(False, 3, 2)
+            completed, = [s for s in first['samples'] if s['status'] == 'complete']
+            rule_ids = {f['id'] for f in first['findings'] if f['category'] == 'rule'}
+            self.assertEqual(len(rule_ids), 3)
+            self.assertEqual({s['error'] for s in first['samples'] if s['status'] == 'failed'}, {'invalid JSON'})
+
+            checked.clear()
+            failures = {(255, 0, 0): 'service timeout'}
+            second = wait_for_results(True, 2, 1)
+            self.assertCountEqual(checked, [(0, 0, 255), (255, 0, 0)])
+            self.assertIn(completed, second['samples'])
+            self.assertEqual(len(second['samples']), 3)
+            remaining, = [s for s in second['samples'] if s['status'] == 'failed']
+            self.assertEqual((Path(remaining['name']).stem, remaining['error']), ('c', 'service timeout'))
+            self.assertTrue(all(f in second['findings'] for f in first['findings']))
+
+            checked.clear()
+            failures = {}
+            final = wait_for_results(True, 1, 0)
+            self.assertEqual(checked, [(255, 0, 0)])
+            self.assertEqual({s['status'] for s in final['samples']}, {'complete'})
+            self.assertEqual(len(final['samples']), 3)
+            self.assertEqual({f['id'] for f in final['findings'] if f['category'] == 'rule'}, rule_ids)
+            self.assertEqual(sum(f['tag'] == 'full body' for f in final['findings']), 3)
+            self.assertEqual(submit(True).status_code, 400)
+            self.assertEqual({path: path.read_bytes() for path in captions}, captions)
+
     def add_reference_sample(self):
         folder = self.caption.parent
         Image.new('RGB', (80, 40), 'cyan').save(folder / 'reference.png')

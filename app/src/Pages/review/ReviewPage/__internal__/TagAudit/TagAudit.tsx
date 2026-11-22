@@ -21,6 +21,7 @@ import styles from './styles.module.css';
 
 const CATEGORY_LABELS = { framing: '构图范围', count: '人物数量', rule: '数据集规则', feature: '核心特征' };
 const STATUS_LABELS = { pending: '待处理', ignored: '已保留', applied: '已应用', stale: '已过期' };
+const ANOMALY_STATUS_LABELS = { ...STATUS_LABELS, failed: '失败' };
 const FEATURE_STATUS_LABELS = {
   pending: '待补标',
   consistent: '已一致',
@@ -338,9 +339,18 @@ export function TagAudit() {
   const rows = useMemo<AuditRow[]>(() => {
     const findings = audit?.findings || [];
     if (!featureMode) {
-      return findings
-        .filter((finding) => finding.action !== 'add')
-        .map((finding) => ({ ...finding, finding }));
+      return [
+        ...findings.filter((finding) => finding.action !== 'add').map((finding) => ({ ...finding, finding })),
+        ...(audit?.samples || [])
+          .filter((sample) => sample.status === 'failed')
+          .map((sample) => ({
+            ...sample,
+            id: `failed/${sample.source}/${sample.candidate}`,
+            name: `${sample.name} · ${sample.candidate}`,
+            status: 'failed' as const,
+            reason: sample.error,
+          })),
+      ];
     }
     const byId = new Map(
       findings.filter((finding) => finding.action === 'add').map((finding) => [finding.id, finding]),
@@ -356,13 +366,15 @@ export function TagAudit() {
         finding,
       };
     });
-  }, [audit?.findings, featureMode, latest]);
+  }, [audit?.findings, audit?.samples, featureMode, latest]);
 
-  const visible = rows.filter(
-    (row) =>
+  const visible = rows.filter((row) => {
+    if (!featureMode && row.status === 'failed') return status === 'failed';
+    return (
       (featureMode || category === 'all' || row.finding?.category === category) &&
-      (status === 'all' || row.status === status),
-  );
+      (status === 'all' || row.status === status)
+    );
+  });
   const selectedIds = visible.flatMap((row) =>
     row.finding?.status === 'pending' && selected.has(row.finding.id) ? [row.finding.id] : [],
   );
@@ -374,39 +386,41 @@ export function TagAudit() {
   );
   const pending = rows.filter((row) => row.status === 'pending').length;
   const uncertain = audit?.samples?.filter((sample) => sample.status === 'uncertain') || [];
-  const failed = audit?.samples?.filter((sample) => sample.status === 'failed') || [];
-  const eligible = v.sources.reduce(
-    (sum, source) =>
-      sum +
-      source.candidates.filter((candidate) => candidate.status === 'accepted' && candidate.tag_current)
-        .length,
-    0,
+  const failed = rows.filter((row) => row.status === 'failed');
+  const eligible = v.tags.allTargets.length;
+  const eligibleKeys = useMemo(
+    () => new Set(v.tags.allTargets.map(([source, candidate]) => `${source}/${candidate}`)),
+    [v.tags.allTargets],
   );
+  const retryable = failed.filter((row) => eligibleKeys.has(`${row.source}/${row.candidate}`)).length;
   const activeAudit = v.job.action === 'start_audit' && v.job.status === 'running';
-  const featureFailed = featureMode ? rows.filter((row) => row.status === 'failed').length : 0;
   const refresh = () => client.invalidateQueries({ queryKey: ['run'] });
   const mutation = useMutation({
     mutationFn: (data: EditRequest) => updateReview(data, v.session.token),
     onMutate: () => v.setDatasetSwitching(true),
     onSuccess: async (_result, data) => {
       setSelected(new Set());
-      if (data.action === 'start_audit') {
+      const retry = data.action === 'retry_audit_failed';
+      if (data.action === 'start_audit' || retry) {
         setPage(0);
-        setStatus('pending');
+        setStatus(retry ? 'failed' : 'pending');
         client.setQueryData(['job'], {
           status: 'running',
           action: 'start_audit',
           auditFeature: data.featureId ? feature : null,
-          total: eligible,
+          total: retry ? retryable : eligible,
           done: 0,
           errors: [],
           failedCount: 0,
         });
-        v.message('标签检查已开始，工作 TXT 保持原样。');
+        v.message(retry ? '正在重试失败样本。' : '标签检查已开始，工作 TXT 保持原样。');
       } else v.message(data.action === 'undo_audit' ? '已撤销该批次。' : '检查结果已保存。');
       await Promise.all([refresh(), client.invalidateQueries({ queryKey: ['job'] })]);
     },
-    onError: (error: Error) => v.message(error.message, true),
+    onError: (error: Error, data) => {
+      const outdated = data.action === 'retry_audit_failed' && error.message === '未知操作';
+      v.message(outdated ? '当前 WebUI 后端版本过旧。请重启 WebUI 后再重试失败项。' : error.message, true);
+    },
     onSettled: () => v.setDatasetSwitching(false),
   });
   const featureMutation = useMutation({
@@ -441,6 +455,14 @@ export function TagAudit() {
     handleFilter('pending', 'all');
   }
 
+  function handleStartAudit(retryFailed = false) {
+    mutation.mutate({
+      action: retryFailed ? 'retry_audit_failed' : 'start_audit',
+      audit: { ...options, forbidden: forbiddenTags },
+      featureId: featureMode ? feature?.id : undefined,
+    });
+  }
+
   function handleDecision(action: 'apply_audit' | 'ignore_audit', ids: string[]) {
     if (!ids.length || disabled) return;
     if (action === 'apply_audit') {
@@ -465,7 +487,8 @@ export function TagAudit() {
     return `/image?source=${encodeURIComponent(sample.source)}&candidate=${encodeURIComponent(sample.candidate)}&kind=tag&v=${encodeURIComponent(v.state?.updated_at || '')}`;
   }
 
-  const statusLabels = featureMode ? FEATURE_STATUS_LABELS : STATUS_LABELS;
+  const statusLabels = featureMode ? FEATURE_STATUS_LABELS : ANOMALY_STATUS_LABELS;
+  const showingFailed = !featureMode && status === 'failed';
   const referenceUrl = referenceSample
     ? getImageUrl(referenceSample[0], 'tag', updatedAt, referenceSample[1])
     : '';
@@ -484,11 +507,17 @@ export function TagAudit() {
         <div className={styles.toolbar}>
           <h2>{featureMode ? '核心特征补标' : '检查结果'}</h2>
           {!featureMode ? <span>待处理 {pending} 项</span> : null}
+          {!featureMode && !showingFailed && failed.length ? (
+            <button type='button' onClick={() => handleFilter('failed')}>
+              失败（{failed.length}）
+            </button>
+          ) : null}
           {!featureMode ? (
             <label>
               类型
               <select
                 value={category}
+                disabled={showingFailed}
                 onChange={(event) => handleFilter(status, event.target.value as AuditCategory)}
               >
                 <option value='all'>全部类型</option>
@@ -513,33 +542,47 @@ export function TagAudit() {
         {featureMode && latest ? (
           <p>
             最近一轮：{latest.feature.name} · {latest.feature.tags.join(' + ')} · {latest.samples.length} /{' '}
-            {latest.total} 份 · 待补标 {pending} 份 · 失败 {featureFailed} 份
+            {latest.total} 份 · 待补标 {pending} 份 · 失败 {failed.length} 份
           </p>
         ) : null}
-        <div className={styles.toolbar}>
-          <button
-            disabled={disabled || !pagePendingIds.length}
-            onClick={() => setSelected(new Set(pagePendingIds))}
-          >
-            选择本页{featureMode ? '待补标项' : '待处理项'}
-          </button>
-          <button disabled={disabled || !selectedIds.length} onClick={() => setSelected(new Set())}>
-            清空选择
-          </button>
-          <button
-            className='primary'
-            disabled={disabled || !selectedIds.length}
-            onClick={() => handleDecision('apply_audit', selectedIds)}
-          >
-            {featureMode ? '补标所选' : '应用所选删除'}（{selectedIds.length}）
-          </button>
-          <button
-            disabled={disabled || !selectedIds.length}
-            onClick={() => handleDecision('ignore_audit', selectedIds)}
-          >
-            {featureMode ? '忽略所选' : '保留所选原标签'}
-          </button>
-        </div>
+        {showingFailed ? (
+          <div className={styles.toolbar}>
+            <button
+              type='button'
+              className='primary'
+              disabled={disabled || !retryable}
+              onClick={() => handleStartAudit(true)}
+            >
+              重试全部失败项（{retryable}）
+            </button>
+            {failed.length > retryable ? <span>{failed.length - retryable} 份样本已不在有效范围</span> : null}
+          </div>
+        ) : (
+          <div className={styles.toolbar}>
+            <button
+              disabled={disabled || !pagePendingIds.length}
+              onClick={() => setSelected(new Set(pagePendingIds))}
+            >
+              选择本页{featureMode ? '待补标项' : '待处理项'}
+            </button>
+            <button disabled={disabled || !selectedIds.length} onClick={() => setSelected(new Set())}>
+              清空选择
+            </button>
+            <button
+              className='primary'
+              disabled={disabled || !selectedIds.length}
+              onClick={() => handleDecision('apply_audit', selectedIds)}
+            >
+              {featureMode ? '补标所选' : '应用所选删除'}（{selectedIds.length}）
+            </button>
+            <button
+              disabled={disabled || !selectedIds.length}
+              onClick={() => handleDecision('ignore_audit', selectedIds)}
+            >
+              {featureMode ? '忽略所选' : '保留所选原标签'}
+            </button>
+          </div>
+        )}
         <div className={styles.list}>
           {pageRows.map((row) => {
             const finding = row.finding;
@@ -558,7 +601,9 @@ export function TagAudit() {
                   <strong>
                     {featureMode
                       ? `${finding ? getFindingTags(finding).join(' + ') : latest?.feature.tags.join(' + ')} · ${FEATURE_STATUS_LABELS[row.status]}`
-                      : `${CATEGORY_LABELS[finding!.category]} · ${finding!.tag}`}
+                      : finding
+                        ? `${CATEGORY_LABELS[finding.category]} · ${finding.tag}`
+                        : '检查失败'}
                   </strong>
                   <p>{row.reason}</p>
                   {!featureMode && finding ? (
@@ -603,7 +648,11 @@ export function TagAudit() {
           })}
           {!visible.length ? (
             <p className='emptyState'>
-              {featureMode && !latest ? '保存一条特征，再检查当前数据集。' : '当前筛选下没有检查结果。'}
+              {showingFailed
+                ? '没有失败样本。'
+                : featureMode && !latest
+                  ? '保存一条特征，再检查当前数据集。'
+                  : '当前筛选下没有检查结果。'}
             </p>
           ) : null}
         </div>
@@ -781,13 +830,7 @@ export function TagAudit() {
               !eligible ||
               (featureMode && (!feature || !!form || !!conflict.length || !!feature.referenceError))
             }
-            onClick={() =>
-              mutation.mutate({
-                action: 'start_audit',
-                audit: { ...options, forbidden: forbiddenTags },
-                featureId: featureMode ? feature?.id : undefined,
-              })
-            }
+            onClick={() => handleStartAudit()}
           >
             {featureMode ? '检查此特征' : '运行检查，不改标签'}
           </button>
@@ -795,28 +838,26 @@ export function TagAudit() {
             <div className={styles.detail} role='status'>
               <p>
                 {v.job.auditFeature ? `正在检查「${v.job.auditFeature.name}」` : '正在检查标签异常'} ·{' '}
-                {v.job.done} / {v.job.total} 份 · 失败 {v.job.failedCount || 0} 份
+                {v.job.done} / {v.job.total} 份
               </p>
               <progress aria-label='标签检查进度' max={Math.max(v.job.total, 1)} value={v.job.done} />
             </div>
           ) : null}
           {!featureMode && audit?.samples ? (
             <p>
-              最近一轮：检查 {audit.samples.length} 份 · 部分不确定 {uncertain.length} 份 · 失败{' '}
-              {failed.length} 份。
+              最近一轮：检查 {audit.samples.length} 份 · 部分不确定 {uncertain.length} 份。
             </p>
           ) : null}
-          {!featureMode && (uncertain.length || failed.length) ? (
+          {!featureMode && uncertain.length ? (
             <details>
-              <summary>查看不确定与失败样本</summary>
-              {[...failed, ...uncertain].map((sample) => (
+              <summary>查看不确定样本</summary>
+              {uncertain.map((sample) => (
                 <div key={`${sample.source}/${sample.candidate}`} className={styles.sample}>
                   <button onClick={() => v.setPreviewImage(imageUrl(sample))}>
                     {sample.name} · {sample.candidate}
                   </button>
                   <p>
-                    {sample.error ||
-                      `${sample.observation?.count_reason}；${sample.observation?.framing_reason}`}
+                    {sample.observation?.count_reason}；{sample.observation?.framing_reason}
                   </p>
                 </div>
               ))}
