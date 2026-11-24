@@ -1,12 +1,19 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { addAuditFeature, deleteAuditFeature, updateAuditFeature, updateReview } from '../../api/client';
+import {
+  addAuditFeature,
+  deleteAuditFeature,
+  describeAuditCostume,
+  updateAuditFeature,
+  updateReview,
+} from '../../api/client';
 import type {
   EditRequest,
   TagAuditFeature,
   TagAuditFinding,
   TagAuditOptions,
+  TagAuditReference,
   TagImage,
 } from '../../api/types';
 import { useReviewContext } from '../../review/context';
@@ -402,6 +409,10 @@ export function TagAuditPage() {
   const [form, setForm] = useState<'new' | 'edit'>();
   const [pickingCostumeReference, setPickingCostumeReference] = useState(false);
   const [costumeSelection, setCostumeSelection] = useState<{ key: string; previousRunId?: string }>();
+  const [descriptionEdit, setDescriptionEdit] = useState<{ text: string; previousRunId?: string }>();
+  const costumeFormId = useId();
+  const descriptionId = useId();
+  const descriptionHelp = useId();
   const features = Object.values(audit?.features || {});
   const feature = features.find((item) => item.id === featureId) || features[0];
   const referenceSamples = useMemo(
@@ -428,6 +439,10 @@ export function TagAuditPage() {
     ? costumeSamples.find(([source, candidate]) => imageKey(source, candidate) === costumeKey)
     : undefined;
   const costumeReferenceError = hasNewCostumeSelection ? undefined : costumeRun?.referenceError;
+  const costumeDescription =
+    descriptionEdit && descriptionEdit.previousRunId === costumeRun?.id
+      ? descriptionEdit.text
+      : (!hasNewCostumeSelection && !costumeReferenceError && savedCostumeReference?.description) || '';
   const updatedAt = v.state?.updated_at || '';
   const forbiddenTags = splitTags(forbidden);
   const targetTags = costumeMode ? [COSTUME_TAG] : (feature?.tags ?? []);
@@ -548,7 +563,24 @@ export function TagAuditPage() {
     onError: (error: Error) => v.showToast(error.message, 'error'),
     onSettled: () => v.setDatasetSwitching(false),
   });
-  const disabled = v.processing || mutation.isPending || featureMutation.isPending;
+  const descriptionMutation = useMutation({
+    mutationFn: (reference: TagAuditReference) =>
+      describeAuditCostume(v.state!.config.run_dir, reference, options, v.session.token),
+    onMutate: () => v.setDatasetSwitching(true),
+    onSuccess: ({ result }) => {
+      setDescriptionEdit({ text: result.description, previousRunId: costumeRun?.id });
+      v.showToast('已生成标准服装描述，请核对后运行。', 'success');
+    },
+    onError: (error: Error) => {
+      v.showToast(
+        error.message === '未知操作' ? '请重启 WebUI，使后端加载当前版本。' : error.message,
+        'error',
+      );
+    },
+    onSettled: () => v.setDatasetSwitching(false),
+  });
+  const disabled =
+    v.processing || mutation.isPending || featureMutation.isPending || descriptionMutation.isPending;
 
   function handleFilter(nextStatus: AuditFilter, nextCategory = category) {
     setStatus(nextStatus);
@@ -562,6 +594,18 @@ export function TagAuditPage() {
     handleFilter(next === 'costume' ? 'alternate' : 'pending', 'all');
   }
 
+  function handleCostumeReference({ sampleKey }: ReferenceSelection) {
+    if (sampleKey === costumeKey && !costumeReferenceError) return;
+    setCostumeSelection({ key: sampleKey, previousRunId: costumeRun?.id });
+    setDescriptionEdit({ text: '', previousRunId: costumeRun?.id });
+  }
+
+  function handleDescribeCostume() {
+    if (!costumeSample || costumeReferenceError) return;
+    const [source, candidate] = costumeSample;
+    descriptionMutation.mutate({ source: source.id, candidate: candidate.id });
+  }
+
   function handleStartAudit(retryFailed = false) {
     const auditOptions = { ...options, forbidden: forbiddenTags };
     if (costumeMode) {
@@ -571,6 +615,7 @@ export function TagAuditPage() {
         action: 'start_costume_audit',
         audit: auditOptions,
         costumeReference: { source: source.id, candidate: candidate.id },
+        costumeDescription,
       });
       return;
     }
@@ -682,6 +727,9 @@ export function TagAuditPage() {
             份
           </p>
         ) : null}
+        {costumeMode && costumeRun && !costumeRun.reference.description ? (
+          <p>上一轮使用旧规则，请确认标准服装描述后重新检查。</p>
+        ) : null}
         {showingFailed ? (
           <div className={styles.toolbar}>
             <button
@@ -788,7 +836,7 @@ export function TagAuditPage() {
               {status === 'failed'
                 ? '没有失败样本。'
                 : costumeMode && !costumeRun
-                  ? '选择标准服装参考图后运行换装检查。'
+                  ? '选择标准服装参考图并确认描述后运行检查。'
                   : featureMode && !latest
                     ? '保存一条特征，再检查当前数据集。'
                     : '当前筛选下没有检查结果。'}
@@ -820,7 +868,7 @@ export function TagAuditPage() {
                 key={item}
                 aria-pressed={mode === item}
                 className={mode === item ? 'active' : ''}
-                disabled={mutation.isPending}
+                disabled={mutation.isPending || descriptionMutation.isPending}
                 onClick={() => handleModeChange(item)}
               >
                 {MODE_LABELS[item]}
@@ -917,6 +965,48 @@ export function TagAuditPage() {
                 </button>
               ) : null}
               {costumeReferenceError ? <p role='status'>{costumeReferenceError}</p> : null}
+              {costumeSample ? (
+                <form
+                  id={costumeFormId}
+                  className={styles.detail}
+                  action='/api/edit'
+                  method='post'
+                  aria-labelledby={descriptionId + '-label'}
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (!disabled) handleStartAudit();
+                  }}
+                >
+                  <label id={descriptionId + '-label'} htmlFor={descriptionId}>
+                    标准服装描述（必填）
+                  </label>
+                  <textarea
+                    id={descriptionId}
+                    name='costumeDescription'
+                    aria-describedby={descriptionHelp}
+                    required
+                    maxLength={2000}
+                    rows={4}
+                    value={costumeDescription}
+                    disabled={disabled || !!costumeReferenceError}
+                    onChange={(event) =>
+                      setDescriptionEdit({ text: event.target.value, previousRunId: costumeRun?.id })
+                    }
+                  />
+                  <p id={descriptionHelp}>核对可见的上衣、外套、下装和鞋袜，尤其是款式、剪裁和层次。</p>
+                  <button
+                    type='button'
+                    disabled={disabled || !!costumeReferenceError}
+                    onClick={handleDescribeCostume}
+                  >
+                    {descriptionMutation.isPending
+                      ? '正在生成描述…'
+                      : costumeDescription
+                        ? '重新生成描述'
+                        : '生成标准服装描述'}
+                  </button>
+                </form>
+              ) : null}
               {pickingCostumeReference && costumeSamples.length ? (
                 <ReferencePicker
                   costume
@@ -925,9 +1015,7 @@ export function TagAuditPage() {
                     costumeSample && costumeKey ? { sampleKey: costumeKey, tags: [] } : undefined
                   }
                   updatedAt={updatedAt}
-                  onSelect={({ sampleKey }) =>
-                    setCostumeSelection({ key: sampleKey, previousRunId: costumeRun?.id })
-                  }
+                  onSelect={handleCostumeReference}
                   onDismiss={() => setPickingCostumeReference(false)}
                 />
               ) : null}
@@ -997,6 +1085,8 @@ export function TagAuditPage() {
           ) : null}
           <button
             className='primary'
+            type={costumeMode ? 'submit' : 'button'}
+            form={costumeMode ? costumeFormId : undefined}
             disabled={
               disabled ||
               !eligible ||
@@ -1004,9 +1094,9 @@ export function TagAuditPage() {
               (featureMode && (!feature || !!form || !!feature.referenceError)) ||
               (costumeMode && (!costumeSample || !!costumeReferenceError))
             }
-            onClick={() => handleStartAudit()}
+            onClick={costumeMode ? undefined : () => handleStartAudit()}
           >
-            {costumeMode ? '运行换装检查' : featureMode ? '检查此特征' : '运行检查，不改标签'}
+            {costumeMode ? '确认描述并运行换装检查' : featureMode ? '检查此特征' : '运行检查，不改标签'}
           </button>
           {activeAudit ? (
             <div className={styles.detail} role='status'>

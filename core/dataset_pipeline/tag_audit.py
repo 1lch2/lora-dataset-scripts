@@ -10,8 +10,8 @@ import requests
 from PIL import Image, ImageOps
 
 from .core import apply_tag_operation, asset, digest, normalize
-from .costume_audit import (COSTUME_PROMPT, COSTUME_TAG, check_costume_reference,
-                            prepare_costume_reference, validate_costume_observation)
+from .costume_audit import (COSTUME_INPUT, COSTUME_PROMPT, COSTUME_TAG, DESCRIPTION_PROMPT,
+                            check_costume_reference, validate_costume_observation, validate_generated_description)
 from .feature_audit import (FEATURE_PROMPT, check_feature_conflict, check_reference, feature_tags,
                             get_feature, image_version, validate_feature_observation)
 from .forge import encode_image
@@ -121,9 +121,15 @@ def observe_feature(path, options, feature):
     return request_observation(options, content, validate_feature_observation)
 
 
-def observe_costume(path, options, reference_image):
+def describe_costume(reference_image, options):
+    content = [{'type': 'text', 'text': DESCRIPTION_PROMPT}, reference_image]
+    return request_observation(options, content, validate_generated_description)
+
+
+def observe_costume(path, options, reference_image, description):
+    description_input = json.dumps(description, ensure_ascii=False)
     content = [
-        {'type': 'text', 'text': COSTUME_PROMPT + '\nImage 1: standard outfit reference.'},
+        {'type': 'text', 'text': f'{COSTUME_PROMPT}\nConfirmed outfit description: {description_input}\nImage 1:'},
         reference_image,
         {'type': 'text', 'text': 'Image 2: target training image.'},
         image_part(path),
@@ -233,7 +239,7 @@ def addition_current(run, latest, category, options, checked):
         check_feature_conflict(feature, options)
         return latest.get('input') == FEATURE_INPUT and feature_current(run, feature, checked)
     check_costume_conflict(options)
-    return not costume_reference_error(run, latest['reference'], checked)
+    return latest.get('input') == COSTUME_INPUT and not costume_reference_error(run, latest['reference'], checked)
 
 
 def addition_tags(latest, category):
@@ -345,7 +351,7 @@ def inspect_addition_sample(run, source, candidate, options, latest, category, r
             reference = latest['reference']
             if (source['id'], candidate['id']) == (reference['source'], reference['candidate']):
                 return {**sample, 'status': 'absent', 'reason': '此图是标准服装参考图。'}, []
-            observation = observe_costume(path, options, reference_image)
+            observation = observe_costume(path, options, reference_image, reference['description'])
         else:
             observation = observe_feature(path, options, latest['feature'])
         sample.update(status=observation['state'], reason=observation['reason'])
@@ -363,7 +369,7 @@ def inspect_addition_sample(run, source, candidate, options, latest, category, r
                'round': latest['id'], 'category': category, 'action': 'add', 'tags': missing, 'status': 'pending',
                'model': options['model']}
     if category == 'costume':
-        finding['referenceVersion'] = latest['reference']['version']
+        finding['referenceVersion'] = latest['referenceVersion']
     else:
         feature = latest['feature']
         finding['feature'] = {'id': feature['id'], 'version': feature['version']}
@@ -423,7 +429,8 @@ def audit_run(run, options, progress, feature_id=None, report_failure=None, retr
         check_costume_reference(run, costume_reference)
         _, candidate = run.locate(costume_reference['source'], costume_reference['candidate'])
         reference_image = image_part(asset(run.directory, candidate['tag']['image']))
-        latest = {'reference': costume_reference}
+        latest = {'reference': costume_reference, 'input': COSTUME_INPUT,
+                  'referenceVersion': digest([costume_reference['version'], costume_reference['description'], COSTUME_INPUT])}
     elif feature_id is not None:
         category = 'feature'
         feature = copy.deepcopy(prepare_feature_check(run, feature_id, options))

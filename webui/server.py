@@ -8,13 +8,13 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from core.dataset_pipeline.core import DEFAULTS, Run, asset, run_lock
-from core.dataset_pipeline.costume_audit import prepare_costume_reference
+from core.dataset_pipeline.costume_audit import prepare_costume_reference, validate_costume_description
 from core.dataset_pipeline.datasets import delete_dataset, detect_source, import_config, import_sources, list_datasets, replace_source_image, upscale_source
 from core.dataset_pipeline.forge import ForgeClient
 from core.dataset_pipeline.geometry import default_scale
 from core.dataset_pipeline.feature_audit import edit_feature
 from core.dataset_pipeline.tag_audit import (audit_run, audit_view, check_costume_conflict, clear_previous_audit_failures,
-                                             edit_audit, eligible_samples,
+                                             describe_costume, edit_audit, eligible_samples, image_part,
                                              prepare_feature_check, validate_options as validate_audit_options)
 from core.dataset_pipeline.tagging import apply_filters, restore_captions, tag_run, validate_options
 from tools.analysis.job import AnalysisJob
@@ -173,7 +173,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 job.update(status="failed", errors=[str(error)])
 
     def start_job(action, group=None, source_id=None, tagging=None, replace_confirmed=False, audit=None,
-                  feature_id=None, retry_failed=False, costume_selection=None):
+                  feature_id=None, retry_failed=False, costume_selection=None, costume_description=None):
         costume = action == 'start_costume_audit'
         if costume:
             action = 'start_audit'
@@ -207,6 +207,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     if costume:
                         check_costume_conflict(audit)
                         costume_reference = prepare_costume_reference(run, costume_selection)
+                        costume_reference['description'] = validate_costume_description(costume_description)
                     if not retry_failed:
                         category = 'costume' if costume else 'feature' if feature_id is not None else 'anomaly'
                         # 返回任务已开始前清除上一轮失败，避免后台准备图片时页面读到旧记录。
@@ -481,13 +482,29 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     self.reply(200, {"ok": True, "result": {}})
                     return
                 action = data.get('action')
+                if action == 'describe_costume':
+                    options = data.get('audit')
+                    options = validate_audit_options({**options, 'visual': True} if isinstance(options, dict) else options)
+                    with mutex:
+                        requested = data.get('runDir')
+                        if directory is None or not isinstance(requested, str) or Path(requested).resolve() != directory:
+                            raise ValueError('当前数据集已变化，请刷新后重试')
+                        if job['status'] == 'running':
+                            raise ValueError('任务正在运行，完成后可生成服装描述')
+                        run = load_run(directory)
+                        reference = prepare_costume_reference(run, data.get('costumeReference'))
+                        _, candidate = run.locate(reference['source'], reference['candidate'])
+                        reference_image = image_part(asset(run.directory, candidate['tag']['image']))
+                    description = describe_costume(reference_image, options)
+                    self.reply(200, {'ok': True, 'result': {'description': description}})
+                    return
                 if action in ('start_tag', 'export', 'sync_sources', 'start_upscale', 'start_detect',
                               'start_audit', 'retry_audit_failed', 'start_costume_audit'):
                     retry = action == 'retry_audit_failed'
                     start_job('start_audit' if retry else action, data.get('group'), data.get('source'),
                               data.get('tagging'), data.get('replaceConfirmed', False), data.get('audit'),
                               data.get('featureId'), retry_failed=retry or data.get('retryFailed', False),
-                              costume_selection=data.get('costumeReference'))
+                              costume_selection=data.get('costumeReference'), costume_description=data.get('costumeDescription'))
                     self.reply(202, {"ok": True, "result": {}})
                     return
                 with mutex, run_lock(directory):

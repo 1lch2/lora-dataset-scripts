@@ -182,7 +182,7 @@ export interface TagAuditInfo {
   featureRun?: { id: string; feature: TagAuditFeature; total: number; samples: TagAuditFeatureSample[] };
   costumeRun?: {
     id: string;
-    reference: TagAuditReference & { name: string };
+    reference: TagAuditReference & { name: string; description?: string };
     referenceError?: string;
     total: number;
     samples: TagAuditFeatureSample[];

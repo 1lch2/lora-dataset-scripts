@@ -11,6 +11,8 @@ import type {
   RunInfo,
   SessionInfo,
   TagAuditFeatureFields,
+  TagAuditOptions,
+  TagAuditReference,
 } from './types';
 
 export async function request<T>(url: string, data?: unknown, token?: string): Promise<T> {
@@ -40,6 +42,18 @@ export const openDataset = (runDir: string, token: string) =>
   request<DatasetOpenResult>('/api/datasets/open', { runDir }, token);
 export const updateReview = (data: EditRequest, token: string) =>
   request<EditResult>('/api/edit', data, token);
+
+export const describeAuditCostume = (
+  runDir: string,
+  costumeReference: TagAuditReference,
+  audit: TagAuditOptions,
+  token: string,
+) =>
+  request<{ result: { description: string } }>(
+    '/api/edit',
+    { action: 'describe_costume', runDir, costumeReference, audit },
+    token,
+  );
 
 export const addAuditFeature = (runDir: string, fields: TagAuditFeatureFields, token: string) =>
   request<EditResult>('/api/tag-audit/feature', { action: 'save_feature', runDir, ...fields }, token);

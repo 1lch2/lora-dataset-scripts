@@ -289,11 +289,11 @@ class TagAuditTests(unittest.TestCase):
     def test_costume_http_compares_two_images_and_only_applies_selected_tags(self):
         folder = self.caption.parent
         cases = {
-            'change': ('red', 'alternate', 'blue hair'),
-            'tagged': ('green', 'alternate', 'alternate_costume'),
+            'change': ('red', 'different_type', 'blue hair'),
+            'tagged': ('green', 'different_type', 'alternate_costume'),
             'same': ('blue', 'same', 'blue hair'),
-            'hidden': ('black', 'unobservable', 'blue hair'),
-            'unclear': ('purple', 'uncertain', 'blue hair'),
+            'hidden': ('black', 'different_construction', 'blue hair'),
+            'motion': ('purple', 'minor', 'blue hair'),
             'failed': ('orange', 'invalid', 'blue hair'),
         }
         states = {(255, 255, 255): 'same'}
@@ -307,18 +307,30 @@ class TagAuditTests(unittest.TestCase):
                 for s in self.run.data['sources'].values()}
         original = {path: path.read_bytes() for path in [*work.values(), *folder.glob('*.txt')]}
         calls = []
+        description = '上衣为白色衬衫，外套为深色长外套。'
+        confirmed = '上衣为白色条纹衬衫，深色长外套带红色内衬。'
 
         class VisionHandler(BaseHTTPRequestHandler):
             def do_POST(self):
                 data = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 colors = []
-                for part in data['messages'][0]['content']:
+                content = data['messages'][0]['content']
+                for part in content:
                     if part['type'] == 'image_url':
-                        content = part['image_url']['url'].split(',', 1)[1]
-                        with Image.open(io.BytesIO(base64.b64decode(content))) as image:
+                        encoded = part['image_url']['url'].split(',', 1)[1]
+                        with Image.open(io.BytesIO(base64.b64decode(encoded))) as image:
                             colors.append(image.getpixel((0, 0)))
-                calls.append(colors)
-                observation = {'state': states.get(colors[-1]), 'reason': '衣领剪裁可见'}
+                calls.append((colors, confirmed in content[0]['text']))
+                if len(colors) == 1:
+                    observation = {'description': description}
+                else:
+                    comparison = states[colors[-1]]
+                    observation = {'regions': [{
+                        'region': 'top', 'comparison': comparison, 'referenceVisible': True,
+                        'targetVisible': colors[-1] != (0, 0, 0), 'reference': '白色条纹衬衫',
+                        'target': {'different_type': '泳装上衣', 'minor': '同款条纹衬衫，衣摆被动作掀起',
+                                   'different_construction': '仅露出衣领'}.get(comparison, '白色条纹衬衫'),
+                    }]}
                 self.send_response(200)
                 self.end_headers()
                 self.wfile.write(json.dumps({'choices': [{'message': {'content': json.dumps(observation)}}]}).encode())
@@ -346,16 +358,23 @@ class TagAuditTests(unittest.TestCase):
                 return job
 
             options = {**self.options, 'endpoint': endpoint + '/v1', 'visual': False, 'concurrency': 2}
-            self.assertEqual(edit('start_costume_audit', audit=options).status_code, 400)
-            start = edit('start_costume_audit', audit=options, costumeReference=selection)
+            draft = edit('describe_costume', runDir=str(self.run.directory), audit=options, costumeReference=selection)
+            self.assertTrue(draft.ok, draft.text)
+            self.assertEqual(draft.json()['result']['description'], description)
+            self.assertEqual(calls, [([(0, 255, 255)], False)])
+            self.assertNotIn('tag_audit', Run.load(self.run.directory).data)
+            calls.clear()
+            self.assertEqual(edit('start_costume_audit', audit=options, costumeReference=selection).status_code, 400)
+            start = edit('start_costume_audit', audit=options, costumeReference=selection, costumeDescription=confirmed)
             self.assertEqual(start.status_code, 202, start.text)
             job = wait_job()
             self.assertEqual((job['status'], job['done'], job['failedCount']), ('complete', len(work), 1))
-            self.assertCountEqual(calls, [[(0, 255, 255), color] for color in states])
+            self.assertCountEqual(calls, [([(0, 255, 255), color], True) for color in states])
             audit = audit_state()
+            self.assertEqual(audit['costumeRun']['reference']['description'], confirmed)
             self.assertEqual({Path(s['name']).stem: s['status'] for s in audit['costumeRun']['samples']}, {
                 'a': 'absent', 'reference': 'absent', 'change': 'present', 'tagged': 'consistent',
-                'same': 'absent', 'hidden': 'unobservable', 'unclear': 'uncertain', 'failed': 'failed',
+                'same': 'absent', 'hidden': 'unobservable', 'motion': 'uncertain', 'failed': 'failed',
             })
             finding, = audit['findings']
             self.assertEqual((finding['category'], finding['tags']), ('costume', ['alternate costume']))
@@ -365,6 +384,11 @@ class TagAuditTests(unittest.TestCase):
             self.assertEqual((folder / 'change.txt').read_bytes(), original[folder / 'change.txt'])
             self.assertTrue(edit('undo_audit', batch=audit_state()['batches'][-1]['id']).ok)
             self.assertEqual({path: path.read_bytes() for path in original}, original)
+            legacy = Run.load(self.run.directory)
+            legacy.data['tag_audit']['costumeRun'].pop('input')
+            legacy.save()
+            self.assertEqual(audit_state()['findings'][0]['status'], 'stale')
+            self.assertEqual(edit('apply_audit', ids=[finding['id']]).status_code, 400)
             _, reference = self.run.locate(selection['source'], selection['candidate'])
             reference_path = asset(self.run.directory, reference['tag']['image'])
             encoding_reference, finish_encoding = threading.Event(), threading.Event()
@@ -383,7 +407,7 @@ class TagAuditTests(unittest.TestCase):
             states[(255, 165, 0)] = 'same'
             with patch('core.dataset_pipeline.tag_audit.image_part', side_effect=pause_reference_encoding):
                 try:
-                    start = edit('start_costume_audit', audit=options, costumeReference=selection)
+                    start = edit('start_costume_audit', audit=options, costumeReference=selection, costumeDescription=confirmed)
                     self.assertEqual(start.status_code, 202, start.text)
                     self.assertTrue(encoding_reference.wait(5))
                     self.assertFalse(any(s['status'] == 'failed' for s in audit_state()['costumeRun']['samples']))
