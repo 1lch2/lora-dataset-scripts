@@ -375,6 +375,16 @@ def failed_sample_indices(audit):
             for index, sample in enumerate(audit.get('samples', [])) if sample['status'] == 'failed'}
 
 
+def clear_previous_audit_failures(run, category):
+    audit = run.data.get('tag_audit', {})
+    result = audit if category == 'anomaly' else audit.get(ADDITION_RUN_KEYS[category], {})
+    samples = result.get('samples', [])
+    remaining = [sample for sample in samples if sample['status'] != 'failed']
+    if len(remaining) != len(samples):
+        result['samples'] = remaining
+        run.save()
+
+
 def eligible_samples(run, retry_failed=False):
     failed = failed_sample_indices(run.data.get('tag_audit', {})) if retry_failed else None
     return [(s, c) for s in run.data['sources'].values() if s.get('active', True)

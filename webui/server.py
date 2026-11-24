@@ -13,7 +13,8 @@ from core.dataset_pipeline.datasets import delete_dataset, detect_source, import
 from core.dataset_pipeline.forge import ForgeClient
 from core.dataset_pipeline.geometry import default_scale
 from core.dataset_pipeline.feature_audit import edit_feature
-from core.dataset_pipeline.tag_audit import (audit_run, audit_view, check_costume_conflict, edit_audit, eligible_samples,
+from core.dataset_pipeline.tag_audit import (audit_run, audit_view, check_costume_conflict, clear_previous_audit_failures,
+                                             edit_audit, eligible_samples,
                                              prepare_feature_check, validate_options as validate_audit_options)
 from core.dataset_pipeline.tagging import apply_filters, restore_captions, tag_run, validate_options
 from tools.analysis.job import AnalysisJob
@@ -206,6 +207,10 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     if costume:
                         check_costume_conflict(audit)
                         costume_reference = prepare_costume_reference(run, costume_selection)
+                    if not retry_failed:
+                        category = 'costume' if costume else 'feature' if feature_id is not None else 'anomaly'
+                        # 返回任务已开始前清除上一轮失败，避免后台准备图片时页面读到旧记录。
+                        clear_previous_audit_failures(run, category)
                 sources = ([run.locate(source_id)] if source_id is not None else
                            [s for s in run.data["sources"].values() if s.get("active", True)
                             and (action not in ('start_upscale', 'start_detect') or not group or s['group'] == group)])
@@ -327,10 +332,10 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 elif route.path == "/api/job":
                     with mutex:
                         data = dict(job)
-                    run = load_run(directory)
-                    samples = [(s, c) for s in run.data["sources"].values() if s.get("active", True)
-                               for c in s["candidates"] if c["status"] == "accepted"]
                     if data.get('action') not in ('start_upscale', 'start_detect', 'start_audit', 'denoise', 'denoise_models') and not data.get('explicitTagging'):
+                        run = load_run(directory)
+                        samples = [(s, c) for s in run.data["sources"].values() if s.get("active", True)
+                                   for c in s["candidates"] if c["status"] == "accepted"]
                         data.update(total=len(samples), done=sum(run.current_tag(s, c)
                                     and asset(directory, c["tag"]["image"]).is_file() for s, c in samples))
                     self.reply(200, data)

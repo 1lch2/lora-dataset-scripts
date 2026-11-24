@@ -17,7 +17,7 @@ from core.dataset_pipeline.core import DEFAULTS, Run, asset
 from core.dataset_pipeline.datasets import import_sources
 from core.dataset_pipeline.feature_audit import edit_feature
 from webui.server import make_server
-from core.dataset_pipeline.tag_audit import audit_run, audit_view, edit_audit, suggestions
+from core.dataset_pipeline.tag_audit import audit_run, audit_view, edit_audit, image_part, suggestions
 
 
 OBSERVATION = {'people': 2, 'girls': 2, 'boys': 0, 'count_certain': True,
@@ -335,15 +335,21 @@ class TagAuditTests(unittest.TestCase):
             def audit_state():
                 return session.get(url + '/api/state', timeout=5).json()['tag_audit']
 
+            def wait_job():
+                for _ in range(100):
+                    response = session.get(url + '/api/job', timeout=5)
+                    self.assertTrue(response.ok, response.text)
+                    job = response.json()
+                    if job['status'] != 'running':
+                        break
+                    time.sleep(.02)
+                return job
+
             options = {**self.options, 'endpoint': endpoint + '/v1', 'visual': False, 'concurrency': 2}
             self.assertEqual(edit('start_costume_audit', audit=options).status_code, 400)
             start = edit('start_costume_audit', audit=options, costumeReference=selection)
             self.assertEqual(start.status_code, 202, start.text)
-            for _ in range(100):
-                job = session.get(url + '/api/job', timeout=5).json()
-                if job['status'] != 'running':
-                    break
-                time.sleep(.02)
+            job = wait_job()
             self.assertEqual((job['status'], job['done'], job['failedCount']), ('complete', len(work), 1))
             self.assertCountEqual(calls, [[(0, 255, 255), color] for color in states])
             audit = audit_state()
@@ -360,7 +366,41 @@ class TagAuditTests(unittest.TestCase):
             self.assertTrue(edit('undo_audit', batch=audit_state()['batches'][-1]['id']).ok)
             self.assertEqual({path: path.read_bytes() for path in original}, original)
             _, reference = self.run.locate(selection['source'], selection['candidate'])
-            Image.new('RGB', (31, 32), 'white').save(asset(self.run.directory, reference['tag']['image']))
+            reference_path = asset(self.run.directory, reference['tag']['image'])
+            encoding_reference, finish_encoding = threading.Event(), threading.Event()
+
+            def pause_reference_encoding(path):
+                if path == reference_path:
+                    encoding_reference.set()
+                    if not finish_encoding.wait(5):
+                        raise TimeoutError('参考图编码未恢复')
+                return image_part(path)
+
+            rejected = edit('start_costume_audit', audit=options, costumeReference={**selection, 'source': 'missing'})
+            self.assertEqual(rejected.status_code, 400)
+            self.assertEqual(sum(s['status'] == 'failed' for s in audit_state()['costumeRun']['samples']), 1)
+
+            states[(255, 165, 0)] = 'same'
+            with patch('core.dataset_pipeline.tag_audit.image_part', side_effect=pause_reference_encoding):
+                try:
+                    start = edit('start_costume_audit', audit=options, costumeReference=selection)
+                    self.assertEqual(start.status_code, 202, start.text)
+                    self.assertTrue(encoding_reference.wait(5))
+                    self.assertFalse(any(s['status'] == 'failed' for s in audit_state()['costumeRun']['samples']))
+                    with patch.object(Run, 'load', side_effect=PermissionError('暂时无法读取运行记录')):
+                        response = session.get(url + '/api/job', timeout=5)
+                        self.assertTrue(response.ok, response.text)
+                        job = response.json()
+                        self.assertEqual((job['status'], job['failedCount']), ('running', 0))
+                finally:
+                    finish_encoding.set()
+                    job = wait_job()
+            self.assertEqual((job['status'], job['done'], job['failedCount']), ('complete', len(work), 0))
+            audit = audit_state()
+            self.assertFalse(any(s['status'] == 'failed' for s in audit['costumeRun']['samples']))
+            self.assertEqual({path: path.read_bytes() for path in original}, original)
+            finding, = audit['findings']
+            Image.new('RGB', (31, 32), 'white').save(reference_path)
             self.assertEqual(audit_state()['findings'][0]['status'], 'stale')
             self.assertEqual(edit('apply_audit', ids=[finding['id']]).status_code, 400)
 
