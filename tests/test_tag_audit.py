@@ -286,6 +286,84 @@ class TagAuditTests(unittest.TestCase):
         source = next(item for item in self.run.data['sources'].values() if Path(item['relative']).stem == 'reference')
         return {'source': source['id'], 'candidate': source['candidates'][0]['id']}
 
+    def test_costume_http_compares_two_images_and_only_applies_selected_tags(self):
+        folder = self.caption.parent
+        cases = {
+            'change': ('red', 'alternate', 'blue hair'),
+            'tagged': ('green', 'alternate', 'alternate_costume'),
+            'same': ('blue', 'same', 'blue hair'),
+            'hidden': ('black', 'unobservable', 'blue hair'),
+            'unclear': ('purple', 'uncertain', 'blue hair'),
+            'failed': ('orange', 'invalid', 'blue hair'),
+        }
+        states = {(255, 255, 255): 'same'}
+        for name, (color, state, caption) in cases.items():
+            image = Image.new('RGB', (100, 100), color)
+            image.save(folder / f'{name}.png')
+            states[image.getpixel((0, 0))] = state
+            (folder / f'{name}.txt').write_text(caption + '\n', encoding='utf-8')
+        selection = self.add_reference_sample()
+        work = {Path(s['relative']).stem: self.run.tag_file(s['candidates'][0]['tag'])
+                for s in self.run.data['sources'].values()}
+        original = {path: path.read_bytes() for path in [*work.values(), *folder.glob('*.txt')]}
+        calls = []
+
+        class VisionHandler(BaseHTTPRequestHandler):
+            def do_POST(self):
+                data = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                colors = []
+                for part in data['messages'][0]['content']:
+                    if part['type'] == 'image_url':
+                        content = part['image_url']['url'].split(',', 1)[1]
+                        with Image.open(io.BytesIO(base64.b64decode(content))) as image:
+                            colors.append(image.getpixel((0, 0)))
+                calls.append(colors)
+                observation = {'state': states.get(colors[-1]), 'reason': '衣领剪裁可见'}
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(json.dumps({'choices': [{'message': {'content': json.dumps(observation)}}]}).encode())
+
+        endpoint = self.serve(ThreadingHTTPServer(('127.0.0.1', 0), VisionHandler))
+        url = self.serve(make_server(self.run.directory, 0))
+        with requests.Session() as session:
+            session.trust_env = False
+            session.headers['X-Review-Token'] = session.get(url + '/api/session', timeout=5).json()['token']
+
+            def edit(action, **data):
+                return session.post(url + '/api/edit', json={'action': action, **data}, timeout=5)
+
+            def audit_state():
+                return session.get(url + '/api/state', timeout=5).json()['tag_audit']
+
+            options = {**self.options, 'endpoint': endpoint + '/v1', 'visual': False, 'concurrency': 2}
+            self.assertEqual(edit('start_costume_audit', audit=options).status_code, 400)
+            start = edit('start_costume_audit', audit=options, costumeReference=selection)
+            self.assertEqual(start.status_code, 202, start.text)
+            for _ in range(100):
+                job = session.get(url + '/api/job', timeout=5).json()
+                if job['status'] != 'running':
+                    break
+                time.sleep(.02)
+            self.assertEqual((job['status'], job['done'], job['failedCount']), ('complete', len(work), 1))
+            self.assertCountEqual(calls, [[(0, 255, 255), color] for color in states])
+            audit = audit_state()
+            self.assertEqual({Path(s['name']).stem: s['status'] for s in audit['costumeRun']['samples']}, {
+                'a': 'absent', 'reference': 'absent', 'change': 'present', 'tagged': 'consistent',
+                'same': 'absent', 'hidden': 'unobservable', 'unclear': 'uncertain', 'failed': 'failed',
+            })
+            finding, = audit['findings']
+            self.assertEqual((finding['category'], finding['tags']), ('costume', ['alternate costume']))
+            self.assertEqual({path: path.read_bytes() for path in original}, original)
+            self.assertTrue(edit('apply_audit', ids=[finding['id']]).ok)
+            self.assertEqual(work['change'].read_text(encoding='utf-8').strip(), 'blue hair, alternate costume')
+            self.assertEqual((folder / 'change.txt').read_bytes(), original[folder / 'change.txt'])
+            self.assertTrue(edit('undo_audit', batch=audit_state()['batches'][-1]['id']).ok)
+            self.assertEqual({path: path.read_bytes() for path in original}, original)
+            _, reference = self.run.locate(selection['source'], selection['candidate'])
+            Image.new('RGB', (31, 32), 'white').save(asset(self.run.directory, reference['tag']['image']))
+            self.assertEqual(audit_state()['findings'][0]['status'], 'stale')
+            self.assertEqual(edit('apply_audit', ids=[finding['id']]).status_code, 400)
+
     def test_feature_http_scan_batch_export_and_undo(self):
         folder = self.caption.parent
         cases = {

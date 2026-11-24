@@ -5,16 +5,19 @@ import type {
   TagAuditFinding,
 } from '../../api/types';
 
-export type AuditCategory = 'all' | Exclude<TagAuditFinding['category'], 'feature'>;
+export type AuditMode = 'anomaly' | 'feature' | 'costume';
+export type AuditCategory = 'all' | Exclude<TagAuditFinding['category'], 'feature' | 'costume'>;
 export type AuditStatus = 'all' | TagAuditFinding['status'];
-export type FeatureStatus = AuditStatus | Exclude<TagAuditFeatureSample['status'], 'present'>;
+type ResultStatus = Exclude<AuditStatus, 'all'> | Exclude<TagAuditFeatureSample['status'], 'present'>;
+export type AuditFilter = ResultStatus | 'all' | 'alternate';
 
 export interface AuditRow {
   id: string;
   source: string;
   candidate: string;
   name: string;
-  status: Exclude<FeatureStatus, 'all'>;
+  status: ResultStatus;
+  alternate?: boolean;
   reason?: string;
   finding?: TagAuditFinding;
 }

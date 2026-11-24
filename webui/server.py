@@ -8,11 +8,12 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from core.dataset_pipeline.core import DEFAULTS, Run, asset, run_lock
+from core.dataset_pipeline.costume_audit import prepare_costume_reference
 from core.dataset_pipeline.datasets import delete_dataset, detect_source, import_config, import_sources, list_datasets, replace_source_image, upscale_source
 from core.dataset_pipeline.forge import ForgeClient
 from core.dataset_pipeline.geometry import default_scale
 from core.dataset_pipeline.feature_audit import edit_feature
-from core.dataset_pipeline.tag_audit import (audit_run, audit_view, edit_audit, eligible_samples,
+from core.dataset_pipeline.tag_audit import (audit_run, audit_view, check_costume_conflict, edit_audit, eligible_samples,
                                              prepare_feature_check, validate_options as validate_audit_options)
 from core.dataset_pipeline.tagging import apply_filters, restore_captions, tag_run, validate_options
 from tools.analysis.job import AnalysisJob
@@ -106,7 +107,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
         overrides = {key: template[key] for key in RUNTIME_KEYS} if settings_path else None
         return Run.load(folder, config_overrides=overrides)
 
-    def process_job(action, group=None, source_id=None, tagging=None, audit=None, feature_id=None, retry_failed=False):
+    def process_job(action, group=None, source_id=None, tagging=None, audit=None, feature_id=None, retry_failed=False,
+                    costume_reference=None):
         try:
             with run_lock(directory):
                 run = load_run(directory)
@@ -145,7 +147,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                         with mutex:
                             job['failedCount'] += 1
 
-                    audit_run(run, audit, audit_progress, feature_id, report_failure, retry_failed=retry_failed)
+                    audit_run(run, audit, audit_progress, feature_id, report_failure, retry_failed=retry_failed,
+                              costume_reference=costume_reference)
                     # 样本失败已写入检查记录，任务错误只用于整轮检查异常中断。
                     errors = []
                 elif action == 'start_tag' and tagging is not None:
@@ -169,7 +172,10 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 job.update(status="failed", errors=[str(error)])
 
     def start_job(action, group=None, source_id=None, tagging=None, replace_confirmed=False, audit=None,
-                  feature_id=None, retry_failed=False):
+                  feature_id=None, retry_failed=False, costume_selection=None):
+        costume = action == 'start_costume_audit'
+        if costume:
+            action = 'start_audit'
         with mutex:
             if directory is None:
                 raise ValueError('请先选择并导入数据集')
@@ -183,11 +189,12 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 raise ValueError("已有任务正在运行")
             with run_lock(directory):
                 run = load_run(directory)
-                audit_feature, audit_total = None, 0
+                audit_feature, costume_reference, audit_total = None, None, 0
                 if action == 'start_audit':
-                    if type(retry_failed) is not bool or (retry_failed and feature_id is not None):
+                    if (type(retry_failed) is not bool or (retry_failed and feature_id is not None)
+                            or (costume and (retry_failed or feature_id is not None))):
                         raise ValueError('失败重试参数无效')
-                    if (feature_id is not None or retry_failed) and isinstance(audit, dict):
+                    if (feature_id is not None or retry_failed or costume) and isinstance(audit, dict):
                         audit = {**audit, 'visual': True}
                     audit = validate_audit_options(audit)
                     audit_total = len(eligible_samples(run, retry_failed))
@@ -196,6 +203,9 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     if feature_id is not None:
                         feature = prepare_feature_check(run, feature_id, audit)
                         audit_feature = {key: feature[key] for key in ('id', 'name')}
+                    if costume:
+                        check_costume_conflict(audit)
+                        costume_reference = prepare_costume_reference(run, costume_selection)
                 sources = ([run.locate(source_id)] if source_id is not None else
                            [s for s in run.data["sources"].values() if s.get("active", True)
                             and (action not in ('start_upscale', 'start_detect') or not group or s['group'] == group)])
@@ -218,8 +228,9 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                         raise ValueError("请先完成所有接受样本的打标")
             job.update(id=secrets.token_hex(8), status="running", action=action, errors=[], count=None,
                        total=audit_total, done=0, explicitTagging=tagging is not None,
-                       auditFeature=audit_feature, failedCount=0)
-        threading.Thread(target=process_job, args=(action, group, source_id, tagging, audit, feature_id, retry_failed),
+                       auditFeature=audit_feature, auditCostume=costume, failedCount=0)
+        threading.Thread(target=process_job,
+                         args=(action, group, source_id, tagging, audit, feature_id, retry_failed, costume_reference),
                          daemon=True).start()
 
     class Handler(BaseHTTPRequestHandler):
@@ -466,11 +477,12 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     return
                 action = data.get('action')
                 if action in ('start_tag', 'export', 'sync_sources', 'start_upscale', 'start_detect',
-                              'start_audit', 'retry_audit_failed'):
+                              'start_audit', 'retry_audit_failed', 'start_costume_audit'):
                     retry = action == 'retry_audit_failed'
                     start_job('start_audit' if retry else action, data.get('group'), data.get('source'),
                               data.get('tagging'), data.get('replaceConfirmed', False), data.get('audit'),
-                              data.get('featureId'), retry_failed=retry or data.get('retryFailed', False))
+                              data.get('featureId'), retry_failed=retry or data.get('retryFailed', False),
+                              costume_selection=data.get('costumeReference'))
                     self.reply(202, {"ok": True, "result": {}})
                     return
                 with mutex, run_lock(directory):

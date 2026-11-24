@@ -11,10 +11,20 @@ import type {
 } from '../../api/types';
 import { useReviewContext } from '../../review/context';
 import { imageKey, imageUrl as getImageUrl, splitTags } from '../../review/utils';
-import type { AuditCategory, AuditRow, FeatureEdit, FeatureStatus } from './types';
+import type { AuditCategory, AuditFilter, AuditMode, AuditRow, FeatureEdit } from './types';
 import styles from './styles.module.css';
 
-const CATEGORY_LABELS = { framing: '构图范围', count: '人物数量', rule: '数据集规则', feature: '核心特征' };
+const CATEGORY_LABELS = {
+  framing: '构图范围',
+  count: '人物数量',
+  rule: '数据集规则',
+  feature: '核心特征',
+  costume: '换装',
+};
+const MODE_LABELS = { anomaly: '错标检查', feature: '漏标补充', costume: '换装检查' } satisfies Record<
+  AuditMode,
+  string
+>;
 const STATUS_LABELS = { pending: '待处理', ignored: '已保留', applied: '已应用', stale: '已过期' };
 const ANOMALY_STATUS_LABELS = { ...STATUS_LABELS, failed: '失败' };
 const FEATURE_STATUS_LABELS = {
@@ -27,6 +37,13 @@ const FEATURE_STATUS_LABELS = {
   ignored: '已忽略',
   applied: '已应用',
   stale: '已过期',
+};
+const COSTUME_TAG = 'alternate costume';
+const COSTUME_STATUS_LABELS = {
+  alternate: '识别为换装',
+  ...FEATURE_STATUS_LABELS,
+  consistent: '已标注换装',
+  absent: '标准服装',
 };
 const DEFAULT_OPTIONS: TagAuditOptions = {
   visual: true,
@@ -110,6 +127,7 @@ interface ReferencePickerProps {
   samples: TagImage[];
   initialSelection?: ReferenceSelection;
   updatedAt: string;
+  costume?: boolean;
   onSelect: (selection: ReferenceSelection) => void;
   onDismiss: () => void;
 }
@@ -118,6 +136,7 @@ function ReferencePicker({
   samples,
   initialSelection,
   updatedAt,
+  costume = false,
   onSelect,
   onDismiss,
 }: ReferencePickerProps) {
@@ -129,8 +148,9 @@ function ReferencePicker({
     () => initialSelection ?? { sampleKey: imageKey(...samples[0]), tags: [] },
   );
   const sample = samples.find(([source, candidate]) => imageKey(source, candidate) === selection.sampleKey);
-  const tags = getReferenceTags(sample);
-  const canConfirm = selection.tags.length > 0 && selection.tags.every((tag) => tags.includes(tag));
+  const tags = costume ? [] : getReferenceTags(sample);
+  const canConfirm =
+    !!sample && (costume || (selection.tags.length > 0 && selection.tags.every((tag) => tags.includes(tag))));
 
   useEffect(() => {
     if (!dialog.current || dialog.current.open) return;
@@ -158,7 +178,7 @@ function ReferencePicker({
   return (
     <dialog ref={dialog} className={styles.picker} aria-labelledby={heading} onClose={onDismiss}>
       <div className={styles.dialogHeading}>
-        <h2 id={heading}>选择参考图和标签</h2>
+        <h2 id={heading}>{costume ? '选择标准服装参考图' : '选择参考图和标签'}</h2>
       </div>
       <div className={styles.pickerBody}>
         <section className={styles.pickerGallery} aria-label='参考图样本'>
@@ -185,7 +205,7 @@ function ReferencePicker({
           </div>
         </section>
         <section className={styles.pickerTags} aria-labelledby={tagsHeading}>
-          <h3 id={tagsHeading}>目标标签</h3>
+          <h3 id={tagsHeading}>{costume ? '参考图预览' : '目标标签'}</h3>
           {sample ? (
             <>
               <p>
@@ -196,26 +216,28 @@ function ReferencePicker({
                 src={getImageUrl(sample[0], 'tag', updatedAt, sample[1])}
                 alt='当前所选参考图'
               />
-              <div className={styles.referenceTags} role='group' aria-labelledby={tagsHeading}>
-                {tags.map((tag) => {
-                  const checked = selection.tags.includes(tag);
-                  return (
-                    <label
-                      className={`tagChip ${styles.referenceTag}${checked ? ` ${styles.referenceTagSelected}` : ''}`}
-                      key={tag}
-                    >
-                      <input
-                        type='checkbox'
-                        name={tagsHeading}
-                        value={tag}
-                        checked={checked}
-                        onChange={(event) => handleToggleTag(tag, event.currentTarget.checked)}
-                      />
-                      <span className='tagText'>{tag}</span>
-                    </label>
-                  );
-                })}
-              </div>
+              {!costume ? (
+                <div className={styles.referenceTags} role='group' aria-labelledby={tagsHeading}>
+                  {tags.map((tag) => {
+                    const checked = selection.tags.includes(tag);
+                    return (
+                      <label
+                        className={`tagChip ${styles.referenceTag}${checked ? ` ${styles.referenceTagSelected}` : ''}`}
+                        key={tag}
+                      >
+                        <input
+                          type='checkbox'
+                          name={tagsHeading}
+                          value={tag}
+                          checked={checked}
+                          onChange={(event) => handleToggleTag(tag, event.currentTarget.checked)}
+                        />
+                        <span className='tagText'>{tag}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : null}
             </>
           ) : (
             <p>请选择参考图</p>
@@ -361,20 +383,33 @@ export function TagAuditPage() {
   const client = useQueryClient();
   const audit = v.state?.tag_audit;
   const latest = audit?.featureRun;
-  const [featureMode, setFeatureMode] = useState(!!latest || !!v.job.auditFeature);
+  const costumeRun = audit?.costumeRun;
+  const [mode, setMode] = useState<AuditMode>(() => {
+    if (v.job.auditCostume || (costumeRun && !latest && !v.job.auditFeature)) return 'costume';
+    return latest || v.job.auditFeature ? 'feature' : 'anomaly';
+  });
+  const anomalyMode = mode === 'anomaly';
+  const featureMode = mode === 'feature';
+  const costumeMode = mode === 'costume';
   const [options, setOptions] = useState({ ...DEFAULT_OPTIONS, ...audit?.options });
   const [forbidden, setForbidden] = useState(options.forbidden.join(', '));
   const [category, setCategory] = useState<AuditCategory>('all');
-  const [status, setStatus] = useState<FeatureStatus>('pending');
+  const [status, setStatus] = useState<AuditFilter>(() => (costumeMode ? 'alternate' : 'pending'));
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [supplement, setSupplement] = useState<SupplementConfirmation>();
   const [page, setPage] = useState(0);
   const [featureId, setFeatureId] = useState(latest?.feature.id);
   const [form, setForm] = useState<'new' | 'edit'>();
+  const [pickingCostumeReference, setPickingCostumeReference] = useState(false);
+  const [costumeSelection, setCostumeSelection] = useState<{ key: string; previousRunId?: string }>();
   const features = Object.values(audit?.features || {});
   const feature = features.find((item) => item.id === featureId) || features[0];
   const referenceSamples = useMemo(
     () => v.tags.allImages.filter(([, candidate]) => candidate.tag_current && candidate.tag.tags.length),
+    [v.tags.allImages],
+  );
+  const costumeSamples = useMemo(
+    () => v.tags.allImages.filter(([, candidate]) => candidate.tag_current),
     [v.tags.allImages],
   );
   const savedReference = feature?.reference;
@@ -384,12 +419,22 @@ export function TagAuditPage() {
           source.id === savedReference.source && candidate.id === savedReference.candidate,
       )
     : undefined;
+  const hasNewCostumeSelection = !!costumeSelection && costumeSelection.previousRunId === costumeRun?.id;
+  const savedCostumeReference = costumeRun?.reference;
+  const costumeKey = hasNewCostumeSelection
+    ? costumeSelection.key
+    : savedCostumeReference && `${savedCostumeReference.source}/${savedCostumeReference.candidate}`;
+  const costumeSample = costumeMode
+    ? costumeSamples.find(([source, candidate]) => imageKey(source, candidate) === costumeKey)
+    : undefined;
+  const costumeReferenceError = hasNewCostumeSelection ? undefined : costumeRun?.referenceError;
   const updatedAt = v.state?.updated_at || '';
   const forbiddenTags = splitTags(forbidden);
-  const conflict = feature?.tags.filter((tag) => forbiddenTags.includes(tag)) ?? [];
+  const targetTags = costumeMode ? [COSTUME_TAG] : (feature?.tags ?? []);
+  const conflict = targetTags.filter((tag) => forbiddenTags.includes(tag));
   const rows = useMemo<AuditRow[]>(() => {
     const findings = audit?.findings || [];
-    if (!featureMode) {
+    if (mode === 'anomaly') {
       return [
         ...findings.filter((finding) => finding.action !== 'add').map((finding) => ({ ...finding, finding })),
         ...(audit?.samples || [])
@@ -404,25 +449,32 @@ export function TagAuditPage() {
       ];
     }
     const byId = new Map(
-      findings.filter((finding) => finding.action === 'add').map((finding) => [finding.id, finding]),
+      findings.filter((finding) => finding.category === mode).map((finding) => [finding.id, finding]),
     );
-    return (latest?.samples || []).map((sample) => {
+    const run = mode === 'feature' ? latest : costumeRun;
+    return (run?.samples || []).map((sample) => {
       const finding = sample.findingId ? byId.get(sample.findingId) : undefined;
+      const status = finding?.status ?? (sample.status === 'present' ? 'stale' : sample.status);
       return {
         ...sample,
         id: `${sample.source}/${sample.candidate}`,
         name: `${sample.name} · ${sample.candidate}`,
-        status: finding?.status ?? (sample.status === 'present' ? 'stale' : sample.status),
+        status,
+        alternate:
+          mode === 'costume' &&
+          status !== 'stale' &&
+          (sample.status === 'present' || sample.status === 'consistent'),
         reason: sample.error || sample.reason,
         finding,
       };
     });
-  }, [audit?.findings, audit?.samples, featureMode, latest]);
+  }, [audit?.findings, audit?.samples, mode, latest, costumeRun]);
 
   const visible = rows.filter((row) => {
-    if (!featureMode && row.status === 'failed') return status === 'failed';
+    if (status === 'alternate') return row.alternate;
+    if (anomalyMode && row.status === 'failed') return status === 'failed';
     return (
-      (featureMode || category === 'all' || row.finding?.category === category) &&
+      (!anomalyMode || category === 'all' || row.finding?.category === category) &&
       (status === 'all' || row.status === status)
     );
   });
@@ -452,13 +504,16 @@ export function TagAuditPage() {
     onSuccess: async (_result, data) => {
       setSelected(new Set());
       const retry = data.action === 'retry_audit_failed';
-      if (data.action === 'start_audit' || retry) {
+      const costume = data.action === 'start_costume_audit';
+      if (data.action === 'start_audit' || retry || costume) {
         setPage(0);
-        setStatus(retry ? 'failed' : 'pending');
+        if (mode === 'costume') setStatus('alternate');
+        else setStatus(retry ? 'failed' : 'pending');
         client.setQueryData(['job'], {
           status: 'running',
           action: 'start_audit',
           auditFeature: data.featureId ? feature : null,
+          auditCostume: costume,
           total: retry ? retryable : eligible,
           done: 0,
           errors: [],
@@ -469,11 +524,9 @@ export function TagAuditPage() {
       await Promise.all([refresh(), client.invalidateQueries({ queryKey: ['job'] })]);
     },
     onError: (error: Error, data) => {
-      const outdated = data.action === 'retry_audit_failed' && error.message === '未知操作';
-      v.showToast(
-        outdated ? '当前 WebUI 后端版本过旧。请重启 WebUI 后再重试失败项。' : error.message,
-        'error',
-      );
+      const outdated =
+        ['retry_audit_failed', 'start_costume_audit'].includes(data.action) && error.message === '未知操作';
+      v.showToast(outdated ? '请重启 WebUI，使后端加载当前版本。' : error.message, 'error');
     },
     onSettled: () => v.setDatasetSwitching(false),
   });
@@ -497,22 +550,33 @@ export function TagAuditPage() {
   });
   const disabled = v.processing || mutation.isPending || featureMutation.isPending;
 
-  function handleFilter(nextStatus: FeatureStatus, nextCategory = category) {
+  function handleFilter(nextStatus: AuditFilter, nextCategory = category) {
     setStatus(nextStatus);
     setCategory(nextCategory);
     setPage(0);
     setSelected(new Set());
   }
 
-  function handleModeChange(next: boolean) {
-    setFeatureMode(next);
-    handleFilter('pending', 'all');
+  function handleModeChange(next: AuditMode) {
+    setMode(next);
+    handleFilter(next === 'costume' ? 'alternate' : 'pending', 'all');
   }
 
   function handleStartAudit(retryFailed = false) {
+    const auditOptions = { ...options, forbidden: forbiddenTags };
+    if (costumeMode) {
+      if (!costumeSample || costumeReferenceError) return;
+      const [source, candidate] = costumeSample;
+      mutation.mutate({
+        action: 'start_costume_audit',
+        audit: auditOptions,
+        costumeReference: { source: source.id, candidate: candidate.id },
+      });
+      return;
+    }
     mutation.mutate({
       action: retryFailed ? 'retry_audit_failed' : 'start_audit',
-      audit: { ...options, forbidden: forbiddenTags },
+      audit: auditOptions,
       featureId: featureMode ? feature?.id : undefined,
     });
   }
@@ -526,7 +590,7 @@ export function TagAuditPage() {
           rows.flatMap(({ finding }) => (finding && idSet.has(finding.id) ? getFindingTags(finding) : [])),
         ),
       ];
-      if (featureMode) {
+      if (!anomalyMode) {
         setSupplement({ ids, tags });
         return;
       }
@@ -551,11 +615,18 @@ export function TagAuditPage() {
     return `/image?source=${encodeURIComponent(sample.source)}&candidate=${encodeURIComponent(sample.candidate)}&kind=tag&v=${encodeURIComponent(v.state?.updated_at || '')}`;
   }
 
-  const statusLabels = featureMode ? FEATURE_STATUS_LABELS : ANOMALY_STATUS_LABELS;
-  const modeTitle = featureMode ? '漏标补充' : '错标检查';
-  const showingFailed = !featureMode && status === 'failed';
+  const statusLabels = costumeMode
+    ? COSTUME_STATUS_LABELS
+    : featureMode
+      ? FEATURE_STATUS_LABELS
+      : ANOMALY_STATUS_LABELS;
+  const modeTitle = MODE_LABELS[mode];
+  const showingFailed = anomalyMode && status === 'failed';
   const referenceUrl = referenceSample
     ? getImageUrl(referenceSample[0], 'tag', updatedAt, referenceSample[1])
+    : '';
+  const costumeReferenceUrl = costumeSample
+    ? getImageUrl(costumeSample[0], 'tag', updatedAt, costumeSample[1])
     : '';
   return (
     <main id='auditView' className={styles.page} role='tabpanel' aria-labelledby='auditTab'>
@@ -565,13 +636,13 @@ export function TagAuditPage() {
       <section className={`tagGallery ${styles.results}`} aria-label={`${modeTitle}结果`}>
         <div className={styles.toolbar}>
           <h2>{modeTitle}</h2>
-          {!featureMode ? <span>待处理 {pending} 项</span> : null}
-          {!featureMode && !showingFailed && failed.length ? (
+          {anomalyMode ? <span>待处理 {pending} 项</span> : null}
+          {!featureMode && status !== 'failed' && failed.length ? (
             <button type='button' onClick={() => handleFilter('failed')}>
               失败（{failed.length}）
             </button>
           ) : null}
-          {!featureMode ? (
+          {anomalyMode ? (
             <label>
               类型
               <select
@@ -588,7 +659,7 @@ export function TagAuditPage() {
           ) : null}
           <label>
             状态
-            <select value={status} onChange={(event) => handleFilter(event.target.value as FeatureStatus)}>
+            <select value={status} onChange={(event) => handleFilter(event.target.value as AuditFilter)}>
               <option value='all'>全部状态</option>
               {Object.entries(statusLabels).map(([key, label]) => (
                 <option key={key} value={key}>
@@ -602,6 +673,13 @@ export function TagAuditPage() {
           <p>
             最近一轮：{latest.feature.name} · {latest.feature.tags.join(' + ')} · {latest.samples.length} /{' '}
             {latest.total} 份 · 待补标 {pending} 份 · 失败 {failed.length} 份
+          </p>
+        ) : null}
+        {costumeMode && costumeRun ? (
+          <p>
+            本轮参考图：{costumeRun.reference.name} · {costumeRun.reference.candidate} · 已检查{' '}
+            {costumeRun.samples.length} / {costumeRun.total} 份 · 待补标 {pending} 份 · 失败 {failed.length}{' '}
+            份
           </p>
         ) : null}
         {showingFailed ? (
@@ -622,7 +700,7 @@ export function TagAuditPage() {
               disabled={disabled || !pagePendingIds.length}
               onClick={() => setSelected(new Set(pagePendingIds))}
             >
-              选择本页{featureMode ? '待补标项' : '待处理项'}
+              选择本页{anomalyMode ? '待处理项' : '待补标项'}
             </button>
             <button disabled={disabled || !selectedIds.length} onClick={() => setSelected(new Set())}>
               清空选择
@@ -632,13 +710,13 @@ export function TagAuditPage() {
               disabled={disabled || !selectedIds.length}
               onClick={() => handleDecision('apply_audit', selectedIds)}
             >
-              {featureMode ? '补标所选' : '应用所选删除'}（{selectedIds.length}）
+              {anomalyMode ? '应用所选删除' : '补标所选'}（{selectedIds.length}）
             </button>
             <button
               disabled={disabled || !selectedIds.length}
               onClick={() => handleDecision('ignore_audit', selectedIds)}
             >
-              {featureMode ? '忽略所选' : '保留所选原标签'}
+              {anomalyMode ? '保留所选原标签' : '忽略所选'}
             </button>
           </div>
         )}
@@ -658,14 +736,14 @@ export function TagAuditPage() {
                 <div className={styles.detail}>
                   <span>{row.name}</span>
                   <strong>
-                    {featureMode
-                      ? `${finding ? getFindingTags(finding).join(' + ') : latest?.feature.tags.join(' + ')} · ${FEATURE_STATUS_LABELS[row.status]}`
+                    {!anomalyMode
+                      ? `${finding ? getFindingTags(finding).join(' + ') : costumeMode ? COSTUME_TAG : latest?.feature.tags.join(' + ')} · ${(costumeMode ? COSTUME_STATUS_LABELS : FEATURE_STATUS_LABELS)[row.status]}`
                       : finding
                         ? `${CATEGORY_LABELS[finding.category]} · ${finding.tag}`
                         : '检查失败'}
                   </strong>
                   <p>{row.reason}</p>
-                  {!featureMode && finding ? (
+                  {anomalyMode && finding ? (
                     <span>
                       建议删除：{finding.tag} · {STATUS_LABELS[finding.status]}
                     </span>
@@ -691,13 +769,13 @@ export function TagAuditPage() {
                         选择此项
                       </label>
                       <button disabled={disabled} onClick={() => handleDecision('apply_audit', [finding.id])}>
-                        {featureMode ? '应用补标' : '应用删除'}
+                        {anomalyMode ? '应用删除' : '应用补标'}
                       </button>
                       <button
                         disabled={disabled}
                         onClick={() => handleDecision('ignore_audit', [finding.id])}
                       >
-                        {featureMode ? '忽略此项' : '保留原标签'}
+                        {anomalyMode ? '保留原标签' : '忽略此项'}
                       </button>
                     </div>
                   ) : null}
@@ -707,11 +785,13 @@ export function TagAuditPage() {
           })}
           {!visible.length ? (
             <p className='emptyState'>
-              {showingFailed
+              {status === 'failed'
                 ? '没有失败样本。'
-                : featureMode && !latest
-                  ? '保存一条特征，再检查当前数据集。'
-                  : '当前筛选下没有检查结果。'}
+                : costumeMode && !costumeRun
+                  ? '选择标准服装参考图后运行换装检查。'
+                  : featureMode && !latest
+                    ? '保存一条特征，再检查当前数据集。'
+                    : '当前筛选下没有检查结果。'}
             </p>
           ) : null}
         </div>
@@ -735,20 +815,17 @@ export function TagAuditPage() {
         </div>
         <div className={`panelScroll ${styles.settings}`}>
           <div className={styles.toolbar} role='group' aria-label='检查类型'>
-            <button
-              aria-pressed={!featureMode}
-              className={!featureMode ? 'active' : ''}
-              onClick={() => handleModeChange(false)}
-            >
-              错标检查
-            </button>
-            <button
-              aria-pressed={featureMode}
-              className={featureMode ? 'active' : ''}
-              onClick={() => handleModeChange(true)}
-            >
-              漏标补充
-            </button>
+            {(['anomaly', 'feature', 'costume'] as const).map((item) => (
+              <button
+                key={item}
+                aria-pressed={mode === item}
+                className={mode === item ? 'active' : ''}
+                disabled={mutation.isPending}
+                onClick={() => handleModeChange(item)}
+              >
+                {MODE_LABELS[item]}
+              </button>
+            ))}
           </div>
           {featureMode ? (
             <>
@@ -817,10 +894,49 @@ export function TagAuditPage() {
               ) : null}
             </>
           ) : null}
+          {costumeMode ? (
+            <div className={styles.detail}>
+              <div className={styles.toolbar}>
+                <button
+                  type='button'
+                  aria-haspopup='dialog'
+                  disabled={disabled || !costumeSamples.length}
+                  onClick={() => setPickingCostumeReference(true)}
+                >
+                  {costumeSample ? '更换标准服装参考图' : '选择标准服装参考图'}
+                </button>
+              </div>
+              {costumeSample ? (
+                <small>
+                  {costumeSample[0].relative} · {costumeSample[1].id}
+                </small>
+              ) : null}
+              {costumeReferenceUrl ? (
+                <button className={styles.reference} onClick={() => v.setPreviewImage(costumeReferenceUrl)}>
+                  <img src={costumeReferenceUrl} alt='查看标准服装参考图' />
+                </button>
+              ) : null}
+              {costumeReferenceError ? <p role='status'>{costumeReferenceError}</p> : null}
+              {pickingCostumeReference && costumeSamples.length ? (
+                <ReferencePicker
+                  costume
+                  samples={costumeSamples}
+                  initialSelection={
+                    costumeSample && costumeKey ? { sampleKey: costumeKey, tags: [] } : undefined
+                  }
+                  updatedAt={updatedAt}
+                  onSelect={({ sampleKey }) =>
+                    setCostumeSelection({ key: sampleKey, previousRunId: costumeRun?.id })
+                  }
+                  onDismiss={() => setPickingCostumeReference(false)}
+                />
+              ) : null}
+            </div>
+          ) : null}
           <p>范围为当前数据集全部 {eligible} 份有效标签样本，独立于标签页筛选。</p>
           <fieldset disabled={disabled}>
             <legend>本地视觉检查</legend>
-            {!featureMode ? (
+            {anomalyMode ? (
               <label className={styles.check}>
                 <input
                   type='checkbox'
@@ -834,7 +950,7 @@ export function TagAuditPage() {
               API 地址（包含 /v1）
               <input
                 value={options.endpoint}
-                disabled={!featureMode && !options.visual}
+                disabled={anomalyMode && !options.visual}
                 onChange={(event) => setOptions({ ...options, endpoint: event.target.value })}
               />
             </label>
@@ -842,7 +958,7 @@ export function TagAuditPage() {
               模型 ID
               <input
                 value={options.model}
-                disabled={!featureMode && !options.visual}
+                disabled={anomalyMode && !options.visual}
                 onChange={(event) => setOptions({ ...options, model: event.target.value })}
               />
             </label>
@@ -859,7 +975,7 @@ export function TagAuditPage() {
                 max={16}
                 step={1}
                 value={options.concurrency}
-                disabled={!featureMode && !options.visual}
+                disabled={anomalyMode && !options.visual}
                 onChange={(event) =>
                   setOptions({ ...options, concurrency: event.currentTarget.valueAsNumber })
                 }
@@ -876,7 +992,7 @@ export function TagAuditPage() {
               onChange={(event) => setForbidden(event.target.value)}
             />
           </label>
-          {featureMode && conflict.length ? (
+          {!anomalyMode && conflict.length ? (
             <p role='status'>目标标签 {conflict.join('、')} 已被禁用，请先调整禁用规则或目标标签。</p>
           ) : null}
           <button
@@ -884,27 +1000,33 @@ export function TagAuditPage() {
             disabled={
               disabled ||
               !eligible ||
-              (featureMode && (!feature || !!form || !!conflict.length || !!feature.referenceError))
+              (!anomalyMode && !!conflict.length) ||
+              (featureMode && (!feature || !!form || !!feature.referenceError)) ||
+              (costumeMode && (!costumeSample || !!costumeReferenceError))
             }
             onClick={() => handleStartAudit()}
           >
-            {featureMode ? '检查此特征' : '运行检查，不改标签'}
+            {costumeMode ? '运行换装检查' : featureMode ? '检查此特征' : '运行检查，不改标签'}
           </button>
           {activeAudit ? (
             <div className={styles.detail} role='status'>
               <p>
-                {v.job.auditFeature ? `正在检查「${v.job.auditFeature.name}」` : '正在检查错标'} ·{' '}
-                {v.job.done} / {v.job.total} 份
+                {v.job.auditCostume
+                  ? '正在检查换装'
+                  : v.job.auditFeature
+                    ? `正在检查「${v.job.auditFeature.name}」`
+                    : '正在检查错标'}{' '}
+                · {v.job.done} / {v.job.total} 份
               </p>
               <progress aria-label='标签检查进度' max={Math.max(v.job.total, 1)} value={v.job.done} />
             </div>
           ) : null}
-          {!featureMode && audit?.samples ? (
+          {anomalyMode && audit?.samples ? (
             <p>
               最近一轮：检查 {audit.samples.length} 份 · 部分不确定 {uncertain.length} 份。
             </p>
           ) : null}
-          {!featureMode && uncertain.length ? (
+          {anomalyMode && uncertain.length ? (
             <details>
               <summary>查看不确定样本</summary>
               {uncertain.map((sample) => (
