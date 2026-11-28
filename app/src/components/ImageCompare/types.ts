@@ -4,4 +4,5 @@ export interface ImageCompareProps {
   width: number;
   height: number;
   outputLabel: string;
+  fitToViewport?: boolean;
 }

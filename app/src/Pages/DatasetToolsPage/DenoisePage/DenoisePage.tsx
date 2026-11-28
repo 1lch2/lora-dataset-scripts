@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { executeDenoise, getDenoiseImageUrl, getDenoiseInfo, loadDenoiseModels } from './api';
 import { ImageCompare } from '../../../components/ImageCompare';
-import type { DenoiseOptions, DenoisePageProps, SelectedImage } from './types';
-import styles from './styles.module.css';
+import type { DenoiseOptions, DenoisePageProps } from './types';
+import { useImageSelection } from '../useImageSelection';
+import styles from '../imageTool.module.css';
 
 const PRESETS = [
   { name: '轻柔', scale: 0.8, strength: 0.0006 },
@@ -23,9 +24,7 @@ const STAGES: Record<string, string> = {
 
 export function DenoisePage({ active, token, processing }: DenoisePageProps) {
   const client = useQueryClient();
-  const [image, setImage] = useState<SelectedImage>();
-  const [inputError, setInputError] = useState('');
-  const [reading, setReading] = useState(false);
+  const { image, inputError, reading, selectImage } = useImageSelection();
   const [taskId, setTaskId] = useState<string>();
   const [options, setOptions] = useState<DenoiseOptions>({
     scale: 0.6,
@@ -34,7 +33,6 @@ export function DenoisePage({ active, token, processing }: DenoisePageProps) {
     model: '',
   });
   const picker = useRef<HTMLInputElement>(null);
-  const selection = useRef(0);
   const status = useQuery({
     queryKey: ['denoise'],
     queryFn: getDenoiseInfo,
@@ -75,49 +73,11 @@ export function DenoisePage({ active, token, processing }: DenoisePageProps) {
     options.strength >= 0.0001 &&
     options.strength <= 0.005;
 
-  useEffect(
-    () => () => {
-      if (image) URL.revokeObjectURL(image.url);
-    },
-    [image],
-  );
-  useEffect(
-    () => () => {
-      selection.current += 1;
-    },
-    [],
-  );
-
   async function handleFile(file?: File) {
     if (!file || busy) return;
-    const current = ++selection.current;
-    setInputError('');
-    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-      setInputError('请选择 PNG、JPEG 或 WebP 图片');
-      return;
-    }
-    if (file.size > 20 * 1024 * 1024) {
-      setInputError('图片文件不能超过 20 MiB');
-      return;
-    }
-    setReading(true);
-    const url = URL.createObjectURL(file);
-    const preview = new Image();
-    preview.src = url;
-    try {
-      await preview.decode();
-      if (current !== selection.current) {
-        URL.revokeObjectURL(url);
-        return;
-      }
-      setImage({ file, url, width: preview.naturalWidth, height: preview.naturalHeight });
+    if (await selectImage(file)) {
       setTaskId(undefined);
       run.reset();
-    } catch {
-      URL.revokeObjectURL(url);
-      setInputError('无法读取图片，请确认文件未损坏且格式为 PNG、JPEG 或 WebP');
-    } finally {
-      if (current === selection.current) setReading(false);
     }
   }
 

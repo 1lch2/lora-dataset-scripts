@@ -118,7 +118,7 @@ export function useReview(session: SessionInfo, startInAnalysis: boolean) {
     tags.handleFocus();
   }, [tags.singleKey, !!tags.focused]);
   useEffect(() => {
-    if (job.action === 'denoise' || job.action === 'denoise_models') return;
+    if (job.action === 'denoise' || job.action === 'denoise_models' || job.action === 'scunet') return;
     if (!job.id || job.id === handledJob.current || !['complete', 'failed'].includes(job.status) || busy)
       return;
     handledJob.current = job.id;

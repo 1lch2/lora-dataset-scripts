@@ -1,0 +1,138 @@
+.workspace {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: 1;
+  min-block-size: 0;
+  gap: var(--review-space-4);
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+  gap: var(--review-space-3);
+}
+
+.modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  flex: none;
+  gap: var(--review-space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.modes label {
+  position: relative;
+  margin: 0;
+  cursor: pointer;
+}
+
+.modes span,
+.submit {
+  min-block-size: 2.5rem;
+  font-weight: 600;
+}
+
+.modes span {
+  display: grid;
+  place-items: center;
+  padding-inline: var(--review-space-2);
+  border: 1px solid var(--color-review-line);
+  border-radius: var(--review-radius);
+  background: var(--color-review-surface);
+  white-space: nowrap;
+}
+
+.modes label:hover span,
+.modes input:checked + span {
+  background: var(--color-review-tint);
+}
+
+.modes input:checked + span {
+  border-color: var(--color-review-accent);
+}
+
+.modes input:focus-visible + span {
+  outline: 2px solid var(--color-review-accent);
+  outline-offset: 2px;
+}
+
+.modes:disabled label {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.submit {
+  flex: none;
+}
+
+.mediaPanel {
+  inline-size: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-block-size: 2rem;
+  flex: none;
+  gap: var(--review-space-2);
+}
+
+.panelHeader small,
+.sourceMeta {
+  color: var(--color-review-muted);
+  overflow-wrap: anywhere;
+}
+
+.resultActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--review-space-2);
+}
+
+.sourceCanvas,
+.resultPlaceholder {
+  display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+  flex: 1;
+  min-block-size: 10rem;
+  border-radius: var(--review-radius);
+  background: var(--color-review-canvas);
+}
+
+.sourceCanvas img {
+  display: block;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: contain;
+}
+
+.upload,
+.resultPlaceholder {
+  place-content: center;
+  text-align: center;
+  color: var(--color-review-muted);
+}
+
+.upload {
+  display: grid;
+  gap: var(--review-space-2);
+  border: 1px dashed var(--color-review-control);
+  background: transparent;
+}
+
+.upload strong {
+  color: var(--color-review-ink);
+}
+
+.resultPlaceholder {
+  display: flex;
+  align-items: center;
+  padding: var(--review-space-4);
+  border: 1px solid var(--color-review-line);
+}

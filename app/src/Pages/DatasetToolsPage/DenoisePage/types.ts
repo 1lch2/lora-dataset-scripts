@@ -20,10 +20,3 @@ export interface DenoiseInfo {
   models: { name: string; scale: number | null }[];
   result: { id: string; width: number; height: number; name: string } | null;
 }
-
-export interface SelectedImage {
-  file: File;
-  url: string;
-  width: number;
-  height: number;
-}

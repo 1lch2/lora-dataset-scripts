@@ -3,9 +3,17 @@ scope: 已核对审核前端、图像降噪、数据集分析、LoRA 文件工�
 not_yet_mapped:
   - 检测、几何裁框与模型客户端的内部实现
 features:
+  - id: scunet-denoise
+    name: 图像降噪（Forge ScuNET 1×）
+    keywords: [图像降噪, ScuNET, Forge 超分, 单图降噪, 文件夹批量降噪, 递归, PNG]
+    doc: docs/features/scunet-denoise.md
+    entrypoints:
+      - app/src/Pages/DatasetToolsPage/ScunetPage/ScunetPage.tsx
+      - tools/scunet.py
+      - webui/server.py
   - id: image-denoise
-    name: 二次元图像降噪与前后对比
-    keywords: [图像降噪, 鱼鳞, 伪影, L0, FFT, BOX, 预缩放, Alpha, PNG, 超分模型, 分割对比]
+    name: 去除GPT水印（实验性）
+    keywords: [去除GPT水印, gpt-image-2, 鱼鳞, 伪影, L0, FFT, BOX, 预缩放, Alpha, PNG, 超分模型, 分割对比]
     doc: docs/features/image-denoise.md
     entrypoints:
       - app/src/Pages/DatasetToolsPage/DenoisePage/DenoisePage.tsx

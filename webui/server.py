@@ -1,3 +1,4 @@
+import io
 import json
 import mimetypes
 import os
@@ -20,10 +21,11 @@ from core.dataset_pipeline.tag_audit import (AuditRetry, audit_run, audit_view, 
                                              validate_options as validate_audit_options)
 from core.dataset_pipeline.tagging import apply_filters, restore_captions, tag_run, validate_options
 from tools.analysis.job import AnalysisJob
-from tools.dataset import DatasetToolsJob, scan_files
+from tools.dataset import DatasetToolsJob, ordinary_path, scan_files
 from tools.denoise import decode_upload, denoise_image, open_image, png_bytes, validate_options as validate_denoise_options
 from tools.lora.prompts import generate_lora_tags
 from tools.lora.rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
+from tools.scunet import batch_directories, batch_images, check_model, save_batch_image, scunet_image
 
 from .settings import RUNTIME_KEYS, save_settings, settings_info
 
@@ -44,6 +46,9 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
     analysis_only = directory is None and config is None
     denoise = {'status': 'idle', 'stage': '', 'errors': [], 'models': [], 'result': None}
     denoise_images = {}
+    scunet = {'status': 'idle', 'stage': '', 'errors': [], 'result': None, 'output': None,
+              'done': 0, 'total': 0, 'saved': 0}
+    scunet_images = {}
 
     def denoise_status():
         return {**denoise, 'defaultModel': template.get('upscaler_1', DEFAULTS['upscaler_1'])}
@@ -84,7 +89,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
 
     def start_denoise(action, data):
         if analysis_only:
-            raise ValueError('请使用 start-webui.bat 打开图像降噪')
+            raise ValueError('请使用 start-webui.bat 打开去除 GPT 水印')
         options, raw, name = None, None, None
         if action == 'denoise':
             options = validate_denoise_options(data)
@@ -105,6 +110,82 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 denoise_images.clear()
             threading.Thread(target=process_denoise, args=(action, selected, options, raw, name), daemon=True).start()
             return {**denoise_status(), 'id': job['id']}
+
+    def process_scunet(selected, upload, directories):
+        try:
+            if directories:
+                source, output, recursive = directories
+                paths = batch_images(source, recursive)
+                with mutex:
+                    scunet.update(total=len(paths), stage='connect')
+                    job['total'] = len(paths)
+            if model_setup:
+                model_setup(selected)
+            client = ForgeClient(selected)
+            check_model(client)
+            with mutex:
+                scunet['stage'] = 'process'
+            if directories:
+                for relative in paths:
+                    failure = None
+                    try:
+                        path = source / relative
+                        ordinary_path(path)
+                        _, _, _, result = scunet_image(path, client)
+                        save_batch_image(output, relative, result)
+                    except (OSError, ValueError) as error:
+                        failure = f'{relative.as_posix()}：{error}'
+                    with mutex:
+                        if failure:
+                            scunet['errors'].append(failure)
+                        else:
+                            scunet['saved'] += 1
+                        scunet['done'] += 1
+                        job['done'] = scunet['done']
+            else:
+                raw, name = upload
+                rgb, alpha, icc, result = scunet_image(io.BytesIO(raw), client)
+                original = png_bytes(rgb, alpha, icc)
+                with mutex:
+                    scunet_images.update(original=original, output=result)
+                    scunet.update(done=1, result={'id': job['id'], 'width': rgb.width, 'height': rgb.height,
+                                                  'name': name + '_denoised.png'})
+                    job['done'] = 1
+        except Exception as error:
+            with mutex:
+                scunet['errors'].append(str(error))
+        finally:
+            with mutex:
+                status = 'failed' if scunet['errors'] else 'complete'
+                scunet.update(status=status, stage='')
+                job.update(status=status, errors=scunet['errors'])
+
+    def start_scunet(data):
+        if analysis_only:
+            raise ValueError('请使用 start-webui.bat 打开图像降噪')
+        upload, directories = None, None
+        if data.get('mode') == 'batch':
+            directories = batch_directories(data)
+        elif data.get('mode') == 'single':
+            name = data.get('name')
+            if not isinstance(name, str) or not name or len(name) > 255:
+                raise ValueError('图片名称无效')
+            upload = decode_upload(data.get('image')), Path(name).stem
+        else:
+            raise ValueError('请选择单图或文件夹批量模式')
+        with mutex:
+            if job['status'] == 'running':
+                raise ValueError('已有任务正在运行，请等待完成')
+            selected = {**DEFAULTS, **template}
+            total = 0 if directories else 1
+            job.update(id=secrets.token_hex(8), status='running', action='scunet',
+                       errors=[], total=total, done=0, count=None)
+            scunet.update(id=job['id'], status='running', stage='scan' if directories else 'connect',
+                          errors=[], done=0, total=total, saved=0, result=None,
+                          output=str(directories[1]) if directories else None)
+            scunet_images.clear()
+            threading.Thread(target=process_scunet, args=(selected, upload, directories), daemon=True).start()
+            return {**scunet, 'errors': []}
 
     def load_run(folder):
         overrides = {key: template[key] for key in RUNTIME_KEYS} if settings_path else None
@@ -301,15 +382,19 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 elif route.path == '/api/denoise/status':
                     with mutex:
                         self.reply(200, denoise_status())
-                elif route.path == '/api/denoise/image':
-                    query = parse_qs(route.query)
+                elif route.path == '/api/scunet/status':
                     with mutex:
-                        result = denoise['result']
+                        self.reply(200, scunet)
+                elif route.path in ('/api/denoise/image', '/api/scunet/image'):
+                    query = parse_qs(route.query)
+                    state, images = (scunet, scunet_images) if route.path.startswith('/api/scunet/') else (denoise, denoise_images)
+                    with mutex:
+                        result = state['result']
                         kind = query.get('kind', ['output'])[0]
                         if (not result or query.get('id', [''])[0] != result['id']
                                 or kind not in ('original', 'output')):
                             raise ValueError('降噪结果已过期，请重新处理')
-                        content = denoise_images[kind]
+                        content = images[kind]
                     self.reply(200, content, 'image/png')
                 elif route.path == '/' or route.path.startswith('/assets/'):
                     path = (static / ('index.html' if route.path == '/' else route.path.lstrip('/'))).resolve()
@@ -360,7 +445,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 elif route.path == "/api/job":
                     with mutex:
                         data = dict(job)
-                    if data.get('action') not in ('start_upscale', 'start_detect', 'start_audit', 'denoise', 'denoise_models') and not data.get('explicitTagging'):
+                    if data.get('action') not in ('start_upscale', 'start_detect', 'start_audit', 'denoise', 'denoise_models', 'scunet') and not data.get('explicitTagging'):
                         run = load_run(directory)
                         samples = [(s, c) for s in run.data["sources"].values() if s.get("active", True)
                                    for c in s["candidates"] if c["status"] == "accepted"]
@@ -393,13 +478,14 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
             if self.path not in ("/api/settings", "/api/edit", '/api/analysis/start', '/api/analysis/cancel', '/api/lora/rename',
                                  '/api/datasets/import', '/api/datasets/open', '/api/datasets/delete',
                                  '/api/denoise/start', '/api/denoise/models', '/api/tag-audit/feature',
+                                 '/api/scunet/start',
                                  '/api/forge/unload-checkpoint',
                                  '/api/tools/scan', '/api/tools/preview', '/api/tools/execute', '/api/tools/cancel'):
                 self.reply(404, {"error": "接口不存在"})
                 return
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                limit = 28 * 1024 * 1024 if self.path == '/api/denoise/start' else 1024 * 1024
+                limit = 28 * 1024 * 1024 if self.path in ('/api/denoise/start', '/api/scunet/start') else 1024 * 1024
                 if not 0 < length <= limit:
                     raise ValueError("请求大小无效")
                 data = json.loads(self.rfile.read(length))
@@ -408,6 +494,9 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 if self.path in ('/api/denoise/start', '/api/denoise/models'):
                     action = 'denoise' if self.path.endswith('/start') else 'denoise_models'
                     self.reply(202, start_denoise(action, data))
+                    return
+                if self.path == '/api/scunet/start':
+                    self.reply(202, start_scunet(data))
                     return
                 if self.path == '/api/forge/unload-checkpoint':
                     with mutex:

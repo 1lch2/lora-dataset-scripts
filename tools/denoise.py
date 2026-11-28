@@ -44,12 +44,16 @@ def decode_upload(payload):
 
 
 def open_image(raw):
+    return read_image(io.BytesIO(raw), formats=('PNG', 'JPEG', 'WEBP'), max_pixels=MAX_INPUT_PIXELS)
+
+
+def read_image(source, *, formats=None, max_pixels):
     try:
-        with Image.open(io.BytesIO(raw)) as image:
-            if image.format not in ('PNG', 'JPEG', 'WEBP'):
+        with Image.open(source) as image:
+            if formats is not None and image.format not in formats:
                 raise ValueError('请选择 PNG、JPEG 或 WebP 图片')
-            if image.width * image.height > MAX_INPUT_PIXELS or max(image.size) > MAX_SIDE:
-                raise ValueError('图片最多 400 万像素，单边不能超过 8192 像素')
+            if image.width * image.height > max_pixels or max(image.size) > MAX_SIDE:
+                raise ValueError(f'图片最多 {max_pixels // 10_000} 万像素，单边不能超过 {MAX_SIDE} 像素')
             if getattr(image, 'is_animated', False):
                 raise ValueError('请使用静态图片')
             image = ImageOps.exif_transpose(image)

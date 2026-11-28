@@ -3,11 +3,20 @@ import type { PointerEvent } from 'react';
 import type { ImageCompareProps } from './types';
 import styles from './styles.module.css';
 
-export function ImageCompare({ original, output, width, height, outputLabel }: ImageCompareProps) {
+export function ImageCompare({
+  original,
+  output,
+  width,
+  height,
+  outputLabel,
+  fitToViewport,
+}: ImageCompareProps) {
   const [split, setSplit] = useState(50);
   const [mode, setMode] = useState('compare');
   const [zoom, setZoom] = useState('fit');
   const frame = useRef<HTMLDivElement>(null);
+  const fittingViewport = zoom === 'fit' && fitToViewport;
+  const fitWidth = fitToViewport ? `min(100%, calc(100cqb * ${width / height}))` : '100%';
 
   function handleSplit(event: PointerEvent<HTMLDivElement>) {
     if (mode !== 'compare' || event.buttons !== 1 || !frame.current) return;
@@ -32,7 +41,7 @@ export function ImageCompare({ original, output, width, height, outputLabel }: I
         <label>
           显示比例
           <select value={zoom} onChange={(event) => setZoom(event.target.value)}>
-            <option value='fit'>适应宽度</option>
+            <option value='fit'>{fitToViewport ? '适应窗口' : '适应宽度'}</option>
             <option value='1'>100%</option>
             <option value='2'>200%</option>
           </select>
@@ -41,11 +50,11 @@ export function ImageCompare({ original, output, width, height, outputLabel }: I
           {width} × {height}
         </span>
       </div>
-      <div className={styles.viewport}>
+      <div className={fittingViewport ? `${styles.viewport} ${styles.fitViewport}` : styles.viewport}>
         <div
           ref={frame}
           className={styles.frame}
-          style={{ width: zoom === 'fit' ? '100%' : width * Number(zoom) }}
+          style={{ width: zoom === 'fit' ? fitWidth : width * Number(zoom) }}
           onPointerDown={(event) => {
             if (mode !== 'compare' || event.button !== 0) return;
             event.currentTarget.setPointerCapture(event.pointerId);

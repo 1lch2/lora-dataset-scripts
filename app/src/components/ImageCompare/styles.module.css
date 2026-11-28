@@ -32,6 +32,10 @@
   background: var(--color-review-canvas-stage);
   border-radius: var(--review-radius);
 }
+.fitViewport {
+  container-type: size;
+  align-content: safe center;
+}
 .frame {
   position: relative;
   margin-inline: auto;
