@@ -42,6 +42,7 @@ def validate_costume_observation(value):
     if not isinstance(regions, list) or len(regions) > len(COSTUME_REGIONS):
         raise ValueError('模型未返回有效的逐部位服装比较')
     seen, matching, ambiguous, differences = set(), [], [], []
+    validated = []
     for item in regions:
         if not isinstance(item, dict):
             raise ValueError('模型返回的服装比较项无效')
@@ -57,6 +58,8 @@ def validate_costume_observation(value):
         reference, target = item.get('reference'), item.get('target')
         if any(not isinstance(text, str) or len(text) > 250 for text in (reference, target)):
             raise ValueError('模型返回的服装依据无效')
+        validated.append({'region': region, 'referenceVisible': reference_visible, 'targetVisible': target_visible,
+                          'reference': reference, 'target': target, 'comparison': comparison})
         if not (reference_visible and target_visible):
             continue
         reference, target = reference.strip(), target.strip()
@@ -70,12 +73,12 @@ def validate_costume_observation(value):
         else:
             ambiguous.append(evidence)
     if differences:
-        return {'state': 'present', 'reason': ''.join(differences)}
+        return {'state': 'present', 'reason': ''.join(differences), 'regions': validated}
     if ambiguous:
-        return {'state': 'uncertain', 'reason': '可见差异不足以确认换装。' + ''.join(ambiguous)}
+        return {'state': 'uncertain', 'reason': '可见差异不足以确认换装。' + ''.join(ambiguous), 'regions': validated}
     if matching:
-        return {'state': 'absent', 'reason': '可对照的服装结构一致。' + ''.join(matching)}
-    return {'state': 'unobservable', 'reason': '两张图缺少共同清楚可见的服装部位。'}
+        return {'state': 'absent', 'reason': '可对照的服装结构一致。' + ''.join(matching), 'regions': validated}
+    return {'state': 'unobservable', 'reason': '两张图缺少共同清楚可见的服装部位。', 'regions': validated}
 
 
 def prepare_costume_reference(run, selection):

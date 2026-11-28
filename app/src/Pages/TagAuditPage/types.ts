@@ -29,6 +29,10 @@ export type AuditConfirmation =
     };
 
 export interface AuditEditRequest extends EditRequest {
+  featureIds?: string[];
+  featureId?: string;
+  auditRunId?: string;
+  retryCategory?: AuditMode;
   retryStatus?: AuditRetryStatus;
   retrySample?: TagAuditReference;
 }

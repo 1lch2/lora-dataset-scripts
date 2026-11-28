@@ -35,6 +35,11 @@
 .toolbar input[type='checkbox'] {
   width: auto;
 }
+.featureChoices label {
+  min-block-size: 44px;
+  min-inline-size: 44px;
+  overflow-wrap: anywhere;
+}
 .clearResults {
   margin-inline-start: auto;
 }

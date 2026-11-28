@@ -152,6 +152,8 @@ export interface TagAuditFinding {
   reason: string;
   status: 'pending' | 'ignored' | 'applied' | 'stale';
   model: string | null;
+  round?: string;
+  executionId?: string;
 }
 export type TagAuditReference = Pick<TagAuditFinding, 'source' | 'candidate'>;
 export interface TagAuditFeatureFields {
@@ -174,12 +176,24 @@ export interface TagAuditFeatureSample {
   findingId?: string;
   reason?: string;
   error?: string;
+  executionId?: string;
+  regions?: {
+    region: 'top' | 'outerwear' | 'bottom' | 'footwear';
+    referenceVisible: boolean;
+    targetVisible: boolean;
+    reference: string;
+    target: string;
+    comparison: 'same' | 'different_type' | 'different_construction' | 'minor' | 'uncertain';
+  }[];
 }
 export interface TagAuditInfo {
   options?: TagAuditOptions;
   findings: TagAuditFinding[];
   features?: Record<string, TagAuditFeature>;
-  featureRun?: { id: string; feature: TagAuditFeature; total: number; samples: TagAuditFeatureSample[] };
+  featureRuns?: Record<
+    string,
+    { id: string; feature: TagAuditFeature; total: number; samples: TagAuditFeatureSample[] }
+  >;
   costumeRun?: {
     id: string;
     reference: TagAuditReference & { name: string; description?: string };
@@ -194,6 +208,18 @@ export interface TagAuditInfo {
     status: 'complete' | 'uncertain' | 'failed';
     error?: string;
     observation?: { count_reason: string; framing_reason: string };
+    executionId?: string;
   }[];
+  anomalyRunId?: string;
+  executions?: Record<
+    string,
+    {
+      roundId: string | null;
+      category: 'anomaly' | 'feature' | 'costume';
+      featureId?: string;
+      options: TagAuditOptions;
+      protocolVersion: string | null;
+    }
+  >;
   batches: { id: string; findings: string[]; undone: boolean }[];
 }

@@ -372,8 +372,8 @@ class TagAuditTests(unittest.TestCase):
             if color == (0, 0, 255):
                 raise ValueError('service timeout')
             if color == (255, 0, 0):
-                return {**PRESENT, 'state': 'uncertain'}
-            return PRESENT
+                return {**PRESENT, 'state': 'uncertain', 'regions': []}
+            return {**PRESENT, 'regions': []}
 
         with patch('core.dataset_pipeline.tag_audit.observe_feature', side_effect=observe_addition), \
                 patch('core.dataset_pipeline.tag_audit.observe_costume', side_effect=observe_addition):
@@ -398,7 +398,7 @@ class TagAuditTests(unittest.TestCase):
                     'category': category, 'status': status, 'auditRunId': round_id,
                 }, timeout=5)
 
-            feature_round = audit['featureRun']['id']
+            feature_round = audit['featureRuns'][feature_id]['id']
             costume_round = audit['costumeRun']['id']
             self.assertEqual(clear('feature', 'pending', costume_round).status_code, 400)
             self.assertEqual(clear('costume', 'applied', costume_round).status_code, 400)
@@ -411,7 +411,8 @@ class TagAuditTests(unittest.TestCase):
                 self.assertEqual(response.json()['result']['changed'], 1)
 
             saved = Run.load(self.run.directory).data['tag_audit']
-            self.assertEqual({sample['status'] for sample in saved['featureRun']['samples']}, {'consistent', 'uncertain'})
+            self.assertEqual({sample['status'] for sample in saved['featureRuns'][feature_id]['samples']},
+                             {'consistent', 'uncertain'})
             self.assertEqual({sample['status'] for sample in saved['costumeRun']['samples']}, {'absent', 'present', 'failed'})
             self.assertEqual([(finding['id'], finding['status']) for finding in saved['findings']], [(applied, 'applied')])
             self.assertEqual(saved['features'], audit['features'])
@@ -515,6 +516,35 @@ class TagAuditTests(unittest.TestCase):
             })
             finding, = audit['findings']
             self.assertEqual((finding['category'], finding['tags']), ('costume', ['alternate costume']))
+            result = audit['costumeRun']
+            by_name = {Path(s['name']).stem: s for s in result['samples']}
+            self.assertEqual(by_name['hidden']['regions'], [{
+                'region': 'top', 'comparison': 'different_construction', 'referenceVisible': True,
+                'targetVisible': False, 'reference': '白色条纹衬衫', 'target': '仅露出衣领',
+            }])
+            self.assertNotIn('regions', by_name['failed'])
+            execution = audit['executions'][by_name['change']['executionId']]
+            self.assertEqual(execution['protocolVersion'], 'described_regions_v1')
+            self.assertEqual(execution['options'], {**options, 'visual': True})
+            calls.clear()
+            retry = edit('retry_audit_samples', audit={**options, 'model': 'retry-costume'}, retryCategory='costume',
+                         retryStatus='failed', auditRunId=result['id'])
+            self.assertEqual(retry.status_code, 202, retry.text)
+            job = wait_job()
+            self.assertEqual((job['status'], job['done'], job['total'], job['failedCount']), ('complete', 1, 1, 1))
+            self.assertEqual(calls, [([(0, 255, 255), (255, 165, 0)], True)])
+            retried = audit_state()
+            self.assertEqual(retried['findings'], [finding])
+            self.assertEqual(retried['costumeRun']['id'], result['id'])
+            for sample in retried['costumeRun']['samples']:
+                if Path(sample['name']).stem == 'failed':
+                    attempt = retried['executions'][sample['executionId']]
+                    self.assertEqual((attempt['roundId'], attempt['options']['model']), (result['id'], 'retry-costume'))
+                else:
+                    self.assertEqual(sample, by_name[Path(sample['name']).stem])
+            persisted = Run.load(self.run.directory).data['tag_audit']
+            self.assertIn(by_name['hidden'], persisted['costumeRun']['samples'])
+            self.assertEqual(persisted['executions'][result['id']], execution)
             self.assertEqual({path: path.read_bytes() for path in original}, original)
             self.assertTrue(edit('apply_audit', ids=[finding['id']]).ok)
             self.assertEqual(work['change'].read_text(encoding='utf-8').strip(), 'blue hair, alternate costume')
@@ -671,7 +701,8 @@ class TagAuditTests(unittest.TestCase):
             self.assertEqual(set(calls), {(1, (100, 100), True, False)})
             self.assertEqual({name: path.read_bytes() for name, path in work.items()}, before)
             result = session.get(url + '/api/state', timeout=5).json()['tag_audit']
-            samples = {Path(sample['name']).stem: sample['status'] for sample in result['featureRun']['samples']}
+            samples = {Path(sample['name']).stem: sample['status']
+                       for sample in result['featureRuns'][feature_id]['samples']}
             expected = {name: state for name, (_, state) in cases.items()}
             expected.update(a='present', tagged='consistent', invalid='failed', refusal='failed',
                             truncated='failed', unsupported='failed')
@@ -709,6 +740,68 @@ class TagAuditTests(unittest.TestCase):
             self.assertEqual({name: path.read_bytes() for name, path in work.items()}, before)
             self.assertEqual({path: path.read_bytes() for path in origins}, origins)
 
+            def audit_state():
+                return session.get(url + '/api/state', timeout=5).json()['tag_audit']
+
+            second_feature = session.post(url + '/api/tag-audit/feature', json={
+                **feature_data, 'name': '领口', 'description': '可见的翻领', 'tags': ['collar'],
+            }, timeout=5)
+            self.assertTrue(second_feature.ok, second_feature.text)
+            second_id = second_feature.json()['result']['id']
+            first = audit_state()
+            first_round = first['featureRuns'][feature_id]
+            legacy = Run.load(self.run.directory)
+            legacy_audit = legacy.data['tag_audit']
+            legacy_audit['featureRun'] = legacy_audit.pop('featureRuns')[feature_id]
+            legacy.save()
+            self.assertEqual(audit_state()['featureRuns'][feature_id], first_round)
+            self.assertEqual(edit('start_audit', featureIds=[second_id, 'missing'], audit=audit_options).status_code, 400)
+            self.assertEqual(audit_state()['featureRuns'][feature_id], first_round)
+
+            response = edit('start_audit', featureIds=[second_id], audit=audit_options)
+            self.assertEqual(response.status_code, 202, response.text)
+            self.assertEqual(wait_job()['status'], 'complete')
+            both = audit_state()
+            self.assertEqual(both['featureRuns'][feature_id], first_round)
+            self.assertTrue(all(f in both['findings'] and f['status'] == 'pending' for f in first['findings']))
+
+            retry_options = {**audit_options, 'model': 'retry-feature', 'concurrency': 1}
+            retry = {'audit': retry_options, 'retryCategory': 'feature', 'retryStatus': 'failed',
+                     'featureId': feature_id, 'auditRunId': first_round['id']}
+            self.assertEqual(edit('retry_audit_samples', **{**retry, 'featureId': second_id}).status_code, 400)
+            invalid_color = next(color for color, state in states.items() if state == 'invalid')
+            states[invalid_color] = 'present'
+            calls.clear()
+            response = edit('retry_audit_samples', **retry)
+            self.assertEqual(response.status_code, 202, response.text)
+            job = wait_job()
+            self.assertEqual((job['status'], job['done'], job['total'], job['failedCount']), ('complete', 5, 5, 4))
+            self.assertEqual(calls, [(1, (100, 100), True, False)] * 5)
+            after_retry = audit_state()
+            self.assertEqual(after_retry['featureRuns'][second_id], both['featureRuns'][second_id])
+            retried_round = after_retry['featureRuns'][feature_id]
+            self.assertEqual(retried_round['id'], first_round['id'])
+            self.assertTrue(all(s in retried_round['samples'] for s in first_round['samples'] if s['status'] != 'failed'))
+            recovered, = [s for s in retried_round['samples'] if Path(s['name']).stem == 'invalid']
+            self.assertEqual(recovered['status'], 'present')
+            self.assertEqual(after_retry['executions'][recovered['executionId']]['options'], retry_options)
+            self.assertEqual(after_retry['executions'][first_round['id']]['options'], audit_options)
+
+            calls.clear()
+            response = edit('start_audit', featureIds=[feature_id, second_id], audit=audit_options)
+            self.assertEqual(response.status_code, 202, response.text)
+            job = wait_job()
+            self.assertEqual((job['status'], job['done'], job['total'], job['failedCount']),
+                             ('complete', 2 * len(work), 2 * len(work), 8))
+            self.assertEqual(calls, [(1, (100, 100), True, False)] * len(work)
+                             + [(1, (100, 100), False, False)] * len(work))
+            latest = audit_state()
+            for key in (feature_id, second_id):
+                round_id = latest['featureRuns'][key]['id']
+                self.assertNotEqual(round_id, both['featureRuns'][key]['id'])
+                self.assertEqual(latest['executions'][round_id]['protocolVersion'], 'target_only_v1')
+            self.assertEqual({name: path.read_bytes() for name, path in work.items()}, before)
+
     def test_feature_stale_after_target_or_definition_changes(self):
         selection = self.add_reference_sample()
         feature_id = edit_feature(self.run, {**FEATURE, 'reference': selection})['id']
@@ -732,7 +825,7 @@ class TagAuditTests(unittest.TestCase):
             edit_feature(self.run, {**update, 'description': '更新后的可观察细节'})
             assert_stale(fid)
             fid = scan()
-            self.run.data['tag_audit']['featureRun'].pop('input')
+            self.run.data['tag_audit']['featureRuns'][feature_id].pop('input')
             assert_stale(fid)
             fid = scan()
             _, reference = self.run.locate(selection['source'], selection['candidate'])
@@ -761,7 +854,7 @@ class TagAuditTests(unittest.TestCase):
         with patch('core.dataset_pipeline.tag_audit.observe_feature', return_value=PRESENT):
             def scan(feature_id):
                 audit_run(self.run, self.options, lambda *_: None, feature_id)
-                finding, = audit_view(self.run)['findings']
+                finding, = [f for f in audit_view(self.run)['findings'] if f['feature']['id'] == feature_id]
                 return finding
 
             finding = scan(one)
@@ -775,4 +868,5 @@ class TagAuditTests(unittest.TestCase):
             edit_audit(self.run, {'action': 'undo_audit', 'batch': batch})
             self.assertEqual(self.run.tag_file(self.candidate['tag']).read_bytes(), self.caption.read_bytes())
             edit_feature(self.run, {'action': 'delete_feature', 'featureId': one})
-            self.assertEqual(audit_view(self.run)['findings'][0]['status'], 'stale')
+            self.assertEqual(next(f for f in audit_view(self.run)['findings'] if f['feature']['id'] == one)['status'],
+                             'stale')
