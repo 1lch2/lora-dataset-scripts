@@ -62,11 +62,19 @@ const FEATURE_STATUS_LABELS = {
   stale: '已过期',
 };
 const COSTUME_TAG = 'alternate costume';
-const COSTUME_STATUS_LABELS = {
+const COSTUME_FILTER_LABELS = {
   alternate: '识别为换装',
-  ...FEATURE_STATUS_LABELS,
+  pending: '待补标',
   consistent: '已标注换装',
-  absent: '标准服装',
+  absent: '与标准服装一致',
+  unobservable: '不可观察',
+  ...RETRY_STATUS_LABELS,
+};
+const COSTUME_STATUS_LABELS = {
+  ...COSTUME_FILTER_LABELS,
+  ignored: '已忽略换装',
+  applied: COSTUME_FILTER_LABELS.consistent,
+  stale: '检查结果已过期',
 };
 const DEFAULT_OPTIONS: TagAuditOptions = {
   visual: true,
@@ -525,12 +533,18 @@ export function TagAuditPage() {
     }
     const run = mode === 'feature' ? latest : costumeRun;
     if (!run) return [];
+    const reference = mode === 'costume' ? costumeRun?.reference : undefined;
     const byId = new Map(
       findings
         .filter((finding) => finding.category === mode && finding.round === run.id)
         .map((finding) => [finding.id, finding]),
     );
-    return run.samples.map((sample) => {
+    const samples = reference
+      ? run.samples.filter(
+          (sample) => sample.source !== reference.source || sample.candidate !== reference.candidate,
+        )
+      : run.samples;
+    return samples.map((sample) => {
       const finding = sample.findingId ? byId.get(sample.findingId) : undefined;
       const status = finding?.status ?? (sample.status === 'present' ? 'stale' : sample.status);
       return {
@@ -539,9 +553,7 @@ export function TagAuditPage() {
         name: `${sample.name} · ${sample.candidate}`,
         status,
         alternate:
-          mode === 'costume' &&
-          status !== 'stale' &&
-          (sample.status === 'present' || sample.status === 'consistent'),
+          mode === 'costume' && (status === 'pending' || status === 'consistent' || status === 'applied'),
         reason: sample.error || sample.reason,
         finding,
       };
@@ -550,6 +562,9 @@ export function TagAuditPage() {
 
   const visible = rows.filter((row) => {
     if (status === 'alternate') return row.alternate;
+    if (costumeMode && status === 'consistent') {
+      return row.status === 'consistent' || row.status === 'applied';
+    }
     if (anomalyMode && isRetryStatus(row.status)) {
       return status === row.status || (status === 'all' && category === 'all');
     }
@@ -589,7 +604,8 @@ export function TagAuditPage() {
     uncertain: uncertain.filter((row) => editableSamples.has(`${row.source}/${row.candidate}`)).length,
   };
   const retryable = retryStatus ? retryCounts[retryStatus] : 0;
-  const activeAudit = v.job.action === 'start_audit' && v.job.status === 'running';
+  const activeAudit =
+    v.job.action === 'start_audit' && v.job.status === 'running' && (!costumeMode || v.job.auditCostume);
   const refresh = () => client.invalidateQueries({ queryKey: ['run'] });
   const mutation = useMutation({
     mutationFn: (data: AuditEditRequest) => updateReview(data, v.session.token),
@@ -828,7 +844,7 @@ export function TagAuditPage() {
   }
 
   const statusLabels = costumeMode
-    ? COSTUME_STATUS_LABELS
+    ? COSTUME_FILTER_LABELS
     : featureMode
       ? FEATURE_STATUS_LABELS
       : ANOMALY_STATUS_LABELS;
@@ -898,9 +914,8 @@ export function TagAuditPage() {
         ) : null}
         {costumeMode && costumeRun ? (
           <p>
-            本轮参考图：{costumeRun.reference.name} · {costumeRun.reference.candidate} · 已检查{' '}
-            {costumeRun.samples.length} / {costumeRun.total} 份 · 待补标 {pending} 份 · 失败 {failed.length}{' '}
-            份
+            已检查 {rows.length} / {Math.max(0, costumeRun.total - 1)} 份 · 待补标 {pending} 份 · 失败{' '}
+            {failed.length} 份
           </p>
         ) : null}
         {costumeMode && costumeRun && !costumeRun.reference.description ? (
@@ -1155,6 +1170,7 @@ export function TagAuditPage() {
           ) : null}
           {costumeMode ? (
             <div className={styles.detail}>
+              <h3>标准服装参考</h3>
               <div className={styles.toolbar}>
                 <button
                   type='button'
@@ -1171,9 +1187,18 @@ export function TagAuditPage() {
                 </small>
               ) : null}
               {costumeReferenceUrl ? (
-                <button className={styles.reference} onClick={() => v.setPreviewImage(costumeReferenceUrl)}>
+                <button
+                  type='button'
+                  className={styles.reference}
+                  onClick={() => v.setPreviewImage(costumeReferenceUrl)}
+                >
                   <img src={costumeReferenceUrl} alt='查看标准服装参考图' />
                 </button>
+              ) : null}
+              {savedCostumeReference && (hasNewCostumeSelection || !costumeSample) ? (
+                <small>
+                  本轮参考图：{savedCostumeReference.name} · {savedCostumeReference.candidate}
+                </small>
               ) : null}
               {costumeReferenceError ? <p role='status'>{costumeReferenceError}</p> : null}
               {costumeSample ? (
@@ -1249,7 +1274,11 @@ export function TagAuditPage() {
               </div>
             </fieldset>
           ) : null}
-          <p>范围为当前数据集全部 {eligible} 份有效标签样本，独立于标签页筛选。</p>
+          {costumeMode ? (
+            <p>检查当前数据集中除标准服装参考图外的有效标签样本。</p>
+          ) : (
+            <p>范围为当前数据集全部 {eligible} 份有效标签样本，独立于标签页筛选。</p>
+          )}
           {blockedFeatures.length ? (
             <p role='status'>
               请重新确认参考图和目标标签：{blockedFeatures.map((item) => item.name).join('、')}。
