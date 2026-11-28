@@ -92,6 +92,43 @@ class TagAuditTests(unittest.TestCase):
         self.assertEqual(self.run.data['tag_audit']['samples'][0]['status'], 'failed')
         self.assertEqual([f['tag'] for f in self.run.data['tag_audit']['findings']], ['virtual youtuber'])
 
+    def test_anomaly_rerun_reconciles_only_confirmed_pending_suggestions(self):
+        first = self.check()
+        solo, = [finding for finding in first if finding['tag'] == 'solo']
+        framing, = [finding for finding in first if finding['category'] == 'framing']
+        rule, = [finding for finding in first if finding['category'] == 'rule']
+        caption = self.run.tag_file(self.candidate['tag'])
+        original = caption.read_bytes()
+        edit_audit(self.run, {'action': 'apply_audit', 'ids': [rule['id']]})
+        applied = caption.read_bytes()
+
+        with patch('core.dataset_pipeline.tag_audit.observe', side_effect=OSError('vision unavailable')):
+            self.assertTrue(audit_run(self.run, self.options, lambda *_: None))
+        self.assertIn(solo['id'], {finding['id'] for finding in audit_view(self.run)['findings']})
+
+        still_two = {**OBSERVATION, 'count_reason': '两名人物都清楚可见'}
+        with patch('core.dataset_pipeline.tag_audit.observe', return_value=still_two):
+            self.assertEqual(audit_run(self.run, self.options, lambda *_: None), [])
+        checked = audit_view(self.run)
+        renewed, = [finding for finding in checked['findings'] if finding['id'] == solo['id']]
+        self.assertEqual(renewed['reason'], still_two['count_reason'])
+        self.assertEqual(renewed['executionId'], checked['samples'][0]['executionId'])
+
+        single_person = {**OBSERVATION, 'people': 1, 'girls': 1, 'framing_certain': False}
+        with patch('core.dataset_pipeline.tag_audit.observe', return_value=single_person):
+            self.assertEqual(audit_run(self.run, self.options, lambda *_: None), [])
+
+        saved = Run.load(self.run.directory)
+        audit = audit_view(saved)
+        self.assertEqual(audit['samples'][0]['observation']['people'], 1)
+        self.assertEqual({finding['id']: finding['status'] for finding in audit['findings']},
+                         {framing['id']: 'pending', rule['id']: 'applied'})
+        with self.assertRaises(ValueError):
+            edit_audit(saved, {'action': 'apply_audit', 'ids': [solo['id']]})
+        self.assertEqual(caption.read_bytes(), applied)
+        edit_audit(saved, {'action': 'undo_audit', 'batch': audit['batches'][-1]['id']})
+        self.assertEqual(caption.read_bytes(), original)
+
     def test_concurrent_checks_preserve_captions_and_keep_other_results_after_failure(self):
         folder = self.caption.parent
         for index in range(3):

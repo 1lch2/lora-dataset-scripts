@@ -547,6 +547,20 @@ def ignore_key(finding):
     return (finding['source'], finding['candidate'], finding['imageVersion'], *definition, tuple(feature_tags(finding)))
 
 
+def superseded_visual_findings(sample, previous, findings):
+    observation = sample.get('observation')
+    if not observation or sample['status'] == 'failed':
+        return set()
+    confirmed = set()
+    if observation['count_certain']:
+        confirmed.add('count')
+    if observation['framing_certain'] and observation['framing'] not in ('uncertain', 'other'):
+        confirmed.add('framing')
+    current = {finding['id'] for finding in findings}
+    return {finding['id'] for finding in previous
+            if finding['category'] in confirmed and finding['id'] not in current}
+
+
 def audit_run(run, options, progress, feature_id=None, report_failure=None, retry=None, costume_reference=None):
     audit = migrate_feature_run(run.data.setdefault('tag_audit', {'findings': [], 'batches': []}))
     result = retry_result(run, audit, retry) if retry else audit
@@ -606,6 +620,12 @@ def audit_run(run, options, progress, feature_id=None, report_failure=None, retr
     progress(0, len(samples))
     errors = []
     existing = {f['id']: f for f in audit['findings'] if f.get('action') != 'add'}
+    pending_visual = {}
+    if latest is None and options['visual']:
+        for finding in existing.values():
+            if finding['status'] == 'pending' and finding['category'] in ('count', 'framing'):
+                pair = (finding['source'], finding['candidate'])
+                pending_visual.setdefault(pair, []).append(finding)
     ignored = {ignore_key(f): f for f in audit['findings']
                if f['category'] == category and f['status'] == 'ignored'} if latest else {}
     workers = min(options.get('concurrency', 1), len(samples)) if options['visual'] else 1
@@ -624,6 +644,13 @@ def audit_run(run, options, progress, feature_id=None, report_failure=None, retr
                 errors.append(error)
                 if report_failure:
                     report_failure()
+            previous = pending_visual.get((sample['source'], sample['candidate']))
+            if previous:
+                obsolete = superseded_visual_findings(sample, previous, findings)
+                if obsolete:
+                    audit['findings'] = [f for f in audit['findings'] if f['id'] not in obsolete]
+                    for fid in obsolete:
+                        del existing[fid]
             for finding in findings:
                 finding['executionId'] = execution_id
                 if latest:
@@ -637,11 +664,14 @@ def audit_run(run, options, progress, feature_id=None, report_failure=None, retr
                     sample['findingId'] = finding['id']
                     continue
                 fid = finding['id']
-                if (fid in existing and existing[fid]['status'] in ('pending', 'ignored')
-                        and existing[fid]['context'] == finding['context']):
-                    continue
-                if fid in existing:
-                    audit['findings'].remove(existing[fid])
+                prior = existing.get(fid)
+                if prior is not None:
+                    if (prior['status'] in ('pending', 'ignored')
+                            and prior['context'] == finding['context']):
+                        if prior['status'] == 'pending' and finding['category'] in ('count', 'framing'):
+                            prior.update(finding)
+                        continue
+                    audit['findings'].remove(prior)
                 audit['findings'].append(finding)
                 existing[fid] = finding
             if retry:
