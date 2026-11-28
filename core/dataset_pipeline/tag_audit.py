@@ -264,6 +264,13 @@ def finding_current(run, finding, audit, versions, checked):
         return False
 
 
+def finding_status(run, finding, audit, versions, checked):
+    status = finding['status']
+    if status in ('pending', 'ignored') and not finding_current(run, finding, audit, versions, checked):
+        return 'stale'
+    return status
+
+
 def audit_view(run):
     audit = copy.deepcopy(run.data.get('tag_audit', {}))
     versions, checked = {}, {}
@@ -282,8 +289,7 @@ def audit_view(run):
         audit['findings'] = [f for f in audit['findings'] if f.get('action') != 'add'
                              or f['round'] == audit.get(ADDITION_RUN_KEYS[f['category']], {}).get('id')]
     for finding in audit.get('findings', []):
-        if finding['status'] in ('pending', 'ignored') and not finding_current(run, finding, audit, versions, checked):
-            finding['status'] = 'stale'
+        finding['status'] = finding_status(run, finding, audit, versions, checked)
     for category, key in ADDITION_RUN_KEYS.items():
         latest = audit.get(key)
         if not latest:
@@ -310,6 +316,57 @@ def audit_view(run):
             except (KeyError, ValueError, OSError, StopIteration):
                 sample['status'] = 'stale'
     return audit
+
+
+def clear_addition_results(run, audit, mode, status, audit_run_id):
+    key = ADDITION_RUN_KEYS[mode]
+    latest = audit.get(key)
+    if not latest or not audit_run_id or latest['id'] != audit_run_id:
+        raise ValueError('本轮检查结果已更新，请刷新后重试')
+
+    # 使用页面读取的有效性结果，避免按原始观察状态误删已应用或已过期的建议。
+    view = audit_view(run)
+    findings = {finding['id']: finding['status'] for finding in view['findings']
+                if finding['category'] == mode and finding.get('action') == 'add'}
+    remaining = []
+    removed_findings = set()
+    for sample, visible in zip(latest['samples'], view[key]['samples']):
+        finding_id = visible.get('findingId')
+        sample_status = 'stale' if visible['status'] == 'present' else visible['status']
+        if findings.get(finding_id, sample_status) != status:
+            remaining.append(sample)
+        elif finding_id in findings:
+            removed_findings.add(finding_id)
+
+    changed = len(latest['samples']) - len(remaining)
+    if changed:
+        latest['samples'] = remaining
+        audit['findings'] = [finding for finding in audit['findings'] if finding['id'] not in removed_findings]
+        run.save()
+    return {'changed': changed}
+
+
+def clear_audit_results(run, status, category, audit_run_id=None):
+    audit = run.data.get('tag_audit', {})
+    if category in ('feature', 'costume') and status in ('pending', 'stale', 'uncertain', 'failed'):
+        return clear_addition_results(run, audit, category, status, audit_run_id)
+    if status in ('uncertain', 'failed') and category == 'all':
+        key = 'samples'
+        remaining = [sample for sample in audit.get(key, []) if sample['status'] != status]
+    elif status in ('pending', 'stale') and category in ('all', 'count', 'framing', 'rule'):
+        key = 'findings'
+        versions, checked = {}, {}
+        remaining = [finding for finding in audit.get(key, [])
+                     if finding.get('action') == 'add'
+                     or (category != 'all' and finding['category'] != category)
+                     or finding_status(run, finding, audit, versions, checked) != status]
+    else:
+        raise ValueError('清空检查结果的筛选范围无效')
+    changed = len(audit.get(key, [])) - len(remaining)
+    if changed:
+        audit[key] = remaining
+        run.save()
+    return {'changed': changed}
 
 
 def inspect_sample(run, source, candidate, options):
@@ -376,9 +433,14 @@ def inspect_addition_sample(run, source, candidate, options, latest, category, r
     return sample, [finding]
 
 
-def failed_sample_indices(audit):
-    return {(sample['source'], sample['candidate']): index
-            for index, sample in enumerate(audit.get('samples', [])) if sample['status'] == 'failed'}
+def retry_sample_indices(audit, retry):
+    status, target = retry
+    indices = {}
+    for index, sample in enumerate(audit.get('samples', [])):
+        pair = (sample['source'], sample['candidate'])
+        if sample['status'] == status and (target is None or pair == target):
+            indices[pair] = index
+    return indices
 
 
 def clear_previous_audit_failures(run, category):
@@ -391,10 +453,10 @@ def clear_previous_audit_failures(run, category):
         run.save()
 
 
-def eligible_samples(run, retry_failed=False):
-    failed = failed_sample_indices(run.data.get('tag_audit', {})) if retry_failed else None
+def eligible_samples(run, retry=None):
+    indices = retry_sample_indices(run.data.get('tag_audit', {}), retry) if retry else None
     return [(s, c) for s in run.data['sources'].values() if s.get('active', True)
-            for c in s['candidates'] if (failed is None or (s['id'], c['id']) in failed)
+            for c in s['candidates'] if (indices is None or (s['id'], c['id']) in indices)
             and c['status'] == 'accepted' and run.current_tag(s, c)]
 
 
@@ -411,17 +473,17 @@ def ignore_key(finding):
     return (finding['source'], finding['candidate'], finding['imageVersion'], *definition, tuple(feature_tags(finding)))
 
 
-def audit_run(run, options, progress, feature_id=None, report_failure=None, retry_failed=False, costume_reference=None):
-    samples = eligible_samples(run, retry_failed)
+def audit_run(run, options, progress, feature_id=None, report_failure=None, retry=None, costume_reference=None):
+    samples = eligible_samples(run, retry)
     if not samples:
-        raise ValueError('没有可重试的失败样本' if retry_failed else '没有可检查的有效标签，请先完成打标或导入 TXT')
+        raise ValueError('没有符合条件的重试样本' if retry else '没有可检查的有效标签，请先完成打标或导入 TXT')
     audit = run.data.setdefault('tag_audit', {'findings': [], 'batches': []})
     latest = None
     category = None
     reference_image = None
-    failed_indices = {}
-    if retry_failed:
-        failed_indices = failed_sample_indices(audit)
+    retry_indices = {}
+    if retry:
+        retry_indices = retry_sample_indices(audit, retry)
         options = {**options, 'forbidden': audit.get('options', {}).get('forbidden', [])}
     elif costume_reference is not None:
         category = 'costume'
@@ -442,9 +504,9 @@ def audit_run(run, options, progress, feature_id=None, report_failure=None, retr
         latest.update(id=secrets.token_hex(12), total=len(samples), samples=[])
         audit[ADDITION_RUN_KEYS[category]] = latest
         audit['findings'] = [f for f in audit['findings'] if f['category'] != category or f['status'] != 'pending']
-    # 补标检查和失败重试始终使用视觉服务，保留全量异常检查的开关。
+    # 补标检查和样本重试始终使用视觉服务，保留全量异常检查的开关。
     audit['options'] = ({**options, 'visual': audit.get('options', {}).get('visual', True)}
-                        if latest or retry_failed else options)
+                        if latest or retry else options)
     run.save()
     progress(0, len(samples))
     errors = []
@@ -484,8 +546,8 @@ def audit_run(run, options, progress, feature_id=None, report_failure=None, retr
                     audit['findings'].remove(existing[fid])
                 audit['findings'].append(finding)
                 existing[fid] = finding
-            if retry_failed:
-                audit['samples'][failed_indices[sample['source'], sample['candidate']]] = sample
+            if retry:
+                audit['samples'][retry_indices[sample['source'], sample['candidate']]] = sample
             else:
                 (latest or audit)['samples'].append(sample)
             run.save()

@@ -9,7 +9,6 @@ import {
   updateReview,
 } from '../../api/client';
 import type {
-  EditRequest,
   TagAuditFeature,
   TagAuditFinding,
   TagAuditOptions,
@@ -19,8 +18,19 @@ import type {
 import { SideTabLayout } from '../../components/SideTabLayout';
 import { useReviewContext } from '../../review/context';
 import { imageKey, imageUrl as getImageUrl, splitTags } from '../../review/utils';
+import { AuditSampleActions } from './__internal__/AuditSampleActions';
 import { AuditSettings } from './__internal__/AuditSettings';
-import type { AuditCategory, AuditFilter, AuditMode, AuditRow, AuditSection, FeatureEdit } from './types';
+import type {
+  AuditCategory,
+  AuditConfirmation,
+  AuditEditRequest,
+  AuditFilter,
+  AuditMode,
+  AuditRetryStatus,
+  AuditRow,
+  AuditSection,
+  FeatureEdit,
+} from './types';
 import styles from './styles.module.css';
 
 const CATEGORY_LABELS = {
@@ -37,7 +47,8 @@ const SECTIONS = {
   settings: { section: 'settings', title: '检查设置', tab: 'auditSettingsTab', panel: 'auditSettingsView' },
 } as const;
 const STATUS_LABELS = { pending: '待处理', ignored: '已保留', applied: '已应用', stale: '已过期' };
-const ANOMALY_STATUS_LABELS = { ...STATUS_LABELS, failed: '失败' };
+const RETRY_STATUS_LABELS = { uncertain: '不确定', failed: '失败' };
+const ANOMALY_STATUS_LABELS = { ...STATUS_LABELS, ...RETRY_STATUS_LABELS };
 const FEATURE_STATUS_LABELS = {
   pending: '待补标',
   consistent: '已一致',
@@ -70,11 +81,6 @@ interface ReferenceSelection {
   tags: string[];
 }
 
-interface SupplementConfirmation {
-  ids: string[];
-  tags: string[];
-}
-
 function getReferenceTags(sample: TagImage | undefined) {
   if (!sample) return [];
   return [...new Set(sample[1].tag.tags.map((tag) => tag.replaceAll('_', ' ').trim()).filter(Boolean))];
@@ -84,17 +90,26 @@ function getFindingTags(finding: TagAuditFinding) {
   return finding.tags ?? (finding.tag ? [finding.tag] : []);
 }
 
-interface SupplementDialogProps {
-  confirmation: SupplementConfirmation;
+function isRetryStatus(status: AuditFilter): status is AuditRetryStatus {
+  return status === 'failed' || status === 'uncertain';
+}
+
+interface AuditConfirmationDialogProps {
+  confirmation: AuditConfirmation;
   disabled: boolean;
   onClose: (confirmed: boolean) => void;
 }
 
-function SupplementDialog({ confirmation, disabled, onClose }: SupplementDialogProps) {
+function AuditConfirmationDialog({ confirmation, disabled, onClose }: AuditConfirmationDialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useId();
   const summary = useId();
   const consequence = useId();
+  const clearing = confirmation.action === 'clear';
+  const title = clearing ? '确认清空检查结果' : '确认补标';
+  const clearLabel = clearing
+    ? (confirmation.mode === 'anomaly' ? ANOMALY_STATUS_LABELS : FEATURE_STATUS_LABELS)[confirmation.status]
+    : undefined;
 
   useEffect(() => {
     if (dialog.current && !dialog.current.open) dialog.current.showModal();
@@ -106,28 +121,43 @@ function SupplementDialog({ confirmation, disabled, onClose }: SupplementDialogP
       className={styles.confirmation}
       aria-labelledby={heading}
       aria-describedby={`${summary} ${consequence}`}
-      onClose={(event) => onClose(event.currentTarget.returnValue === 'apply')}
+      onClose={(event) => onClose(event.currentTarget.returnValue === 'confirm')}
     >
       <div className={styles.dialogHeading}>
-        <h2 id={heading}>确认补标</h2>
+        <h2 id={heading}>{title}</h2>
       </div>
       <div className={styles.confirmationBody}>
-        <p id={summary}>将应用 {confirmation.ids.length} 项补标建议，追加以下标签。</p>
-        <ul className={styles.confirmationTags}>
-          {confirmation.tags.map((tag) => (
-            <li className='tagChip' key={tag}>
-              {tag}
-            </li>
-          ))}
-        </ul>
-        <p id={consequence}>仅修改工作 TXT，可通过「应用历史与撤销」恢复该批次。</p>
+        {clearing ? (
+          <>
+            <p id={summary}>
+              将清空「{SECTIONS[confirmation.mode].title}」的「{clearLabel}」中
+              {confirmation.category === 'all'
+                ? ''
+                : `「${CATEGORY_LABELS[confirmation.category]}」类型的`}{' '}
+              {confirmation.count} 项检查记录。
+            </p>
+            <p id={consequence}>此操作只清理当前数据集的检查记录。</p>
+          </>
+        ) : (
+          <>
+            <p id={summary}>将应用 {confirmation.ids.length} 项补标建议，追加以下标签。</p>
+            <ul className={styles.confirmationTags}>
+              {confirmation.tags.map((tag) => (
+                <li className='tagChip' key={tag}>
+                  {tag}
+                </li>
+              ))}
+            </ul>
+            <p id={consequence}>仅修改工作 TXT，可通过「应用历史与撤销」恢复该批次。</p>
+          </>
+        )}
       </div>
       <form className={styles.dialogActions} method='dialog'>
         <button type='submit' value='cancel' autoFocus>
           取消
         </button>
-        <button type='submit' className='primary' value='apply' disabled={disabled}>
-          确认补标
+        <button type='submit' className='primary' value='confirm' disabled={disabled}>
+          {clearing ? '确认清空' : '确认补标'}
         </button>
       </form>
     </dialog>
@@ -409,7 +439,7 @@ export function TagAuditPage() {
   const [category, setCategory] = useState<AuditCategory>('all');
   const [status, setStatus] = useState<AuditFilter>(() => (costumeMode ? 'alternate' : 'pending'));
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [supplement, setSupplement] = useState<SupplementConfirmation>();
+  const [confirmation, setConfirmation] = useState<AuditConfirmation>();
   const [page, setPage] = useState(0);
   const [featureId, setFeatureId] = useState(latest?.feature.id);
   const [form, setForm] = useState<'new' | 'edit'>();
@@ -458,15 +488,24 @@ export function TagAuditPage() {
     if (mode === 'anomaly') {
       return [
         ...findings.filter((finding) => finding.action !== 'add').map((finding) => ({ ...finding, finding })),
-        ...(audit?.samples || [])
-          .filter((sample) => sample.status === 'failed')
-          .map((sample) => ({
-            ...sample,
-            id: `failed/${sample.source}/${sample.candidate}`,
-            name: `${sample.name} · ${sample.candidate}`,
-            status: 'failed' as const,
-            reason: sample.error,
-          })),
+        ...(audit?.samples || []).flatMap((sample) => {
+          const { status } = sample;
+          if (status === 'complete') return [];
+          return [
+            {
+              ...sample,
+              status,
+              id: `sample/${sample.source}/${sample.candidate}`,
+              name: `${sample.name} · ${sample.candidate}`,
+              reason:
+                status === 'failed'
+                  ? sample.error
+                  : [sample.observation?.count_reason, sample.observation?.framing_reason]
+                      .filter(Boolean)
+                      .join('；'),
+            },
+          ];
+        }),
       ];
     }
     const byId = new Map(
@@ -493,7 +532,9 @@ export function TagAuditPage() {
 
   const visible = rows.filter((row) => {
     if (status === 'alternate') return row.alternate;
-    if (anomalyMode && row.status === 'failed') return status === 'failed';
+    if (anomalyMode && isRetryStatus(row.status)) {
+      return status === row.status || (status === 'all' && category === 'all');
+    }
     return (
       (!anomalyMode || category === 'all' || row.finding?.category === category) &&
       (status === 'all' || row.status === status)
@@ -509,44 +550,69 @@ export function TagAuditPage() {
     row.finding?.status === 'pending' ? [row.finding.id] : [],
   );
   const pending = rows.filter((row) => row.status === 'pending').length;
-  const uncertain = audit?.samples?.filter((sample) => sample.status === 'uncertain') || [];
+  const uncertain = rows.filter((row) => row.status === 'uncertain');
   const failed = rows.filter((row) => row.status === 'failed');
   const eligible = v.tags.allTargets.length;
-  const eligibleKeys = useMemo(
-    () => new Set(v.tags.allTargets.map(([source, candidate]) => `${source}/${candidate}`)),
-    [v.tags.allTargets],
+  const editableSamples = useMemo(
+    () =>
+      new Map(
+        v.tags.allImages
+          .filter(([, candidate]) => candidate.tag_current)
+          .map((pair) => [imageKey(...pair), pair[1]]),
+      ),
+    [v.tags.allImages],
   );
-  const retryable = failed.filter((row) => eligibleKeys.has(`${row.source}/${row.candidate}`)).length;
+  const retryStatus = anomalyMode && isRetryStatus(status) ? status : undefined;
+  const clearStatus =
+    isRetryStatus(status) || status === 'pending' || status === 'stale' ? status : undefined;
+  const retryCounts = {
+    failed: failed.filter((row) => editableSamples.has(`${row.source}/${row.candidate}`)).length,
+    uncertain: uncertain.filter((row) => editableSamples.has(`${row.source}/${row.candidate}`)).length,
+  };
+  const retryable = retryStatus ? retryCounts[retryStatus] : 0;
   const activeAudit = v.job.action === 'start_audit' && v.job.status === 'running';
   const refresh = () => client.invalidateQueries({ queryKey: ['run'] });
   const mutation = useMutation({
-    mutationFn: (data: EditRequest) => updateReview(data, v.session.token),
+    mutationFn: (data: AuditEditRequest) => updateReview(data, v.session.token),
     onMutate: () => v.setDatasetSwitching(true),
-    onSuccess: async (_result, data) => {
+    onSuccess: async ({ result }, data) => {
       setSelected(new Set());
-      const retry = data.action === 'retry_audit_failed';
+      const retry = data.retryStatus;
       const costume = data.action === 'start_costume_audit';
       if (data.action === 'start_audit' || retry || costume) {
-        setPage(0);
-        if (mode === 'costume') setStatus('alternate');
-        else setStatus(retry ? 'failed' : 'pending');
+        if (!data.retrySample) {
+          setPage(0);
+          setStatus(costume ? 'alternate' : (retry ?? 'pending'));
+        }
         client.setQueryData(['job'], {
           status: 'running',
           action: 'start_audit',
           auditFeature: data.featureId ? feature : null,
           auditCostume: costume,
-          total: retry ? retryable : eligible,
+          total: retry ? (data.retrySample ? 1 : retryCounts[retry]) : eligible,
           done: 0,
           errors: [],
           failedCount: 0,
         });
-        v.showToast(retry ? '正在重试失败样本。' : '标签检查已开始，工作 TXT 保持原样。', 'info');
+        v.showToast(
+          retry ? `正在重试${RETRY_STATUS_LABELS[retry]}样本。` : '标签检查已开始，工作 TXT 保持原样。',
+          'info',
+        );
+      } else if (data.action === 'tags') {
+        v.showToast('已保存此图的工作标签。', 'success');
+      } else if (data.action === 'clear_audit_results') {
+        setPage(0);
+        v.showToast(
+          result.changed ? `已清空 ${result.changed} 项检查记录。` : '当前筛选下没有可清空的记录。',
+          'success',
+        );
       } else v.showToast(data.action === 'undo_audit' ? '已撤销该批次。' : '检查结果已保存。', 'success');
       await Promise.all([refresh(), client.invalidateQueries({ queryKey: ['job'] })]);
     },
     onError: (error: Error, data) => {
       const outdated =
-        ['retry_audit_failed', 'start_costume_audit'].includes(data.action) && error.message === '未知操作';
+        ['retry_audit_samples', 'start_costume_audit', 'clear_audit_results'].includes(data.action) &&
+        error.message === '未知操作';
       v.showToast(outdated ? '请重启 WebUI，使后端加载当前版本。' : error.message, 'error');
     },
     onSettled: () => v.setDatasetSwitching(false),
@@ -614,7 +680,7 @@ export function TagAuditPage() {
     descriptionMutation.mutate({ source: source.id, candidate: candidate.id });
   }
 
-  function handleStartAudit(retryFailed = false) {
+  function handleStartAudit() {
     const auditOptions = { ...options, forbidden: forbiddenTags };
     if (costumeMode) {
       if (!costumeSample || costumeReferenceError) return;
@@ -628,10 +694,32 @@ export function TagAuditPage() {
       return;
     }
     mutation.mutate({
-      action: retryFailed ? 'retry_audit_failed' : 'start_audit',
+      action: 'start_audit',
       audit: auditOptions,
       featureId: featureMode ? feature?.id : undefined,
     });
+  }
+
+  function handleRetryAudit(retryStatus: AuditRetryStatus, retrySample?: TagAuditReference) {
+    mutation.mutate({
+      action: 'retry_audit_samples',
+      audit: { ...options, forbidden: forbiddenTags },
+      retryStatus,
+      retrySample,
+    });
+  }
+
+  async function handleSaveSample({ source, candidate }: TagAuditReference, tags: string[]) {
+    try {
+      await mutation.mutateAsync({
+        action: 'tags',
+        selections: [[source, candidate]],
+        operation: { mode: 'set', tags },
+      });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   function handleDecision(action: 'apply_audit' | 'ignore_audit', ids: string[]) {
@@ -644,7 +732,7 @@ export function TagAuditPage() {
         ),
       ];
       if (!anomalyMode) {
-        setSupplement({ ids, tags });
+        setConfirmation({ action: 'supplement', ids, tags });
         return;
       }
       if (
@@ -657,11 +745,35 @@ export function TagAuditPage() {
     mutation.mutate({ action, ids });
   }
 
-  function handleSupplementClose(confirmed: boolean) {
-    setSupplement(undefined);
-    if (confirmed && supplement && !disabled) {
-      mutation.mutate({ action: 'apply_audit', ids: supplement.ids });
+  function handleClearResults() {
+    const runDir = v.state?.config.run_dir;
+    if (!clearStatus || !visible.length || disabled || !runDir) return;
+    setConfirmation({
+      action: 'clear',
+      mode,
+      status: clearStatus,
+      category: anomalyMode && !retryStatus ? category : 'all',
+      count: visible.length,
+      runDir,
+      auditRunId: featureMode ? latest?.id : costumeMode ? costumeRun?.id : undefined,
+    });
+  }
+
+  function handleConfirmationClose(confirmed: boolean) {
+    setConfirmation(undefined);
+    if (!confirmed || !confirmation || disabled) return;
+    if (confirmation.action === 'clear') {
+      const { mode, status, category, runDir, auditRunId } = confirmation;
+      mutation.mutate({
+        action: 'clear_audit_results',
+        status,
+        category: mode === 'anomaly' ? category : mode,
+        runDir,
+        auditRunId,
+      });
+      return;
     }
+    mutation.mutate({ action: 'apply_audit', ids: confirmation.ids });
   }
 
   function imageUrl(sample: Pick<AuditRow, 'source' | 'candidate'>) {
@@ -674,7 +786,6 @@ export function TagAuditPage() {
       ? FEATURE_STATUS_LABELS
       : ANOMALY_STATUS_LABELS;
   const modeTitle = SECTIONS[mode].title;
-  const showingFailed = anomalyMode && status === 'failed';
   const referenceUrl = referenceSample
     ? getImageUrl(referenceSample[0], 'tag', updatedAt, referenceSample[1])
     : '';
@@ -683,13 +794,22 @@ export function TagAuditPage() {
     : '';
   const checkContent = (
     <>
-      {supplement ? (
-        <SupplementDialog confirmation={supplement} disabled={disabled} onClose={handleSupplementClose} />
+      {confirmation ? (
+        <AuditConfirmationDialog
+          confirmation={confirmation}
+          disabled={disabled}
+          onClose={handleConfirmationClose}
+        />
       ) : null}
       <section className={`tagGallery ${styles.results}`} aria-label={`${modeTitle}结果`}>
         <div className={styles.toolbar}>
           <h2>{modeTitle}</h2>
           {anomalyMode ? <span>待处理 {pending} 项</span> : null}
+          {anomalyMode && status !== 'uncertain' && uncertain.length ? (
+            <button type='button' onClick={() => handleFilter('uncertain')}>
+              不确定（{uncertain.length}）
+            </button>
+          ) : null}
           {!featureMode && status !== 'failed' && failed.length ? (
             <button type='button' onClick={() => handleFilter('failed')}>
               失败（{failed.length}）
@@ -700,7 +820,7 @@ export function TagAuditPage() {
               类型
               <select
                 value={category}
-                disabled={showingFailed}
+                disabled={!!retryStatus}
                 onChange={(event) => handleFilter(status, event.target.value as AuditCategory)}
               >
                 <option value='all'>全部类型</option>
@@ -738,48 +858,64 @@ export function TagAuditPage() {
         {costumeMode && costumeRun && !costumeRun.reference.description ? (
           <p>上一轮使用旧规则，请确认标准服装描述后重新检查。</p>
         ) : null}
-        {showingFailed ? (
-          <div className={styles.toolbar}>
+        <div className={styles.toolbar}>
+          {retryStatus ? (
+            <>
+              <button
+                type='button'
+                className='primary'
+                disabled={disabled || !retryable}
+                onClick={() => handleRetryAudit(retryStatus)}
+              >
+                重试全部{RETRY_STATUS_LABELS[retryStatus]}项（{retryable}）
+              </button>
+              {visible.length > retryable ? (
+                <span>{visible.length - retryable} 份样本已不在有效范围</span>
+              ) : null}
+            </>
+          ) : !clearStatus || clearStatus === 'pending' ? (
+            <>
+              <button
+                disabled={disabled || !pagePendingIds.length}
+                onClick={() => setSelected(new Set(pagePendingIds))}
+              >
+                选择本页{anomalyMode ? '待处理项' : '待补标项'}
+              </button>
+              <button disabled={disabled || !selectedIds.length} onClick={() => setSelected(new Set())}>
+                清空选择
+              </button>
+              <button
+                className='primary'
+                disabled={disabled || !selectedIds.length}
+                onClick={() => handleDecision('apply_audit', selectedIds)}
+              >
+                {anomalyMode ? '应用所选删除' : '补标所选'}（{selectedIds.length}）
+              </button>
+              <button
+                disabled={disabled || !selectedIds.length}
+                onClick={() => handleDecision('ignore_audit', selectedIds)}
+              >
+                {anomalyMode ? '保留所选原标签' : '忽略所选'}
+              </button>
+            </>
+          ) : null}
+          {clearStatus ? (
             <button
               type='button'
-              className='primary'
-              disabled={disabled || !retryable}
-              onClick={() => handleStartAudit(true)}
+              className={styles.clearResults}
+              disabled={disabled || !visible.length}
+              onClick={handleClearResults}
             >
-              重试全部失败项（{retryable}）
+              清空
             </button>
-            {failed.length > retryable ? <span>{failed.length - retryable} 份样本已不在有效范围</span> : null}
-          </div>
-        ) : (
-          <div className={styles.toolbar}>
-            <button
-              disabled={disabled || !pagePendingIds.length}
-              onClick={() => setSelected(new Set(pagePendingIds))}
-            >
-              选择本页{anomalyMode ? '待处理项' : '待补标项'}
-            </button>
-            <button disabled={disabled || !selectedIds.length} onClick={() => setSelected(new Set())}>
-              清空选择
-            </button>
-            <button
-              className='primary'
-              disabled={disabled || !selectedIds.length}
-              onClick={() => handleDecision('apply_audit', selectedIds)}
-            >
-              {anomalyMode ? '应用所选删除' : '补标所选'}（{selectedIds.length}）
-            </button>
-            <button
-              disabled={disabled || !selectedIds.length}
-              onClick={() => handleDecision('ignore_audit', selectedIds)}
-            >
-              {anomalyMode ? '保留所选原标签' : '忽略所选'}
-            </button>
-          </div>
-        )}
+          ) : null}
+        </div>
         <div className={styles.list}>
           {pageRows.map((row) => {
             const finding = row.finding;
             const url = imageUrl(row);
+            const sampleStatus = anomalyMode && isRetryStatus(row.status) ? row.status : undefined;
+            const sample = sampleStatus ? editableSamples.get(`${row.source}/${row.candidate}`) : undefined;
             return (
               <article key={row.id} className={styles.finding}>
                 <button
@@ -796,7 +932,7 @@ export function TagAuditPage() {
                       ? `${finding ? getFindingTags(finding).join(' + ') : costumeMode ? COSTUME_TAG : latest?.feature.tags.join(' + ')} · ${(costumeMode ? COSTUME_STATUS_LABELS : FEATURE_STATUS_LABELS)[row.status]}`
                       : finding
                         ? `${CATEGORY_LABELS[finding.category]} · ${finding.tag}`
-                        : '检查失败'}
+                        : sampleStatus && RETRY_STATUS_LABELS[sampleStatus]}
                   </strong>
                   <p>{row.reason}</p>
                   {anomalyMode && finding ? (
@@ -805,6 +941,17 @@ export function TagAuditPage() {
                     </span>
                   ) : null}
                   {finding?.model ? <small>观察模型：{finding.model}</small> : null}
+                  {sample && sampleStatus ? (
+                    <AuditSampleActions
+                      name={row.name}
+                      tags={sample.tag.tags}
+                      disabled={disabled}
+                      onRetry={() =>
+                        handleRetryAudit(sampleStatus, { source: row.source, candidate: row.candidate })
+                      }
+                      onSave={(tags) => handleSaveSample(row, tags)}
+                    />
+                  ) : null}
                   {finding?.status === 'pending' ? (
                     <div className={styles.toolbar}>
                       <label>
@@ -843,11 +990,13 @@ export function TagAuditPage() {
             <p className='emptyState'>
               {status === 'failed'
                 ? '没有失败样本。'
-                : costumeMode && !costumeRun
-                  ? '选择标准服装参考图并确认描述后运行检查。'
-                  : featureMode && !latest
-                    ? '保存一条特征，再检查当前数据集。'
-                    : '当前筛选下没有检查结果。'}
+                : status === 'uncertain' && anomalyMode
+                  ? '没有不确定样本。'
+                  : costumeMode && !costumeRun
+                    ? '选择标准服装参考图并确认描述后运行检查。'
+                    : featureMode && !latest
+                      ? '保存一条特征，再检查当前数据集。'
+                      : '当前筛选下没有检查结果。'}
             </p>
           ) : null}
         </div>
@@ -1052,21 +1201,6 @@ export function TagAuditPage() {
             <p>
               最近一轮：检查 {audit.samples.length} 份 · 部分不确定 {uncertain.length} 份。
             </p>
-          ) : null}
-          {anomalyMode && uncertain.length ? (
-            <details>
-              <summary>查看不确定样本</summary>
-              {uncertain.map((sample) => (
-                <div key={`${sample.source}/${sample.candidate}`} className={styles.sample}>
-                  <button onClick={() => v.setPreviewImage(imageUrl(sample))}>
-                    {sample.name} · {sample.candidate}
-                  </button>
-                  <p>
-                    {sample.observation?.count_reason}；{sample.observation?.framing_reason}
-                  </p>
-                </div>
-              ))}
-            </details>
           ) : null}
           <details>
             <summary>应用历史与撤销</summary>

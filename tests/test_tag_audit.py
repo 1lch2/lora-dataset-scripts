@@ -14,6 +14,7 @@ import requests
 from PIL import Image
 
 from core.dataset_pipeline.core import DEFAULTS, Run, asset
+from core.dataset_pipeline.costume_audit import prepare_costume_reference
 from core.dataset_pipeline.datasets import import_sources
 from core.dataset_pipeline.feature_audit import edit_feature
 from webui.server import make_server
@@ -205,9 +206,55 @@ class TagAuditTests(unittest.TestCase):
         self.addCleanup(server.shutdown)
         return f'http://127.0.0.1:{server.server_port}'
 
-    def test_http_retry_replaces_only_failed_observations(self):
+    def test_http_clear_anomaly_results_preserves_captions_and_other_statuses(self):
+        findings = self.check()
+        applied, = [finding for finding in findings if finding['category'] == 'rule']
+        edit_audit(self.run, {'action': 'apply_audit', 'ids': [applied['id']]})
+        self.run.edit_tags([[self.source['id'], self.candidate['id']]], {'mode': 'add', 'tags': ['2girls']})
+        audit = self.run.data['tag_audit']
+        audit['samples'][0]['status'] = 'uncertain'
+        audit['samples'].append({'source': 'removed_source', 'candidate': 'full', 'name': 'removed.png',
+                                 'status': 'failed', 'error': 'service timeout'})
+        self.run.save()
+        work_caption = self.run.tag_file(self.candidate['tag'])
+        original_captions = (self.caption.read_bytes(), work_caption.read_bytes())
+        url = self.serve(make_server(self.run.directory, 0))
+
+        with requests.Session() as session:
+            session.trust_env = False
+            session.headers['X-Review-Token'] = session.get(url + '/api/session', timeout=5).json()['token']
+
+            def clear(status, category='all', run_dir=self.run.directory):
+                return session.post(url + '/api/edit', json={
+                    'action': 'clear_audit_results', 'runDir': str(run_dir), 'status': status, 'category': category,
+                }, timeout=5)
+
+            def cleared(status, category='all'):
+                response = clear(status, category)
+                self.assertEqual(response.status_code, 200, response.text)
+                return response.json()['result']['changed']
+
+            self.assertEqual(clear('uncertain', run_dir=self.root / 'other').status_code, 400)
+            self.assertEqual(clear('applied').status_code, 400)
+            self.assertEqual(cleared('uncertain'), 1)
+            self.assertEqual(cleared('pending', 'framing'), 1)
+            self.assertEqual(cleared('stale', 'framing'), 0)
+            view = session.get(url + '/api/state', timeout=5).json()['tag_audit']
+            self.assertEqual({(finding['category'], finding['status']) for finding in view['findings']},
+                             {('count', 'stale'), ('rule', 'applied')})
+            self.assertEqual([sample['status'] for sample in view['samples']], ['failed'])
+            self.assertEqual(cleared('stale', 'count'), 2)
+            self.assertEqual(cleared('failed'), 1)
+
+        saved = Run.load(self.run.directory).data['tag_audit']
+        self.assertEqual(saved['samples'], [])
+        self.assertEqual(saved['findings'], [applied])
+        self.assertEqual(saved['batches'], audit['batches'])
+        self.assertEqual((self.caption.read_bytes(), work_caption.read_bytes()), original_captions)
+
+    def test_http_retry_replaces_only_targeted_observations(self):
         folder = self.caption.parent
-        for stem, color in (('b', 'blue'), ('c', 'red')):
+        for stem, color in (('b', 'blue'), ('c', 'red'), ('d', 'green'), ('e', 'yellow')):
             Image.new('RGB', (100, 100), color).save(folder / f'{stem}.png')
             (folder / f'{stem}.txt').write_bytes(self.caption.read_bytes())
         self.run, errors = import_sources(self.run.config)
@@ -216,6 +263,7 @@ class TagAuditTests(unittest.TestCase):
                     for s in self.run.data['sources'].values() for c in s['candidates']}
         url = self.serve(make_server(self.run.directory, 0))
         failures = {(0, 0, 255): 'invalid JSON', (255, 0, 0): 'invalid JSON'}
+        uncertain = {(0, 128, 0), (255, 255, 0)}
         checked = []
 
         def observe_sample(path, _options):
@@ -224,20 +272,23 @@ class TagAuditTests(unittest.TestCase):
             checked.append(color)
             if color in failures:
                 raise ValueError(failures[color])
+            if color in uncertain:
+                return {**OBSERVATION, 'count_certain': False}
             return OBSERVATION
 
         with requests.Session() as session, patch('core.dataset_pipeline.tag_audit.observe', side_effect=observe_sample):
             session.trust_env = False
             session.headers['X-Review-Token'] = session.get(url + '/api/session', timeout=5).json()['token']
 
-            def submit(retry=False):
+            def submit(action, **fields):
                 return session.post(url + '/api/edit', json={
-                    'action': 'retry_audit_failed' if retry else 'start_audit',
+                    'action': action,
                     'audit': self.options,
+                    **fields,
                 }, timeout=5)
 
-            def wait_for_results(retry, total, failed):
-                response = submit(retry)
+            def wait_for_results(action, total, failed, **fields):
+                response = submit(action, **fields)
                 self.assertEqual(response.status_code, 202, response.text)
                 for _ in range(100):
                     job = session.get(url + '/api/job', timeout=5).json()
@@ -249,31 +300,50 @@ class TagAuditTests(unittest.TestCase):
                 self.assertEqual((job['done'], job['total'], job['failedCount']), (total, total, failed))
                 return session.get(url + '/api/state', timeout=5).json()['tag_audit']
 
-            first = wait_for_results(False, 3, 2)
+            first = wait_for_results('start_audit', 5, 2)
             completed, = [s for s in first['samples'] if s['status'] == 'complete']
+            uncertain_rows = {Path(s['name']).stem: s for s in first['samples'] if s['status'] == 'uncertain'}
+            self.assertEqual(uncertain_rows.keys(), {'d', 'e'})
             rule_ids = {f['id'] for f in first['findings'] if f['category'] == 'rule'}
-            self.assertEqual(len(rule_ids), 3)
+            self.assertEqual(len(rule_ids), 5)
             self.assertEqual({s['error'] for s in first['samples'] if s['status'] == 'failed'}, {'invalid JSON'})
 
             checked.clear()
             failures = {(255, 0, 0): 'service timeout'}
-            second = wait_for_results(True, 2, 1)
+            second = wait_for_results('retry_audit_failed', 2, 1)
             self.assertCountEqual(checked, [(0, 0, 255), (255, 0, 0)])
             self.assertIn(completed, second['samples'])
-            self.assertEqual(len(second['samples']), 3)
+            self.assertEqual(len(second['samples']), 5)
             remaining, = [s for s in second['samples'] if s['status'] == 'failed']
             self.assertEqual((Path(remaining['name']).stem, remaining['error']), ('c', 'service timeout'))
             self.assertTrue(all(f in second['findings'] for f in first['findings']))
 
             checked.clear()
-            failures = {}
-            final = wait_for_results(True, 1, 0)
-            self.assertEqual(checked, [(255, 0, 0)])
+            failures[(0, 128, 0)] = 'service timeout'
+            retry_target = {key: uncertain_rows['d'][key] for key in ('source', 'candidate')}
+            targeted = wait_for_results('retry_audit_samples', 1, 1, retryStatus='uncertain', retrySample=retry_target)
+            self.assertEqual(checked, [(0, 128, 0)])
+            changed_row, = [s for s in targeted['samples'] if s['source'] == retry_target['source']]
+            self.assertEqual((changed_row['status'], changed_row['error']), ('failed', 'service timeout'))
+            self.assertIn(uncertain_rows['e'], targeted['samples'])
+            self.assertIn(remaining, targeted['samples'])
+            self.assertEqual(submit('retry_audit_samples', retryStatus='uncertain', retrySample=retry_target).status_code, 400)
+
+            checked.clear()
+            uncertain.clear()
+            resolved = wait_for_results('retry_audit_samples', 1, 0, retryStatus='uncertain')
+            self.assertEqual(checked, [(255, 255, 0)])
+            self.assertFalse(any(s['status'] == 'uncertain' for s in resolved['samples']))
+
+            checked.clear()
+            failures.clear()
+            final = wait_for_results('retry_audit_failed', 2, 0)
+            self.assertCountEqual(checked, [(255, 0, 0), (0, 128, 0)])
             self.assertEqual({s['status'] for s in final['samples']}, {'complete'})
-            self.assertEqual(len(final['samples']), 3)
+            self.assertEqual(len(final['samples']), 5)
             self.assertEqual({f['id'] for f in final['findings'] if f['category'] == 'rule'}, rule_ids)
-            self.assertEqual(sum(f['tag'] == 'full body' for f in final['findings']), 3)
-            self.assertEqual(submit(True).status_code, 400)
+            self.assertEqual(sum(f['tag'] == 'full body' for f in final['findings']), 5)
+            self.assertEqual(submit('retry_audit_failed').status_code, 400)
             self.assertEqual({path: path.read_bytes() for path in captions}, captions)
 
     def add_reference_sample(self):
@@ -285,6 +355,73 @@ class TagAuditTests(unittest.TestCase):
         self.source, self.candidate = self.run.locate(self.source['id'], self.candidate['id'])
         source = next(item for item in self.run.data['sources'].values() if Path(item['relative']).stem == 'reference')
         return {'source': source['id'], 'candidate': source['candidates'][0]['id']}
+
+    def test_http_clear_additions_respects_round_status_and_undo_history(self):
+        folder = self.caption.parent
+        for stem, color in (('b', 'green'), ('uncertain', 'red'), ('failed', 'blue')):
+            Image.new('RGB', (100, 100), color).save(folder / f'{stem}.png')
+            (folder / f'{stem}.txt').write_text('blue hair\n', encoding='utf-8')
+        selection = self.add_reference_sample()
+        feature_id = edit_feature(self.run, {**FEATURE, 'reference': selection})['id']
+        reference = prepare_costume_reference(self.run, selection)
+        reference['description'] = '上衣为白色衬衫。'
+
+        def observe_addition(path, *_):
+            with Image.open(path) as image:
+                color = image.getpixel((0, 0))
+            if color == (0, 0, 255):
+                raise ValueError('service timeout')
+            if color == (255, 0, 0):
+                return {**PRESENT, 'state': 'uncertain'}
+            return PRESENT
+
+        with patch('core.dataset_pipeline.tag_audit.observe_feature', side_effect=observe_addition), \
+                patch('core.dataset_pipeline.tag_audit.observe_costume', side_effect=observe_addition):
+            audit_run(self.run, self.options, lambda *_: None, feature_id)
+            audit_run(self.run, self.options, lambda *_: None, costume_reference=reference)
+        audit = self.run.data['tag_audit']
+        applied, = [finding['id'] for finding in audit['findings']
+                    if finding['category'] == 'costume' and finding['source'] != self.source['id']]
+        edit_audit(self.run, {'action': 'apply_audit', 'ids': [applied]})
+        self.run.edit_tags([[self.source['id'], self.candidate['id']]], {'mode': 'add', 'tags': ['white shirt']})
+        paths = {self.run.tag_file(c['tag']) for s in self.run.data['sources'].values() for c in s['candidates']}
+        captions_before = {path: path.read_bytes() for path in paths | set(folder.glob('*.txt'))}
+        url = self.serve(make_server(self.run.directory, 0))
+
+        with requests.Session() as session:
+            session.trust_env = False
+            session.headers['X-Review-Token'] = session.get(url + '/api/session', timeout=5).json()['token']
+
+            def clear(category, status, round_id):
+                return session.post(url + '/api/edit', json={
+                    'action': 'clear_audit_results', 'runDir': str(self.run.directory),
+                    'category': category, 'status': status, 'auditRunId': round_id,
+                }, timeout=5)
+
+            feature_round = audit['featureRun']['id']
+            costume_round = audit['costumeRun']['id']
+            self.assertEqual(clear('feature', 'pending', costume_round).status_code, 400)
+            self.assertEqual(clear('costume', 'applied', costume_round).status_code, 400)
+            for category, status, round_id in (
+                    ('feature', 'stale', feature_round), ('feature', 'pending', feature_round),
+                    ('feature', 'failed', feature_round), ('costume', 'uncertain', costume_round),
+                    ('costume', 'pending', costume_round)):
+                response = clear(category, status, round_id)
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json()['result']['changed'], 1)
+
+            saved = Run.load(self.run.directory).data['tag_audit']
+            self.assertEqual({sample['status'] for sample in saved['featureRun']['samples']}, {'consistent', 'uncertain'})
+            self.assertEqual({sample['status'] for sample in saved['costumeRun']['samples']}, {'absent', 'present', 'failed'})
+            self.assertEqual([(finding['id'], finding['status']) for finding in saved['findings']], [(applied, 'applied')])
+            self.assertEqual(saved['features'], audit['features'])
+            self.assertEqual(saved['costumeRun']['reference'], reference)
+            self.assertEqual(saved['batches'], audit['batches'])
+            self.assertEqual({path: path.read_bytes() for path in captions_before}, captions_before)
+            response = session.post(url + '/api/edit', json={
+                'action': 'undo_audit', 'batch': saved['batches'][0]['id'],
+            }, timeout=5)
+            self.assertEqual(response.status_code, 200, response.text)
 
     def test_costume_http_compares_two_images_and_only_applies_selected_tags(self):
         folder = self.caption.parent

@@ -35,6 +35,9 @@
 .toolbar input[type='checkbox'] {
   width: auto;
 }
+.clearResults {
+  margin-inline-start: auto;
+}
 .list {
   display: flex;
   flex-direction: column;
@@ -91,10 +94,12 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
 }
-.picker:modal {
+.picker:modal,
+.confirmation:modal {
   overscroll-behavior: contain;
 }
-.picker::backdrop {
+.picker::backdrop,
+.confirmation::backdrop {
   overflow: hidden;
   overscroll-behavior: contain;
 }
@@ -242,8 +247,4 @@
   min-width: 0;
   border: 1px solid var(--color-review-line);
   border-radius: var(--review-radius);
-}
-.sample {
-  padding-block: var(--review-space-2);
-  border-bottom: 1px solid var(--color-review-line);
 }
