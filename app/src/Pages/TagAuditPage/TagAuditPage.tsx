@@ -5,6 +5,7 @@ import {
   addAuditFeature,
   deleteAuditFeature,
   describeAuditCostume,
+  unloadForgeCheckpoint,
   updateAuditFeature,
   updateReview,
 } from '../../api/client';
@@ -664,8 +665,17 @@ export function TagAuditPage() {
     },
     onSettled: () => v.setDatasetSwitching(false),
   });
+  const unloadForgeMutation = useMutation({
+    mutationFn: () => unloadForgeCheckpoint(v.session.token),
+    onSuccess: () => v.showToast('已卸载 Forge 生图模型，下次生图时会自动加载。', 'success'),
+    onError: (error: Error) => v.showToast(error.message, 'error'),
+  });
   const disabled =
-    v.processing || mutation.isPending || featureMutation.isPending || descriptionMutation.isPending;
+    v.processing ||
+    mutation.isPending ||
+    featureMutation.isPending ||
+    descriptionMutation.isPending ||
+    unloadForgeMutation.isPending;
 
   function handleFilter(nextStatus: AuditFilter, nextCategory = category) {
     setStatus(nextStatus);
@@ -1332,8 +1342,10 @@ export function TagAuditPage() {
               options={options}
               forbidden={forbidden}
               disabled={disabled}
+              unloadingForge={unloadForgeMutation.isPending}
               onOptionsChange={setOptions}
               onForbiddenChange={setForbidden}
+              onUnloadForge={() => unloadForgeMutation.mutate()}
             />
           ) : null}
         </div>

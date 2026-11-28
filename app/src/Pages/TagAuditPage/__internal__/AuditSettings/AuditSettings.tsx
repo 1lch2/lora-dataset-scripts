@@ -6,10 +6,13 @@ export function AuditSettings({
   options,
   forbidden,
   disabled,
+  unloadingForge,
   onOptionsChange,
   onForbiddenChange,
+  onUnloadForge,
 }: AuditSettingsProps) {
   const concurrencyId = useId();
+  const unloadHintId = useId();
 
   return (
     <div className={styles.settings}>
@@ -49,6 +52,13 @@ export function AuditSettings({
             }
           />
         </div>
+      </fieldset>
+      <fieldset disabled={disabled}>
+        <legend>Forge 模型</legend>
+        <p id={unloadHintId}>建议在 WebUI Forge 空闲时卸载生图模型，为 LLM 检查腾出显存和内存空间。</p>
+        <button type='button' className='self-start' aria-describedby={unloadHintId} onClick={onUnloadForge}>
+          {unloadingForge ? '正在卸载 Forge 生图模型…' : '卸载 Forge 生图模型'}
+        </button>
       </fieldset>
       <fieldset disabled={disabled}>
         <legend>检查规则</legend>

@@ -42,6 +42,8 @@ export const openDataset = (runDir: string, token: string) =>
   request<DatasetOpenResult>('/api/datasets/open', { runDir }, token);
 export const updateReview = (data: EditRequest, token: string) =>
   request<EditResult>('/api/edit', data, token);
+export const unloadForgeCheckpoint = (token: string) =>
+  request<{ ok: boolean }>('/api/forge/unload-checkpoint', {}, token);
 
 export const describeAuditCostume = (
   runDir: string,

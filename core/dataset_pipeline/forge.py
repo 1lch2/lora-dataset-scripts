@@ -17,10 +17,22 @@ class ForgeClient:
         self.config = config
         self.url = config["forge_url"].rstrip("/")
 
-    def request(self, method, route, **kwargs):
-        response = requests.request(method, self.url + route, timeout=(10, 600), **kwargs)
+    def request(self, method, route, *, timeout=(10, 600), **kwargs):
+        response = requests.request(method, self.url + route, timeout=timeout, **kwargs)
         response.raise_for_status()
         return response.json()
+
+    def unload_checkpoint(self):
+        try:
+            progress = self.request("GET", "/sdapi/v1/progress", params={"skip_current_image": True},
+                                    timeout=(3, 5))
+            if progress["state"]["job_count"] != 0:
+                raise ValueError("Forge 正在处理任务，请等待完成后再卸载模型")
+            self.request("POST", "/sdapi/v1/unload-checkpoint", timeout=(3, 20))
+        except requests.ConnectionError as error:
+            raise ValueError("无法连接 Forge，请确认 Forge 已启动并开启 API") from error
+        except requests.RequestException as error:
+            raise ValueError(f"无法卸载 Forge 生图模型：{error}") from error
 
     def check(self, tagging=False):
         if tagging:

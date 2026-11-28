@@ -393,6 +393,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
             if self.path not in ("/api/settings", "/api/edit", '/api/analysis/start', '/api/analysis/cancel', '/api/lora/rename',
                                  '/api/datasets/import', '/api/datasets/open', '/api/datasets/delete',
                                  '/api/denoise/start', '/api/denoise/models', '/api/tag-audit/feature',
+                                 '/api/forge/unload-checkpoint',
                                  '/api/tools/scan', '/api/tools/preview', '/api/tools/execute', '/api/tools/cancel'):
                 self.reply(404, {"error": "接口不存在"})
                 return
@@ -407,6 +408,15 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 if self.path in ('/api/denoise/start', '/api/denoise/models'):
                     action = 'denoise' if self.path.endswith('/start') else 'denoise_models'
                     self.reply(202, start_denoise(action, data))
+                    return
+                if self.path == '/api/forge/unload-checkpoint':
+                    with mutex:
+                        if analysis_only:
+                            raise ValueError('请从标签检查设置卸载 Forge 模型')
+                        if job['status'] == 'running':
+                            raise ValueError('已有任务正在运行，请等待完成后再卸载 Forge 模型')
+                        ForgeClient({**DEFAULTS, **template}).unload_checkpoint()
+                    self.reply(200, {'ok': True})
                     return
                 if self.path == '/api/tag-audit/feature':
                     action = data.get('action')
