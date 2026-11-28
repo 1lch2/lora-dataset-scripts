@@ -1028,7 +1028,7 @@ export function TagAuditPage() {
                   {!features.length ? <option value=''>暂无特征</option> : null}
                   {features.map((item) => (
                     <option key={item.id} value={item.id}>
-                      {item.name} · {item.tags.join(' + ')}
+                      {item.name}
                     </option>
                   ))}
                 </select>
