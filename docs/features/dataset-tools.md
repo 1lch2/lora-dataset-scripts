@@ -6,7 +6,7 @@
 
 ## 入口
 
-- [DatasetToolsPage](../../app/src/Pages/DatasetToolsPage/DatasetToolsPage.tsx)：顶栏“数据集工具”的左侧导航，包含批量处理、[数据集分析](dataset-analysis.md)、[图像降噪](scunet-denoise.md)和[去除GPT水印（实验性）](image-denoise.md)。常规会话默认打开批量处理，独立分析和 `?analysis` 直达分析，独立分析会话禁用两个 Forge 图像工具。
+- [DatasetToolsPage](../../app/src/Pages/DatasetToolsPage/DatasetToolsPage.tsx)：顶栏“数据集工具”的左侧导航，包含批量处理、[数据集分析](dataset-analysis.md)、[图像降噪和降噪设置](scunet-denoise.md)以及[去除GPT水印（实验性）](image-denoise.md)。常规会话默认打开批量处理，独立分析和 `?analysis` 直达分析，独立分析会话禁用 Forge 图像工具及降噪设置。
 - [SideTabLayout](../../app/src/components/SideTabLayout/SideTabLayout.tsx) 提供数据集工具和[标签检查](tag-audit.md)共用的侧栏布局与键盘导航。
 - [BatchProcessingPage](../../app/src/Pages/DatasetToolsPage/BatchProcessingPage/BatchProcessingPage.tsx)：批量处理面板，选择已导入数据集的来源目录、当前审核数据集或自定义目录；扫描后按子目录、相对路径搜索和逐张勾选确定范围。筛选与选择分离，提供仅选筛选结果、追加筛选结果及清空选择。
 - [api.ts](../../app/src/Pages/DatasetToolsPage/BatchProcessingPage/api.ts)、[types.ts](../../app/src/Pages/DatasetToolsPage/BatchProcessingPage/types.ts)：文件扫描、预览、执行、取消、状态轮询协议。

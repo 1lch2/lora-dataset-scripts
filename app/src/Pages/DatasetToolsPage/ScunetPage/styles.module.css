@@ -64,13 +64,27 @@
   cursor: default;
 }
 
-.submit {
+.submitRow {
+  display: flex;
+  align-items: center;
+  gap: var(--review-space-3);
   flex: none;
 }
 
+.submit {
+  flex: 1;
+}
+
+.textureToggle {
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  margin: 0;
+  font-size: var(--review-text-xs);
+}
+
 .mediaPanel {
-  inline-size: 100%;
-  aspect-ratio: 4 / 3;
+  flex: 1;
 }
 
 .panelHeader {

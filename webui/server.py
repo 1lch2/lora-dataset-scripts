@@ -25,7 +25,9 @@ from tools.dataset import DatasetToolsJob, ordinary_path, scan_files
 from tools.denoise import decode_upload, denoise_image, open_image, png_bytes, validate_options as validate_denoise_options
 from tools.lora.prompts import generate_lora_tags
 from tools.lora.rename import DIR as LORA_OUTPUT_DIR, plan_renames, rename_files
-from tools.scunet import batch_directories, batch_images, check_model, save_batch_image, scunet_image
+from tools.scunet import (DEFAULT_MODEL as DEFAULT_SCUNET_MODEL, batch_directories, batch_images,
+                          denoise_options as scunet_options, model_names as scunet_model_names,
+                          save_batch_image, scunet_image)
 
 from .settings import RUNTIME_KEYS, save_settings, settings_info
 
@@ -46,8 +48,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
     analysis_only = directory is None and config is None
     denoise = {'status': 'idle', 'stage': '', 'errors': [], 'models': [], 'result': None}
     denoise_images = {}
-    scunet = {'status': 'idle', 'stage': '', 'errors': [], 'result': None, 'output': None,
-              'done': 0, 'total': 0, 'saved': 0}
+    scunet = {'status': 'idle', 'stage': '', 'errors': [], 'result': None, 'output': None, 'preserveTexture': False,
+              'model': DEFAULT_SCUNET_MODEL, 'chromaModel': None, 'done': 0, 'total': 0, 'saved': 0}
     scunet_images = {}
 
     def denoise_status():
@@ -111,7 +113,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
             threading.Thread(target=process_denoise, args=(action, selected, options, raw, name), daemon=True).start()
             return {**denoise_status(), 'id': job['id']}
 
-    def process_scunet(selected, upload, directories):
+    def process_scunet(selected, upload, directories, options):
         try:
             if directories:
                 source, output, recursive = directories
@@ -122,7 +124,11 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
             if model_setup:
                 model_setup(selected)
             client = ForgeClient(selected)
-            check_model(client)
+            names = scunet_model_names(client)
+            for model in (options['model'], options['chroma_model']):
+                if model is not None and model not in names:
+                    raise ValueError(f'Forge 中没有可用的本地模型 {model}，请在降噪设置中刷新模型列表')
+            fused = options['chroma_model'] is not None
             with mutex:
                 scunet['stage'] = 'process'
             if directories:
@@ -131,8 +137,8 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                     try:
                         path = source / relative
                         ordinary_path(path)
-                        _, _, _, result = scunet_image(path, client)
-                        save_batch_image(output, relative, result)
+                        _, _, _, result = scunet_image(path, client, **options)
+                        save_batch_image(output, relative, result, fused=fused)
                     except (OSError, ValueError) as error:
                         failure = f'{relative.as_posix()}：{error}'
                     with mutex:
@@ -144,12 +150,17 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                         job['done'] = scunet['done']
             else:
                 raw, name = upload
-                rgb, alpha, icc, result = scunet_image(io.BytesIO(raw), client)
+                rgb, alpha, icc, result = scunet_image(io.BytesIO(raw), client, **options)
                 original = png_bytes(rgb, alpha, icc)
+                suffix = '_denoised'
+                if fused:
+                    suffix += '_fused'
+                elif options['preserve_texture']:
+                    suffix += '_texture'
                 with mutex:
                     scunet_images.update(original=original, output=result)
                     scunet.update(done=1, result={'id': job['id'], 'width': rgb.width, 'height': rgb.height,
-                                                  'name': name + '_denoised.png'})
+                                                  'name': name + suffix + '.png'})
                     job['done'] = 1
         except Exception as error:
             with mutex:
@@ -163,6 +174,7 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
     def start_scunet(data):
         if analysis_only:
             raise ValueError('请使用 start-webui.bat 打开图像降噪')
+        options = scunet_options(data)
         upload, directories = None, None
         if data.get('mode') == 'batch':
             directories = batch_directories(data)
@@ -182,9 +194,11 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                        errors=[], total=total, done=0, count=None)
             scunet.update(id=job['id'], status='running', stage='scan' if directories else 'connect',
                           errors=[], done=0, total=total, saved=0, result=None,
+                          preserveTexture=options['preserve_texture'], model=options['model'],
+                          chromaModel=options['chroma_model'],
                           output=str(directories[1]) if directories else None)
             scunet_images.clear()
-            threading.Thread(target=process_scunet, args=(selected, upload, directories), daemon=True).start()
+            threading.Thread(target=process_scunet, args=(selected, upload, directories, options), daemon=True).start()
             return {**scunet, 'errors': []}
 
     def load_run(folder):
@@ -385,6 +399,16 @@ def make_server(directory=None, port=8765, config=None, model_setup=None, settin
                 elif route.path == '/api/scunet/status':
                     with mutex:
                         self.reply(200, scunet)
+                elif route.path == '/api/scunet/models':
+                    if analysis_only:
+                        raise ValueError('请使用 start-webui.bat 打开图像降噪')
+                    with mutex:
+                        config = {**DEFAULTS, **template}
+                    try:
+                        names = scunet_model_names(ForgeClient(config))
+                    except OSError as error:
+                        raise ValueError(f'无法读取 Forge 模型，请确认 Forge 已启动并开启 API：{error}') from error
+                    self.reply(200, {'models': names})
                 elif route.path in ('/api/denoise/image', '/api/scunet/image'):
                     query = parse_qs(route.query)
                     state, images = (scunet, scunet_images) if route.path.startswith('/api/scunet/') else (denoise, denoise_images)

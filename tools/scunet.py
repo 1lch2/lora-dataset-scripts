@@ -1,4 +1,4 @@
-"""通过 Forge ScuNET 1× 处理单张静态图片或本机目录。"""
+"""通过 Forge 1× 降噪处理单张静态图片或本机目录。"""
 import os
 from itertools import count
 from pathlib import Path
@@ -9,6 +9,10 @@ from PIL import Image
 from core.dataset_pipeline.core import EXTENSIONS
 from tools.dataset import input_directory, ordinary_path
 from tools.denoise import MAX_SR_PIXELS, png_bytes, read_image
+from tools.scunet_texture import blend_denoised_chroma, fuse_denoised_images
+
+
+DEFAULT_MODEL = 'ScuNET'
 
 
 def batch_directories(data):
@@ -51,16 +55,40 @@ def batch_images(source, recursive):
     return paths
 
 
-def check_model(client):
-    model = next((item for item in client.upscalers() if item['name'] == 'ScuNET'), None)
-    if model is None:
-        raise ValueError('Forge 中没有名为 ScuNET 的超分模型')
-    location = model.get('model_path') or model.get('model_url') or ''
-    if location.lower().startswith(('http://', 'https://')):
-        raise ValueError('请先在 Forge 中安装本地 ScuNET 权重')
+def model_names(client):
+    names = []
+    for item in client.upscalers(timeout=(3, 10)):
+        location = item.get('model_path') or item.get('model_url') or ''
+        if location and not location.lower().startswith(('http://', 'https://')):
+            names.append(item['name'])
+    return names
 
 
-def scunet_image(source, client):
+def denoise_options(data):
+    model = data.get('model', DEFAULT_MODEL)
+    chroma_model = data.get('chromaModel')
+    preserve_texture = data.get('preserveTexture', False)
+    if not isinstance(model, str) or not model.strip():
+        raise ValueError('请选择降噪模型')
+    if chroma_model is not None and (not isinstance(chroma_model, str) or not chroma_model.strip()):
+        raise ValueError('请选择色度模型')
+    if chroma_model == model:
+        raise ValueError('双模型融合需要两个不同的模型')
+    if not isinstance(preserve_texture, bool):
+        raise ValueError('保留排线选项须为布尔值')
+    if chroma_model and preserve_texture:
+        raise ValueError('双模型融合与单模型保留排线不能同时启用')
+    return {'model': model, 'chroma_model': chroma_model, 'preserve_texture': preserve_texture}
+
+
+def _run_model(client, image, original_size, model):
+    result = client.upscale(image, 1, model=model, max_pixels=image.width * image.height)
+    if result.size != image.size:
+        raise ValueError(f'{model} 返回图像尺寸 {result.size}，预期 {image.size}')
+    return result.convert('RGB').crop((0, 0, *original_size))
+
+
+def scunet_image(source, client, *, model=DEFAULT_MODEL, chroma_model=None, preserve_texture=False):
     rgb, alpha, icc = read_image(source, max_pixels=MAX_SR_PIXELS)
     width, height = rgb.size
     pad_x, pad_y = -width % 8, -height % 8
@@ -68,19 +96,23 @@ def scunet_image(source, client):
     padded = rgb
     if pad_x or pad_y:
         padded = Image.fromarray(np.pad(np.asarray(rgb), ((0, pad_y), (0, pad_x), (0, 0)), mode='edge'))
-    result = client.upscale(padded, 1, model='ScuNET', max_pixels=padded.width * padded.height)
-    if result.size != padded.size:
-        raise ValueError(f'Forge 返回图像尺寸 {result.size}，预期 {padded.size}')
-    return rgb, alpha, icc, png_bytes(result.convert('RGB').crop((0, 0, width, height)), alpha, icc)
+    clean = _run_model(client, padded, rgb.size, model)
+    if chroma_model:
+        color = _run_model(client, padded, rgb.size, chroma_model)
+        clean = fuse_denoised_images(rgb, clean, color)
+    elif preserve_texture:
+        clean = blend_denoised_chroma(rgb, clean)
+    return rgb, alpha, icc, png_bytes(clean, alpha, icc)
 
 
-def save_batch_image(output, relative, content):
+def save_batch_image(output, relative, content, *, fused=False):
     folder = output / relative.parent
     ordinary_path(folder)
     folder.mkdir(parents=True, exist_ok=True)
+    stem = f'{relative.stem}_denoised' + ('_fused' if fused else '')
     for number in count():
         suffix = f'_{number}' if number else ''
-        path = folder / f'{relative.stem}_denoised{suffix}.png'
+        path = folder / f'{stem}{suffix}.png'
         try:
             stream = path.open('xb')
         except FileExistsError:

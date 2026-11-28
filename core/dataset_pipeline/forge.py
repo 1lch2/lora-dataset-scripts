@@ -45,8 +45,8 @@ class ForgeClient:
                 if self.config[key] not in names:
                     raise ValueError(f"Forge 中没有放大模型 {self.config[key]}")
 
-    def upscalers(self):
-        return self.request("GET", "/sdapi/v1/upscalers")
+    def upscalers(self, *, timeout=(10, 600)):
+        return self.request("GET", "/sdapi/v1/upscalers", timeout=timeout)
 
     def upscale(self, image, scale, *, model=None, max_pixels=None):
         data = self.request("POST", "/sdapi/v1/extra-single-image", json={

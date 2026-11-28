@@ -11,6 +11,7 @@ const SECTIONS = [
   { section: 'processing', title: '批量处理', tab: 'processingTab', panel: 'processingView' },
   { section: 'analysis', title: '数据集分析', tab: 'analysisTab', panel: 'analysisView' },
   { section: 'scunet', title: '图像降噪', tab: 'scunetTab', panel: 'scunetView' },
+  { section: 'scunetSettings', title: '降噪设置', tab: 'scunetSettingsTab', panel: 'scunetSettingsPanel' },
   { section: 'denoise', title: '去除GPT水印（实验性）', tab: 'denoiseTab', panel: 'denoiseView' },
 ] as const;
 
@@ -22,7 +23,9 @@ export function DatasetToolsPage({ initialSection }: DatasetToolsPageProps) {
   const token = v.session.token;
   const tabs = SECTIONS.map((tab) => ({
     ...tab,
-    disabled: (tab.section === 'scunet' || tab.section === 'denoise') && v.session.analysisOnly,
+    disabled:
+      v.session.analysisOnly &&
+      (tab.section === 'scunet' || tab.section === 'scunetSettings' || tab.section === 'denoise'),
   }));
 
   return (
@@ -41,7 +44,12 @@ export function DatasetToolsPage({ initialSection }: DatasetToolsPageProps) {
         currentDirectory={v.state?.datasetLoaded ? v.state.config.input_dir : undefined}
       />
       <AnalysisPage token={token} active={activeSection === 'analysis'} />
-      <ScunetPage token={token} active={activeSection === 'scunet'} processing={v.processing} />
+      <ScunetPage
+        token={token}
+        active={activeSection === 'scunet'}
+        settingsActive={activeSection === 'scunetSettings'}
+        processing={v.processing}
+      />
       <DenoisePage token={token} active={activeSection === 'denoise'} processing={v.processing} />
     </SideTabLayout>
   );

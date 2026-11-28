@@ -3,11 +3,19 @@ import { readImageData } from '../readImageData';
 import type { ScunetInfo, ScunetRequest } from './types';
 
 export const getScunetInfo = () => request<ScunetInfo>('/api/scunet/status');
+export const getAllScunetModelList = () => request<{ models: string[] }>('/api/scunet/models');
 
 export async function executeScunet(data: ScunetRequest, token: string) {
   const payload =
     data.mode === 'single'
-      ? { mode: data.mode, image: await readImageData(data.file), name: data.file.name }
+      ? {
+          mode: data.mode,
+          image: await readImageData(data.file),
+          name: data.file.name,
+          preserveTexture: data.preserveTexture,
+          model: data.model,
+          chromaModel: data.chromaModel,
+        }
       : data;
   return request<ScunetInfo>('/api/scunet/start', payload, token);
 }

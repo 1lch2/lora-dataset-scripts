@@ -1,0 +1,86 @@
+.settings {
+  inline-size: min(100%, 36rem);
+}
+
+.heading,
+.fusionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--review-space-3);
+}
+
+.settings small {
+  color: var(--color-review-muted);
+}
+
+.help {
+  position: relative;
+  flex: none;
+}
+
+.helpButton {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--color-review-muted);
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 100%;
+  inset-inline-end: 0;
+  padding: var(--review-space-1) var(--review-space-2);
+  border: 1px solid var(--color-review-line);
+  border-radius: var(--review-radius);
+  background: var(--color-review-surface);
+  box-shadow: 0 2px 8px var(--color-review-shadow);
+  font-size: var(--review-text-xs);
+  white-space: nowrap;
+  visibility: hidden;
+}
+
+.help:hover .tooltip,
+.help:focus-within .tooltip {
+  visibility: visible;
+}
+
+.downloadDialog {
+  inline-size: min(32rem, calc(100% - 2 * var(--review-page-gutter)));
+  block-size: auto;
+  max-block-size: calc(100% - 2 * var(--review-page-gutter));
+  margin: auto;
+  padding: var(--review-space-4);
+  border-radius: var(--review-panel-radius);
+  background: var(--color-review-surface);
+  color: var(--color-review-ink);
+}
+
+.downloadDialog:modal {
+  overscroll-behavior: contain;
+}
+
+.downloadDialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.downloadLinks {
+  display: grid;
+  gap: var(--review-space-3);
+  margin-block: var(--review-space-4);
+}
+
+.downloadLinks dt {
+  font-weight: 600;
+}
+
+.downloadLinks a {
+  text-decoration: underline;
+}
+
+.downloadDialog p + p {
+  margin-block-start: var(--review-space-2);
+}

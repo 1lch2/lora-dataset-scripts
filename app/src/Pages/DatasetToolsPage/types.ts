@@ -1,4 +1,4 @@
-export type DatasetToolSection = 'processing' | 'analysis' | 'scunet' | 'denoise';
+export type DatasetToolSection = 'processing' | 'analysis' | 'scunet' | 'scunetSettings' | 'denoise';
 
 export interface DatasetToolsPageProps {
   initialSection: DatasetToolSection;
