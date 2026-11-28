@@ -1,0 +1,50 @@
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--review-space-3);
+  width: min(100%, 680px);
+}
+
+.settings h2 {
+  font-size: var(--review-text-lg);
+}
+
+.settings p {
+  margin: 0;
+  color: var(--color-review-muted);
+}
+
+.settings fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: var(--review-space-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--review-space-3);
+  border: 1px solid var(--color-review-line);
+  border-radius: var(--review-radius);
+}
+
+.settings label {
+  margin: 0;
+}
+
+.settings .check {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--review-space-2);
+}
+
+.concurrencyHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--review-space-2);
+}
+
+input.concurrency[type='range'] {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  accent-color: var(--color-review-accent);
+}

@@ -1,8 +1,15 @@
-.page {
+.checkPanel {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+.settingsPanel {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--review-space-4) var(--review-page-gutter);
 }
 .results {
   display: flex;
@@ -18,16 +25,14 @@
   flex-wrap: wrap;
   gap: var(--review-space-2);
 }
-.toolbar label,
-.check {
+.toolbar label {
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: var(--review-space-2);
   margin: 0;
 }
-.toolbar input[type='checkbox'],
-.check input[type='checkbox'] {
+.toolbar input[type='checkbox'] {
   width: auto;
 }
 .list {
@@ -217,7 +222,7 @@
   overflow-wrap: anywhere;
 }
 .detail p,
-.settings p,
+.controlsBody p,
 .results > p {
   margin: 0;
   color: var(--color-review-muted);
@@ -225,33 +230,18 @@
 .controls {
   min-width: 0;
 }
-.controls > .toolbar {
-  padding: var(--review-space-3);
-  border-bottom: 1px solid var(--color-review-line);
-}
-.settings {
+.controlsBody {
   display: flex;
   flex-direction: column;
   gap: var(--review-space-4);
 }
-.settings fieldset {
+.controlsBody fieldset {
   display: flex;
   flex-direction: column;
   gap: var(--review-space-3);
+  min-width: 0;
   border: 1px solid var(--color-review-line);
   border-radius: var(--review-radius);
-}
-.concurrency span {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--review-space-2);
-}
-.concurrency input[type='range'] {
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  accent-color: var(--color-review-accent);
 }
 .sample {
   padding-block: var(--review-space-2);

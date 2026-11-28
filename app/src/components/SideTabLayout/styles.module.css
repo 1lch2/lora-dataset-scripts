@@ -1,6 +1,6 @@
 .page {
   display: grid;
-  grid-template-columns: clamp(136px, 14vw, 200px) minmax(0, 1fr);
+  grid-template-columns: clamp(124px, 12.5vw, 180px) minmax(0, 1fr);
   height: 100%;
   min-height: 0;
 }
@@ -28,6 +28,12 @@
 .navigation button[aria-selected='true'] {
   background: var(--color-review-tint);
   font-weight: 600;
+}
+
+@media (forced-colors: active) {
+  .navigation button[aria-selected='true'] {
+    border-color: Highlight;
+  }
 }
 
 .content {

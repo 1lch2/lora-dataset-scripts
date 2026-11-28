@@ -16,9 +16,11 @@ import type {
   TagAuditReference,
   TagImage,
 } from '../../api/types';
+import { SideTabLayout } from '../../components/SideTabLayout';
 import { useReviewContext } from '../../review/context';
 import { imageKey, imageUrl as getImageUrl, splitTags } from '../../review/utils';
-import type { AuditCategory, AuditFilter, AuditMode, AuditRow, FeatureEdit } from './types';
+import { AuditSettings } from './__internal__/AuditSettings';
+import type { AuditCategory, AuditFilter, AuditMode, AuditRow, AuditSection, FeatureEdit } from './types';
 import styles from './styles.module.css';
 
 const CATEGORY_LABELS = {
@@ -28,10 +30,12 @@ const CATEGORY_LABELS = {
   feature: '核心特征',
   costume: '换装',
 };
-const MODE_LABELS = { anomaly: '错标检查', feature: '漏标补充', costume: '换装检查' } satisfies Record<
-  AuditMode,
-  string
->;
+const SECTIONS = {
+  anomaly: { section: 'anomaly', title: '错标检查', tab: 'auditAnomalyTab', panel: 'auditAnomalyView' },
+  feature: { section: 'feature', title: '漏标补充', tab: 'auditFeatureTab', panel: 'auditFeatureView' },
+  costume: { section: 'costume', title: '换装检查', tab: 'auditCostumeTab', panel: 'auditCostumeView' },
+  settings: { section: 'settings', title: '检查设置', tab: 'auditSettingsTab', panel: 'auditSettingsView' },
+} as const;
 const STATUS_LABELS = { pending: '待处理', ignored: '已保留', applied: '已应用', stale: '已过期' };
 const ANOMALY_STATUS_LABELS = { ...STATUS_LABELS, failed: '失败' };
 const FEATURE_STATUS_LABELS = {
@@ -395,6 +399,8 @@ export function TagAuditPage() {
     if (v.job.auditCostume || (costumeRun && !latest && !v.job.auditFeature)) return 'costume';
     return latest || v.job.auditFeature ? 'feature' : 'anomaly';
   });
+  const [showSettings, setShowSettings] = useState(false);
+  const section = showSettings ? 'settings' : mode;
   const anomalyMode = mode === 'anomaly';
   const featureMode = mode === 'feature';
   const costumeMode = mode === 'costume';
@@ -589,7 +595,9 @@ export function TagAuditPage() {
     setSelected(new Set());
   }
 
-  function handleModeChange(next: AuditMode) {
+  function handleSectionChange(next: AuditSection) {
+    setShowSettings(next === 'settings');
+    if (next === 'settings' || next === mode) return;
     setMode(next);
     handleFilter(next === 'costume' ? 'alternate' : 'pending', 'all');
   }
@@ -665,7 +673,7 @@ export function TagAuditPage() {
     : featureMode
       ? FEATURE_STATUS_LABELS
       : ANOMALY_STATUS_LABELS;
-  const modeTitle = MODE_LABELS[mode];
+  const modeTitle = SECTIONS[mode].title;
   const showingFailed = anomalyMode && status === 'failed';
   const referenceUrl = referenceSample
     ? getImageUrl(referenceSample[0], 'tag', updatedAt, referenceSample[1])
@@ -673,8 +681,8 @@ export function TagAuditPage() {
   const costumeReferenceUrl = costumeSample
     ? getImageUrl(costumeSample[0], 'tag', updatedAt, costumeSample[1])
     : '';
-  return (
-    <main id='auditView' className={styles.page} role='tabpanel' aria-labelledby='auditTab'>
+  const checkContent = (
+    <>
       {supplement ? (
         <SupplementDialog confirmation={supplement} disabled={disabled} onClose={handleSupplementClose} />
       ) : null}
@@ -857,24 +865,8 @@ export function TagAuditPage() {
           </div>
         ) : null}
       </section>
-      <aside className={`tagTools ${styles.controls}`} aria-label='标签检查设置'>
-        <div className={styles.toolbar}>
-          <h2>标签检查设置</h2>
-        </div>
-        <div className={`panelScroll ${styles.settings}`}>
-          <div className={styles.toolbar} role='group' aria-label='检查类型'>
-            {(['anomaly', 'feature', 'costume'] as const).map((item) => (
-              <button
-                key={item}
-                aria-pressed={mode === item}
-                className={mode === item ? 'active' : ''}
-                disabled={mutation.isPending || descriptionMutation.isPending}
-                onClick={() => handleModeChange(item)}
-              >
-                {MODE_LABELS[item]}
-              </button>
-            ))}
-          </div>
+      <aside className={`tagTools ${styles.controls}`} aria-label={`${modeTitle}操作`}>
+        <div className={`panelScroll ${styles.controlsBody}`}>
           {featureMode ? (
             <>
               <label>
@@ -1022,66 +1014,11 @@ export function TagAuditPage() {
             </div>
           ) : null}
           <p>范围为当前数据集全部 {eligible} 份有效标签样本，独立于标签页筛选。</p>
-          <fieldset disabled={disabled}>
-            <legend>本地视觉检查</legend>
-            {anomalyMode ? (
-              <label className={styles.check}>
-                <input
-                  type='checkbox'
-                  checked={options.visual}
-                  onChange={(event) => setOptions({ ...options, visual: event.target.checked })}
-                />
-                检查构图范围和人物数量
-              </label>
-            ) : null}
-            <label>
-              API 地址（包含 /v1）
-              <input
-                value={options.endpoint}
-                disabled={anomalyMode && !options.visual}
-                onChange={(event) => setOptions({ ...options, endpoint: event.target.value })}
-              />
-            </label>
-            <label>
-              模型 ID
-              <input
-                value={options.model}
-                disabled={anomalyMode && !options.visual}
-                onChange={(event) => setOptions({ ...options, model: event.target.value })}
-              />
-            </label>
-            <label className={styles.concurrency}>
-              <span>
-                并发请求数
-                <output htmlFor='auditConcurrency'>{options.concurrency}</output>
-              </span>
-              <input
-                id='auditConcurrency'
-                aria-label='并发请求数'
-                type='range'
-                min={1}
-                max={16}
-                step={1}
-                value={options.concurrency}
-                disabled={anomalyMode && !options.visual}
-                onChange={(event) =>
-                  setOptions({ ...options, concurrency: event.currentTarget.valueAsNumber })
-                }
-              />
-            </label>
-          </fieldset>
-          <label>
-            当前数据集禁用标签
-            <textarea
-              rows={3}
-              value={forbidden}
-              disabled={disabled}
-              placeholder='例如 virtual youtuber，逗号或换行分隔'
-              onChange={(event) => setForbidden(event.target.value)}
-            />
-          </label>
           {!anomalyMode && conflict.length ? (
-            <p role='status'>目标标签 {conflict.join('、')} 已被禁用，请先调整禁用规则或目标标签。</p>
+            <p role='status'>
+              目标标签 {conflict.join('、')} 已被禁用，请先在检查设置中调整禁用标签
+              {featureMode ? '或修改特征的目标标签。' : '。'}
+            </p>
           ) : null}
           <button
             className='primary'
@@ -1150,6 +1087,44 @@ export function TagAuditPage() {
           </details>
         </div>
       </aside>
-    </main>
+    </>
+  );
+
+  const tabs = Object.values(SECTIONS).map((tab) => ({
+    ...tab,
+    disabled: tab.section !== section && (mutation.isPending || descriptionMutation.isPending),
+  }));
+
+  return (
+    <SideTabLayout
+      id='auditView'
+      labelledBy='auditTab'
+      navigationLabel='标签检查导航'
+      tabs={tabs}
+      selected={section}
+      onSelect={handleSectionChange}
+    >
+      {tabs.map(({ section: item, tab, panel }) => (
+        <div
+          key={item}
+          id={panel}
+          className={item === 'settings' ? styles.settingsPanel : styles.checkPanel}
+          role='tabpanel'
+          aria-labelledby={tab}
+          hidden={item !== section}
+        >
+          {item === mode ? checkContent : null}
+          {item === 'settings' ? (
+            <AuditSettings
+              options={options}
+              forbidden={forbidden}
+              disabled={disabled}
+              onOptionsChange={setOptions}
+              onForbiddenChange={setForbidden}
+            />
+          ) : null}
+        </div>
+      ))}
+    </SideTabLayout>
   );
 }

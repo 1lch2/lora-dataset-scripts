@@ -6,6 +6,7 @@ import type {
 } from '../../api/types';
 
 export type AuditMode = 'anomaly' | 'feature' | 'costume';
+export type AuditSection = AuditMode | 'settings';
 export type AuditCategory = 'all' | Exclude<TagAuditFinding['category'], 'feature' | 'costume'>;
 export type AuditStatus = 'all' | TagAuditFinding['status'];
 type ResultStatus = Exclude<AuditStatus, 'all'> | Exclude<TagAuditFeatureSample['status'], 'present'>;

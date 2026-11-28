@@ -2,12 +2,13 @@
 
 [返回功能导航](../feature-map.yaml)
 
-核对日期：2026-11-25。覆盖顶栏入口、后台检查、本地观察、数据集参考图、人工应用、忽略和批次撤销。打标或导入 TXT 后都可使用。
+核对日期：2026-11-28。覆盖顶栏入口、左侧导航、检查设置、后台检查、本地观察、数据集参考图、人工应用、忽略和批次撤销。打标或导入 TXT 后都可使用。
 
 ## 入口和实现
 
 - [Header](../../app/src/App/__internal__/Header/Header.tsx)：顶栏“标签检查”入口，与“标签编辑”并列，打开数据集后可用。
-- [TagAuditPage](../../app/src/Pages/TagAuditPage/TagAuditPage.tsx) 提供“错标检查”“漏标补充”和“换装检查”。漏标和换装共用参考图选择弹窗。三种检查共用图片预览、状态筛选、单项或批量处理及应用历史与撤销。
+- [TagAuditPage](../../app/src/Pages/TagAuditPage/TagAuditPage.tsx) 通过与数据集工具共用的 [SideTabLayout](../../app/src/components/SideTabLayout/SideTabLayout.tsx)，提供“错标检查”“漏标补充”“换装检查”和“检查设置”四个子页。漏标和换装共用参考图选择弹窗。三种检查共用图片预览、状态筛选、单项或批量处理及应用历史与撤销。
+- [AuditSettings](../../app/src/Pages/TagAuditPage/__internal__/AuditSettings/AuditSettings.tsx) 提供共用的 API 地址、模型 ID、并发数、禁用标签和错标视觉开关。`TagAuditPage` 按当前数据集维护同一份配置草稿，往返设置时保留当前检查的操作状态。
 - [tag_audit.py](../../core/dataset_pipeline/tag_audit.py) 复用本地服务请求与图像预处理。`audit_run` 并发观察，后台任务线程逐样本合并和保存。错标、漏标和换装拥有各自最近一轮的观察记录，共用建议与批次处理。
 - [feature_audit.py](../../core/dataset_pipeline/feature_audit.py) 管理特征定义、参考图版本、禁用标签冲突及特征观察协议。
 - [costume_audit.py](../../core/dataset_pipeline/costume_audit.py) 管理标准服装参考图版本、描述和双图逐部位比较协议，并按可见性和差异类型得出结论。

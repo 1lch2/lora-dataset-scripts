@@ -1,11 +1,10 @@
 import { useState } from 'react';
+import { SideTabLayout } from '../../components/SideTabLayout';
 import { AnalysisPage } from './AnalysisPage';
 import { DenoisePage } from './DenoisePage';
 import { BatchProcessingPage } from './BatchProcessingPage';
 import { useReviewContext } from '../../review/context';
-import { handleTabKeys } from '../../review/utils';
 import type { DatasetToolSection, DatasetToolsPageProps } from './types';
-import styles from './styles.module.css';
 
 const SECTIONS = [
   { section: 'processing', title: '批量处理', tab: 'processingTab', panel: 'processingView' },
@@ -19,44 +18,28 @@ export function DatasetToolsPage({ initialSection }: DatasetToolsPageProps) {
   const active = v.stage === 'tools';
   const activeSection = active ? section : undefined;
   const token = v.session.token;
+  const tabs = SECTIONS.map((tab) => ({
+    ...tab,
+    disabled: tab.section === 'denoise' && v.session.analysisOnly,
+  }));
 
   return (
-    <main id='toolsView' className={styles.page} role='tabpanel' aria-labelledby='toolsTab' hidden={!active}>
-      <nav
-        className={styles.navigation}
-        role='tablist'
-        aria-label='数据集工具导航'
-        aria-orientation='vertical'
-        onKeyDown={handleTabKeys}
-      >
-        {SECTIONS.map(({ section: item, title, tab, panel }) => {
-          const selected = item === section;
-          return (
-            <button
-              key={item}
-              type='button'
-              id={tab}
-              role='tab'
-              aria-controls={panel}
-              aria-selected={selected}
-              tabIndex={selected ? 0 : -1}
-              disabled={item === 'denoise' && v.session.analysisOnly}
-              onClick={() => setSection(item)}
-            >
-              {title}
-            </button>
-          );
-        })}
-      </nav>
-      <div className={styles.content}>
-        <BatchProcessingPage
-          token={token}
-          active={activeSection === 'processing'}
-          currentDirectory={v.state?.datasetLoaded ? v.state.config.input_dir : undefined}
-        />
-        <AnalysisPage token={token} active={activeSection === 'analysis'} />
-        <DenoisePage token={token} active={activeSection === 'denoise'} processing={v.processing} />
-      </div>
-    </main>
+    <SideTabLayout
+      id='toolsView'
+      labelledBy='toolsTab'
+      navigationLabel='数据集工具导航'
+      hidden={!active}
+      tabs={tabs}
+      selected={section}
+      onSelect={setSection}
+    >
+      <BatchProcessingPage
+        token={token}
+        active={activeSection === 'processing'}
+        currentDirectory={v.state?.datasetLoaded ? v.state.config.input_dir : undefined}
+      />
+      <AnalysisPage token={token} active={activeSection === 'analysis'} />
+      <DenoisePage token={token} active={activeSection === 'denoise'} processing={v.processing} />
+    </SideTabLayout>
   );
 }
