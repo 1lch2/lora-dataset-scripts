@@ -2,6 +2,16 @@ import { useId } from 'react';
 import type { AuditSettingsProps } from './types';
 import styles from './styles.module.css';
 
+const GENERATION_FIELDS = [
+  { key: 'max_tokens', label: '最大输出 token 数', min: 1, step: 1, placeholder: '8192' },
+  { key: 'temperature', label: '温度（Temperature）', min: 0, step: 'any' },
+  { key: 'top_k', label: 'Top K', min: 0, step: 1 },
+  { key: 'repeat_penalty', label: '重复惩罚（Repeat Penalty）', step: 'any' },
+  { key: 'presence_penalty', label: '存在惩罚（Presence Penalty）', step: 'any' },
+  { key: 'top_p', label: 'Top P', min: 0, max: 1, step: 'any' },
+  { key: 'min_p', label: '最小 P（Min P）', min: 0, max: 1, step: 'any' },
+] as const;
+
 export function AuditSettings({
   options,
   forbidden,
@@ -52,6 +62,26 @@ export function AuditSettings({
             }
           />
         </div>
+        <div className='grid grid-cols-2 gap-3'>
+          {GENERATION_FIELDS.map(({ key, label, step, ...limits }) => (
+            <label key={key}>
+              {label}
+              <input
+                type='number'
+                step={step}
+                placeholder='模型默认'
+                {...limits}
+                value={options[key] ?? ''}
+                onChange={(event) => {
+                  const { value, valueAsNumber } = event.currentTarget;
+                  const emptyValue = key === 'max_tokens' ? undefined : null;
+                  onOptionsChange({ ...options, [key]: value === '' ? emptyValue : valueAsNumber });
+                }}
+              />
+            </label>
+          ))}
+        </div>
+        <p>输出上限包含思考和最终答复，留空使用 8192。采样参数留空时使用模型服务的默认值。</p>
       </fieldset>
       <fieldset disabled={disabled}>
         <legend>Forge 模型</legend>

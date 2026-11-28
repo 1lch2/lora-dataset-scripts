@@ -138,6 +138,13 @@ export interface TagAuditOptions {
   endpoint: string;
   model: string;
   concurrency: number;
+  max_tokens?: number;
+  temperature?: number | null;
+  top_k?: number | null;
+  repeat_penalty?: number | null;
+  presence_penalty?: number | null;
+  top_p?: number | null;
+  min_p?: number | null;
   forbidden: string[];
 }
 export interface TagAuditFinding {

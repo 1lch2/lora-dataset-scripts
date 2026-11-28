@@ -73,6 +73,13 @@ const DEFAULT_OPTIONS: TagAuditOptions = {
   endpoint: 'http://localhost:23333/v1',
   model: 'qwen3.5-4b-uncensored-hauhaucs-aggressive',
   concurrency: 1,
+  max_tokens: 8192,
+  temperature: 0,
+  top_k: 20,
+  repeat_penalty: 1,
+  presence_penalty: 1.5,
+  top_p: 0.95,
+  min_p: 0,
   forbidden: [],
 };
 const PAGE_SIZE = 30;

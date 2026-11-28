@@ -62,6 +62,17 @@ def finding_addition_run(audit, finding):
     return addition_run(audit, finding['category'], finding.get('feature', {}).get('id'))
 
 
+GENERATION_DEFAULTS = {
+    'max_tokens': 8192,
+    'temperature': 0,
+    'top_k': 20,
+    'repeat_penalty': 1,
+    'presence_penalty': 1.5,
+    'top_p': 0.95,
+    'min_p': 0,
+}
+
+
 def validate_options(value):
     if not isinstance(value, dict):
         raise ValueError('检查配置无效')
@@ -85,8 +96,28 @@ def validate_options(value):
             raise ValueError('请填写本地视觉模型 ID')
     if not visual and not forbidden:
         raise ValueError('请启用视觉检查或填写当前数据集禁用标签')
+    generation = {key: value.get(key, default) for key, default in GENERATION_DEFAULTS.items()}
+    if type(generation['max_tokens']) is not int or generation['max_tokens'] < 1:
+        raise ValueError('最大输出 token 数必须是正整数')
+    top_k = generation['top_k']
+    if top_k is not None and (type(top_k) is not int or top_k < 0):
+        raise ValueError('top_k 必须是非负整数')
+    for key in ('temperature', 'top_p', 'min_p', 'repeat_penalty'):
+        number = generation[key]
+        if number is not None and (type(number) not in (int, float) or not 0 <= number < float('inf')):
+            raise ValueError(f'{key} 必须是非负有限数值，或留空使用模型默认值')
+    for key in ('top_p', 'min_p'):
+        if generation[key] is not None and generation[key] > 1:
+            raise ValueError(f'{key} 必须介于 0 和 1 之间')
+    if generation['repeat_penalty'] == 0:
+        raise ValueError('repeat_penalty 必须大于 0')
+    presence_penalty = generation['presence_penalty']
+    if presence_penalty is not None and (type(presence_penalty) not in (int, float)
+                                         or not -float('inf') < presence_penalty < float('inf')):
+        raise ValueError('presence_penalty 必须是有限数值，或留空使用模型默认值')
     return {'visual': visual, 'endpoint': endpoint.strip().rstrip('/'), 'model': model.strip(),
-            'forbidden': forbidden, 'concurrency': concurrency}
+            'forbidden': forbidden, 'concurrency': concurrency,
+            **{key: value[key] for key in GENERATION_DEFAULTS if key in value}}
 
 
 def context_tags(tags, category, name):
@@ -165,12 +196,14 @@ def observe_costume(path, options, reference_image, description):
 
 
 def request_observation(options, content, validate):
+    generation = {key: options.get(key, default) for key, default in GENERATION_DEFAULTS.items()}
+    payload = {'model': options['model'], 'messages': [{'role': 'user', 'content': content}],
+               **{key: value for key, value in generation.items() if value is not None}}
     # 禁止跟随重定向，图片仅发送到用户配置的本机服务。
     with requests.Session() as session:
         session.trust_env = False
         response = session.post(options['endpoint'] + '/chat/completions', timeout=(10, 180), allow_redirects=False,
-                                json={'model': options['model'], 'temperature': 0, 'max_tokens': 4096,
-                                      'messages': [{'role': 'user', 'content': content}]})
+                                json=payload)
     if response.status_code != 200:
         raise ValueError(f'本地视觉接口返回 HTTP {response.status_code}')
     try:
